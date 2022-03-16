@@ -52,7 +52,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_CLONE => sys_fork(),
         SYSCALL_EXECVE => sys_exec(args[0] as *const u8, args[1] as *const usize),
-        SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32),
+        SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32, args[2] as isize),
         SYSCALL_THREAD_CREATE => sys_thread_create(args[0], args[1]),
         SYSCALL_GETTID => sys_gettid(),
         SYSCALL_WAITTID => sys_waittid(args[0]) as isize,

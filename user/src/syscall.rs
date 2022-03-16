@@ -105,8 +105,8 @@ pub fn sys_exec(path: &str, args: &[*const u8]) -> isize {
     )
 }
 
-pub fn sys_waitpid(pid: isize, exit_code: *mut i32) -> isize {
-    syscall(SYSCALL_WAIT4, [pid as usize, exit_code as usize, 0])
+pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
+    syscall(SYSCALL_WAIT4, [pid as usize, wstatus as usize, options as usize])
 }
 
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
