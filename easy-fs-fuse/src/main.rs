@@ -1,9 +1,10 @@
 use clap::{App, Arg};
-use easy_fs::{BlockDevice, EasyFileSystem};
+use easy_fs::{BlockDevice, EasyFileSystem, Inode};
 use std::fs::{read_dir, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread::panicking;
 
 const BLOCK_SZ: usize = 512;
 
@@ -29,38 +30,8 @@ fn main() {
     easy_fs_pack().expect("Error when packing easy-fs!");
 }
 
-fn easy_fs_pack() -> std::io::Result<()> {
-    let matches = App::new("EasyFileSystem packer")
-        .arg(
-            Arg::with_name("source")
-                .short("s")
-                .long("source")
-                .takes_value(true)
-                .help("Executable source dir(with backslash)"),
-        )
-        .arg(
-            Arg::with_name("target")
-                .short("t")
-                .long("target")
-                .takes_value(true)
-                .help("Executable target dir(with backslash)"),
-        )
-        .get_matches();
-    let src_path = matches.value_of("source").unwrap();
-    let target_path = matches.value_of("target").unwrap();
-    println!("src_path = {}\ntarget_path = {}", src_path, target_path);
-    let block_file = Arc::new(BlockFile(Mutex::new({
-        let f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(format!("{}{}", target_path, "fs.img"))?;
-        f.set_len(16 * 2048 * 512).unwrap();
-        f
-    })));
-    // 16MiB, at most 4095 files
-    let efs = EasyFileSystem::create(block_file, 16 * 2048, 1);
-    let root_inode = Arc::new(EasyFileSystem::root_inode(&efs));
+/// 打包target应用程序
+fn pack_target(root_inode: Arc<Inode>, src_path: &str, target_path: &str) {
     let apps: Vec<_> = read_dir(src_path)
         .unwrap()
         .into_iter()
@@ -81,9 +52,93 @@ fn easy_fs_pack() -> std::io::Result<()> {
         inode.write_at(0, all_data.as_slice());
     }
     // list apps
+    // for app in root_inode.ls() {
+    //     println!("{}", app);
+    // }
+}
+
+/// 打包test应用程序
+fn pack_test(root_inode: Arc<Inode>, test_path: &str) {
+    let apps: Vec<_> = read_dir(test_path)
+        .unwrap()
+        .into_iter()
+        .filter(|dir_entry| {
+            if let Ok(de) = dir_entry {
+                if let Ok(filetype) = de.file_type() {
+                    filetype.is_file()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        })
+        .map(|dir_entry| dir_entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    for app in apps {
+        // load app data from host file system
+        let mut host_file = File::open(format!("{}{}", test_path, app)).unwrap();
+        let mut all_data: Vec<u8> = Vec::new();
+        host_file.read_to_end(&mut all_data).unwrap();
+        println!("{:#?}", app);
+        // create a file in easy-fs
+        let inode = root_inode.create(app.as_str()).unwrap();
+        // write data to easy-fs
+        inode.write_at(0, all_data.as_slice());
+    }
+    // list apps
     for app in root_inode.ls() {
         println!("{}", app);
     }
+}
+
+fn easy_fs_pack() -> std::io::Result<()> {
+    let matches = App::new("EasyFileSystem packer")
+        .arg(
+            Arg::with_name("source")
+                .short("s")
+                .long("source")
+                .takes_value(true)
+                .help("Executable source dir(with backslash)"),
+        )
+        .arg(
+            Arg::with_name("target")
+                .short("t")
+                .long("target")
+                .takes_value(true)
+                .help("Executable target dir(with backslash)"),
+        )
+        .arg(
+            Arg::with_name("test")
+                .short("T")
+                .long("test")
+                .takes_value(true)
+                .help("Executable test dir(with backslash)"),
+        )
+        .get_matches();
+    let src_path = matches.value_of("source").unwrap();
+    let target_path = matches.value_of("target").unwrap();
+    let test_path = matches.value_of("test").unwrap();
+
+    println!(
+        "src_path = {}\ntarget_path = {}\ntest_path = {}",
+        src_path, target_path, test_path
+    );
+    let block_file = Arc::new(BlockFile(Mutex::new({
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(format!("{}{}", target_path, "fs.img"))?;
+        f.set_len(16 * 2048 * 512).unwrap();
+        f
+    })));
+    // 16MiB, at most 4095 files
+    let efs = EasyFileSystem::create(block_file, 16 * 2048, 1);
+    let root_inode = Arc::new(EasyFileSystem::root_inode(&efs));
+
+    pack_target(root_inode.clone(), src_path, target_path);
+    pack_test(root_inode, test_path);
     Ok(())
 }
 
