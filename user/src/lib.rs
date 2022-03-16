@@ -150,6 +150,7 @@ pub fn kill(pid: usize, signal: i32) -> isize {
 }
 
 pub fn sleep(sleep_ms: usize) {
+    panic!("outdated function");
     sys_sleep(sleep_ms);
 }
 

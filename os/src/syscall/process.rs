@@ -4,7 +4,7 @@ use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ns, NSEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -19,8 +19,12 @@ pub fn sys_yield() -> isize {
     0
 }
 
-pub fn sys_get_time() -> isize {
-    get_time_ms() as isize
+pub fn sys_get_time(ts: *mut u64, _tz: usize) -> isize {
+    let token = current_user_token();
+    let curtime = get_time_ns();
+    *translated_refmut(token, ts) = (curtime / NSEC_PER_SEC) as u64;
+    *translated_refmut(token, unsafe { ts.add(1) }) = (curtime % NSEC_PER_SEC) as u64;
+    0
 }
 
 pub fn sys_getpid() -> isize {
@@ -73,22 +77,23 @@ const WNOHANG: isize = 1;
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
     loop {
-        // when WNOHANG is set, return value...
-        let mut return_value = 0;
+        let mut found: bool = true; // when WNOHANG is set
+        let mut exited: bool = true;
         {
             let process = current_process();
             let mut inner = process.inner_exclusive_access();
 
             // find a child process
-
             if !inner
                 .children
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.getpid())
             {
-                return_value = -1;
+                found = false;
             }
-            if return_value == 0 {
+
+            // child process exists
+            if found {
                 let pair = inner.children.iter().enumerate().find(|(_, p)| {
                     // ++++ temporarily access child PCB exclusively
                     p.inner_exclusive_access().is_zombie
@@ -103,19 +108,20 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     // ++++ temporarily access child PCB exclusively
                     // let exit_code = child.inner_exclusive_access().exit_code;
                     // ++++ release child PCB
-                    *translated_refmut(inner.memory_set.token(), wstatus) = 3 << 8;
+                    if wstatus as usize != 0 {
+                        *translated_refmut(inner.memory_set.token(), wstatus) = 3 << 8;
+                    }
                     return found_pid as isize;
                 } else {
-                    return_value = -2;
+                    exited = false;
                 }
             }
             // ---- release current PCB automatically
         }
-
         // not found yet
-        assert!(return_value < 0);
-        if options == WNOHANG {
-            return return_value;
+        assert!(!found || !exited);
+        if !found && options == WNOHANG {
+            return -1;
         }
         suspend_current_and_run_next();
     }
