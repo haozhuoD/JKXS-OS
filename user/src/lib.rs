@@ -93,7 +93,8 @@ pub fn yield_() -> isize {
     sys_yield()
 }
 pub fn get_time() -> isize {
-    sys_get_time()
+    panic!("outdated function");
+    // sys_get_time()
 }
 pub fn getpid() -> isize {
     sys_getpid()
@@ -151,7 +152,7 @@ pub fn kill(pid: usize, signal: i32) -> isize {
 
 pub fn sleep(sleep_ms: usize) {
     panic!("outdated function");
-    sys_sleep(sleep_ms);
+    // sys_sleep(sleep_ms);
 }
 
 pub fn thread_create(entry: usize, arg: usize) -> isize {

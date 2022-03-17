@@ -1,19 +1,21 @@
 use crate::mm::translated_ref;
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
-use crate::task::{block_current_and_run_next, current_process, current_task, current_user_token};
-use crate::timer::{add_timer, get_time_ns, NSEC_PER_SEC};
+use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
+use crate::timer::{USEC_PER_SEC, get_time_us};
 use alloc::sync::Arc;
 
-pub fn sys_nanosleep(req: *mut u64) -> isize {
+pub fn sys_sleep(req: *mut u64) -> isize {
     let token = current_user_token();
     let sec = *translated_ref(token, req);
-    let nsec = *translated_ref(token, unsafe { req.add(1) });
-    let expire_ns = get_time_ns() + sec as usize * NSEC_PER_SEC + nsec as usize;
+    let usec = *translated_ref(token, unsafe { req.add(1) });
+    drop(token);
 
-    println!("***{} {} {}", sec, nsec, expire_ns);
-    let task = current_task().unwrap();
-    add_timer(expire_ns, task);
-    block_current_and_run_next();
+    let t = sec as usize * USEC_PER_SEC + usec as usize;
+    let start_time = get_time_us();
+
+    while get_time_us() - start_time < t {
+        suspend_current_and_run_next();
+    }
     0
 }
 

@@ -45,7 +45,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
-        SYSCALL_NANOSLEEP => sys_nanosleep(args[0] as *mut u64),
+        SYSCALL_NANOSLEEP => sys_sleep(args[0] as *mut u64),
         SYSCALL_SCHED_YIELD => sys_yield(),
         SYSCALL_KILL => sys_kill(args[0], args[1] as u32),
         SYSCALL_GETTIMEOFDAY => sys_get_time(args[0] as *mut u64, args[1]),
