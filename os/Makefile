@@ -33,8 +33,9 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 DISASM ?= -x
 
 build: env switch-check $(KERNEL_BIN) fs-img 
+build-light: env switch-check $(KERNEL_BIN) 
 	
-# build: env switch-check $(KERNEL_BIN)
+# 反汇编并把文件保存到target/riscv64gc-unknown-none-elf/release/os.S
 asm:
 	@$(OBJDUMP) -all $(KERNEL_ELF) > $(KERNEL_ELF).S
 #	@$(OBJDUMP) -S $(KERNEL_ELF) > $(KERNEL_ELF).S
