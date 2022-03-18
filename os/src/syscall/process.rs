@@ -139,3 +139,17 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
         -1
     }
 }
+
+pub fn sys_brk(addr: usize) -> isize {
+    let process = current_process();
+    let mut inner = process.inner_exclusive_access();
+    // println!("syscall brk addr = {:x?}, base = {:x?}, top = {:x?}", addr, inner.user_heap_base, inner.user_heap_top);
+    if addr == 0 {
+        inner.user_heap_top as isize
+    } else if addr >= inner.user_heap_base {
+        inner.user_heap_top = addr as usize;
+        addr as isize
+    } else {
+        -1
+    }
+}

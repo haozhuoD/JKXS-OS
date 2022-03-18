@@ -33,6 +33,8 @@ pub struct ProcessControlBlockInner {
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    pub user_heap_base: usize,
+    pub user_heap_top: usize,
 }
 
 impl ProcessControlBlockInner {
@@ -100,6 +102,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    user_heap_base: uheap_base,
+                    user_heap_top: uheap_base,
                 })
             },
         });
@@ -140,6 +144,10 @@ impl ProcessControlBlock {
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
+
+        // ****设置用户堆顶****
+        self.inner_exclusive_access().user_heap_base = uheap_base;
+        self.inner_exclusive_access().user_heap_top = uheap_base;
         // then we alloc user resource for main thread again
         // since memory_set has been changed
         let task = self.inner_exclusive_access().get_task(0);
@@ -202,6 +210,8 @@ impl ProcessControlBlock {
                 new_fd_table.push(None);
             }
         }
+
+        let uheap_base = parent.user_heap_base;
         // create child process pcb
         let child = Arc::new(Self {
             pid,
@@ -219,6 +229,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    user_heap_base: uheap_base,
+                    user_heap_top: uheap_base,
                 })
             },
         });

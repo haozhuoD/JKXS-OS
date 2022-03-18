@@ -4,7 +4,6 @@ use std::fs::{read_dir, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread::panicking;
 
 const BLOCK_SZ: usize = 512;
 
