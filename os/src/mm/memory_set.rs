@@ -2,7 +2,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE};
+use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -165,7 +165,7 @@ impl MemorySet {
     }
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
+    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize) {
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();
@@ -201,12 +201,12 @@ impl MemorySet {
             }
         }
         let max_end_va: VirtAddr = max_end_vpn.into();
-        let mut user_stack_base: usize = max_end_va.into();
-        user_stack_base += PAGE_SIZE;
+        let user_heap_base: usize = max_end_va.into();
         (
             memory_set,
-            user_stack_base,
+            USER_STACK_BASE,
             elf.header.pt2.entry_point() as usize,
+            user_heap_base,
         )
     }
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {

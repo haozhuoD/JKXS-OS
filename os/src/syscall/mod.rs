@@ -36,7 +36,7 @@ use process::*;
 use sync::*;
 use thread::*;
 
-pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     match syscall_id {
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_OPENAT => sys_open(args[0] as *const u8, args[1] as u32),
