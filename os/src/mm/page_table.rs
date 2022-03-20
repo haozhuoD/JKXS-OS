@@ -203,12 +203,30 @@ impl UserBuffer {
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
         Self { buffers }
     }
+
     pub fn len(&self) -> usize {
         let mut total: usize = 0;
         for b in self.buffers.iter() {
             total += b.len();
         }
         total
+    }
+
+    /// 将buff中的数据写入UserBuf中
+    pub fn write(&mut self, buf: &[u8]) -> usize {
+        let len = self.len().min(buf.len());
+        let mut current = 0;
+        for sub_buf in self.buffers.iter_mut() {
+            let sblen = (*sub_buf).len();
+            for j in 0..sblen {
+                (*sub_buf)[j] = buf[current];
+                current += 1;
+                if current == len {
+                    return len;
+                }
+            }
+        }
+        len
     }
 }
 

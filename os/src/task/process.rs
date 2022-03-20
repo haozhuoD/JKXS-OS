@@ -3,7 +3,7 @@ use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
 use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
-use crate::fs::{File, Stdin, Stdout};
+use crate::fs::{File, Stdin, Stdout, FileClass};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
@@ -26,7 +26,7 @@ pub struct ProcessControlBlockInner {
     pub parent: Option<Weak<ProcessControlBlock>>,
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: Vec<Option<FileClass>>,
     pub signals: SignalFlags,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
@@ -90,11 +90,11 @@ impl ProcessControlBlock {
                     exit_code: 0,
                     fd_table: vec![
                         // 0 -> stdin
-                        Some(Arc::new(Stdin)),
+                        Some(FileClass::Abs(Arc::new(Stdin))),
                         // 1 -> stdout
-                        Some(Arc::new(Stdout)),
+                        Some(FileClass::Abs(Arc::new(Stdout))),
                         // 2 -> stderr
-                        Some(Arc::new(Stdout)),
+                        Some(FileClass::Abs(Arc::new(Stdout))),
                     ],
                     signals: SignalFlags::empty(),
                     tasks: Vec::new(),
@@ -202,7 +202,7 @@ impl ProcessControlBlock {
         // alloc a pid
         let pid = pid_alloc();
         // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        let mut new_fd_table = Vec::new();
         for fd in parent.fd_table.iter() {
             if let Some(file) = fd {
                 new_fd_table.push(Some(file.clone()));

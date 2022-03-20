@@ -183,4 +183,11 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+
+    pub fn size(&self) -> usize {
+        let _fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            disk_inode.size as usize
+        })
+    }
 }

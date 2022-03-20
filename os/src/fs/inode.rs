@@ -41,6 +41,11 @@ impl OSInode {
         }
         v
     }
+
+    pub fn file_size(&self) -> usize {
+        let mut inner = self.inner.exclusive_access();
+        inner.inode.size()
+    }
 }
 
 lazy_static! {
