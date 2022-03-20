@@ -1,6 +1,8 @@
 use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_process, current_task, current_user_token};
+use crate::gdb_println;
+use crate::monitor::*;
 use alloc::sync::Arc;
 use core::mem::size_of;
 
@@ -24,7 +26,16 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        f.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        
+        let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) ;
+        if fd == 2{
+            let str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
+            gdb_println!(SYSCALL_ENABLE, "sys_write(fd: {}, buf: \"{}\", len: {}) = {}", fd, str, len, ret);
+        }
+        else if fd > 2{
+            gdb_println!(SYSCALL_ENABLE, "sys_write(fd: {}, buf: ?, len: {}) = {}", fd, len, ret);
+        }
+        ret as isize
     } else {
         -1
     }
@@ -48,7 +59,11 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        f.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) ;
+        if fd>2 {
+            gdb_println!(SYSCALL_ENABLE,"sys_read(fd: {}, buf: *** , len: {}) = {}", fd, len, ret);
+        }
+        ret as isize
     } else {
         -1
     }
@@ -62,6 +77,7 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
         let mut inner = process.inner_exclusive_access();
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(FileClass::File(inode));
+        gdb_println!(SYSCALL_ENABLE,"sys_open(path: {}, flags: {} ) = {}", path,flags , fd);
         fd as isize
     } else {
         -1
@@ -72,12 +88,15 @@ pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
+        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -1);
         return -1;
     }
     if inner.fd_table[fd].is_none() {
+        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -1);
         return -1;
     }
     inner.fd_table[fd].take();
+    gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, 0);
     0
 }
 
@@ -92,6 +111,7 @@ pub fn sys_pipe(pipe: *mut usize) -> isize {
     inner.fd_table[write_fd] = Some(FileClass::Abs(pipe_write));
     *translated_refmut(token, pipe) = read_fd;
     *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd;
+    gdb_println!(SYSCALL_ENABLE, "sys_pipe() = [{}, {}]", read_fd, write_fd);
     0
 }
 
