@@ -2,9 +2,9 @@
 
 const SYSCALL_GETCWD: usize = 17;
 const SYSCALL_DUP: usize = 23;
-const SYSCALL_DUP3:usize = 24;
-const SYSCALL_FCNTL:usize = 25;
-const SYSCALL_IOCTL:usize = 29;
+const SYSCALL_DUP3: usize = 24;
+const SYSCALL_FCNTL: usize = 25;
+const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_MKDIRAT: usize = 34;
 const SYSCALL_UNLINKAT: usize = 35;
 const SYSCALL_LINKAT: usize = 37;
@@ -24,9 +24,9 @@ const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEW_FSTATAT: usize = 79;
-const SYSCALL_FSTAT:usize = 80;
-const SYSCALL_FSYNC:usize = 82;
-const SYSCALL_UTIMENSAT:usize = 88;
+const SYSCALL_FSTAT: usize = 80;
+const SYSCALL_FSYNC: usize = 82;
+const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GRUOP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
@@ -101,6 +101,15 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_CLONE => sys_fork(),
         SYSCALL_EXECVE => sys_exec(args[0] as *const u8, args[1] as *const usize),
+        SYSCALL_MMAP => sys_mmap(
+            args[0] as usize,
+            args[1] as usize,
+            args[2] as usize,
+            args[3] as usize,
+            args[4] as isize,
+            args[5] as usize,
+        ),
+
         SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32, args[2] as isize),
         SYSCALL_THREAD_CREATE => sys_thread_create(args[0], args[1]),
         SYSCALL_GETTID => sys_gettid(),
