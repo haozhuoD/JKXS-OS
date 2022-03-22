@@ -307,6 +307,13 @@ impl ProcessControlBlock {
         start as isize
     }
 
+    pub fn munmap(&self, start: usize, _len: usize) -> isize {
+        assert!(is_aligned(start));
+        let mut inner = self.inner_exclusive_access();
+        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
+        inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
+    }
+
     pub fn getpid(&self) -> usize {
         self.pid.0
     }

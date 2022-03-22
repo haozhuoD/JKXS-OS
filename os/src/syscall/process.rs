@@ -177,6 +177,15 @@ pub fn sys_mmap(
     let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
     let aligned_len = aligned_up(len);
 
-    println!("sys_mmap(aligned_start: {:#x?}, len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, 0);
-    current_process().mmap(start, aligned_len, prot, flags, fd, offset)
+    let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
+    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, ret);
+    ret
+}
+
+pub fn sys_munmap(start: usize, _len: usize) -> isize {
+    let start = aligned_up(start);
+
+    let ret = current_process().munmap(start, _len);
+    gdb_println!(SYSCALL_ENABLE, "sys_munmap(aligend_start: {:#x?}, len: {}) = {}", start, _len, ret);
+    ret
 }

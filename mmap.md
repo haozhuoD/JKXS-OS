@@ -1,7 +1,16 @@
 # mmap
 
-1. 修改memoryset内容，增加记录已分配的堆内存和mmap内存的数据结构。
-2. 修改用户栈基地址和mmap基地址
-! todo: fork子进程和new的时候，memory_set的内容如何初始化？
-! todo: 小改open系统调用
-! todo: munmap
+1. 修改`memoryset`内容，增加记录已分配的堆内存和`mmap`内存的数据结构。
+2. 修改用户栈基地址和`mmap`基地址，见`config.rs`
+3. 修改`open`系统调用为`open_at`，增加`fstat`系统调用。
+4. 以`lazy allocation`的方式，将实际分配`mmap`和`heap`的内存延迟到缺页中断发生时，见`trap/page_fault.rs`
+
+! todo: lazy heap
+
+! todo: CopyOnWrite
+
+! todo: fork子进程时，复制堆内存和`mmap`内存
+
+! todo: munmap时写回文件
+
+! todo: mmap_anonymus

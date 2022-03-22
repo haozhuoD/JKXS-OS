@@ -41,7 +41,7 @@ impl MmapArea {
         }
     }
 
-    /// 分配一个物理页帧并建立vpn到它的mmap映射，同时从fd中读取对应文件，失败返回-1
+    /// (lazy)分配一个物理页帧并建立vpn到它的mmap映射，同时从fd中读取对应文件，失败返回-1
     pub fn map_one(
         &mut self,
         page_table: &mut PageTable,
@@ -82,5 +82,11 @@ impl MmapArea {
             return -1;
         }
         0
+    }
+
+    pub fn unmap(&self, page_table: &mut PageTable) {
+        for vpn in self.data_frames.keys() {
+            page_table.unmap(*vpn);
+        }
     }
 }

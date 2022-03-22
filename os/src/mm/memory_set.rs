@@ -254,13 +254,29 @@ impl MemorySet {
         self.mmap_areas.push(mmap_area);
     }
 
-    /// 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
+    /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
     pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum, fd_table: FdTable) -> isize {
         for mmap_area in self.mmap_areas.iter_mut() {
             if vpn >= mmap_area.start_vpn && vpn < mmap_area.end_vpn {
                 return mmap_area.map_one(&mut self.page_table, fd_table, vpn);
             }
         }
+        // if failed
+        -1
+    }
+
+    pub fn remove_mmap_area_with_start_vpn(&mut self, vpn: VirtPageNum) -> isize {
+        if let Some((idx, area)) = self
+            .mmap_areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.start_vpn == vpn)
+        {
+            area.unmap(&mut self.page_table);
+            self.mmap_areas.remove(idx);
+            return 0;
+        }
+        // if failed
         -1
     }
 }
