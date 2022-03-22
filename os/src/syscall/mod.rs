@@ -86,7 +86,12 @@ use thread::*;
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     match syscall_id {
         SYSCALL_DUP => sys_dup(args[0]),
-        SYSCALL_OPENAT => sys_open(args[0] as *const u8, args[1] as u32),
+        SYSCALL_OPENAT => sys_open_at(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as u32,
+            args[3] as u32,
+        ),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE2 => sys_pipe(args[0] as *mut usize),
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
@@ -109,7 +114,6 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[4] as isize,
             args[5] as usize,
         ),
-
         SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32, args[2] as isize),
         SYSCALL_THREAD_CREATE => sys_thread_create(args[0], args[1]),
         SYSCALL_GETTID => sys_gettid(),

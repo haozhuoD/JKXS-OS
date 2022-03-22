@@ -1,7 +1,7 @@
 use crate::mm::translated_ref;
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
-use crate::timer::{USEC_PER_SEC, get_time_us};
+use crate::timer::{get_time_us, USEC_PER_SEC};
 use alloc::sync::Arc;
 
 pub fn sys_sleep(req: *mut u64) -> isize {

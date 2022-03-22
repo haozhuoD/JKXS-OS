@@ -1,8 +1,8 @@
 use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags};
-use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::task::{current_process, current_task, current_user_token};
 use crate::gdb_println;
+use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::monitor::*;
+use crate::task::{current_process, current_task, current_user_token};
 use alloc::sync::Arc;
 use core::mem::size_of;
 
@@ -26,14 +26,26 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        
-        let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) ;
-        if fd == 2{
+
+        let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
+        if fd == 2 {
             let str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
-            gdb_println!(SYSCALL_ENABLE, "sys_write(fd: {}, buf: \"{}\", len: {}) = {}", fd, str, len, ret);
-        }
-        else if fd > 2{
-            gdb_println!(SYSCALL_ENABLE, "sys_write(fd: {}, buf: ?, len: {}) = {}", fd, len, ret);
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_write(fd: {}, buf: \"{}\", len: {}) = {}",
+                fd,
+                str,
+                len,
+                ret
+            );
+        } else if fd > 2 {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_write(fd: {}, buf: ?, len: {}) = {}",
+                fd,
+                len,
+                ret
+            );
         }
         ret as isize
     } else {
@@ -59,9 +71,15 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) ;
-        if fd>2 {
-            gdb_println!(SYSCALL_ENABLE,"sys_read(fd: {}, buf: *** , len: {}) = {}", fd, len, ret);
+        let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len)));
+        if fd > 2 {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_read(fd: {}, buf: *** , len: {}) = {}",
+                fd,
+                len,
+                ret
+            );
         }
         ret as isize
     } else {
@@ -69,15 +87,24 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     }
 }
 
-pub fn sys_open(path: *const u8, flags: u32) -> isize {
+pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, mode: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
     let path = translated_str(token, path);
+
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = process.inner_exclusive_access();
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(FileClass::File(inode));
-        gdb_println!(SYSCALL_ENABLE,"sys_open(path: {}, flags: {} ) = {}", path,flags , fd);
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = {}",
+            dirfd,
+            path,
+            flags,
+            mode,
+            0
+        );
         fd as isize
     } else {
         -1
@@ -126,6 +153,7 @@ pub fn sys_dup(fd: usize) -> isize {
     }
     let new_fd = inner.alloc_fd();
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
+    gdb_println!(SYSCALL_ENABLE, "sys_dup(fd: {}) = {}", fd, new_fd);
     new_fd as isize
 }
 
@@ -150,7 +178,14 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
             FileClass::File(f) => {
                 kstat.st_size = f.file_size() as i64;
                 userbuf.write(kstat.as_bytes());
-                -1
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_dup(fd: {}, buf = {:x?}) = {}",
+                    fd,
+                    buf,
+                    0
+                );
+                0
             }
             _ => -1,
         }

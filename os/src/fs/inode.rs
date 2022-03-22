@@ -43,8 +43,13 @@ impl OSInode {
     }
 
     pub fn file_size(&self) -> usize {
-        let mut inner = self.inner.exclusive_access();
+        let inner = self.inner.exclusive_access();
         inner.inode.size()
+    }
+
+    pub fn set_offset(&self, offset: usize) -> usize {
+        self.inner.exclusive_access().offset = offset;
+        offset
     }
 }
 
@@ -90,6 +95,7 @@ impl OpenFlags {
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
+        // println!("open_file(CREATE)");
         if let Some(inode) = ROOT_INODE.find(name) {
             // clear size
             inode.clear();

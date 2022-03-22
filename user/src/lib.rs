@@ -71,8 +71,11 @@ bitflags! {
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
+
+const AT_FDCWD: isize = -100;
+
 pub fn open(path: &str, flags: OpenFlags) -> isize {
-    sys_open(path, flags.bits)
+    sys_open_at(AT_FDCWD, path, flags.bits, 2)
 }
 pub fn close(fd: usize) -> isize {
     sys_close(fd)

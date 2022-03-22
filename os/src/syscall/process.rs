@@ -1,10 +1,12 @@
+use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::{USEC_PER_SEC, get_time_us};
+use crate::timer::{get_time_us, USEC_PER_SEC};
+use crate::{gdb_println, monitor::*};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -63,6 +65,13 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         let all_data = app_inode.read_all();
         let process = current_process();
         let argc = args_vec.len();
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_exec(path: {:?}, args: {:x?} ) = {}",
+            path,
+            args,
+            argc
+        );
         process.exec(all_data.as_slice(), args_vec);
         // return argc because cx.x[10] will be covered with it later
         argc as isize
@@ -154,6 +163,20 @@ pub fn sys_brk(addr: usize) -> isize {
     }
 }
 
-pub fn sys_mmap(start: usize, len: usize, prot: usize, flags: usize, fd: isize, offset: usize) -> isize {
-    0
+pub fn sys_mmap(
+    start: usize,
+    len: usize,
+    prot: usize,
+    flags: usize,
+    fd: isize,
+    offset: usize,
+) -> isize {
+    if start != 0 {
+        unimplemented!();
+    }
+    let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
+    let aligned_len = aligned_up(len);
+
+    println!("sys_mmap(aligned_start: {:#x?}, len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, 0);
+    current_process().mmap(start, aligned_len, prot, flags, fd, offset)
 }
