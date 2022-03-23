@@ -19,6 +19,7 @@ pub fn main() -> i32 {
 
     // assert 1
     assert_eq!(addr1 - addr0, 160);
+    println!("try to write...");
     let ptr = (addr0 + 48) as usize as *mut usize;
     unsafe {
         ptr.write_volatile(MAGIC);
@@ -33,5 +34,6 @@ pub fn main() -> i32 {
     unsafe {
         (addr0 as usize as *mut usize).write_volatile(MAGIC);
     }
+    panic!("Should not reach here!");
     0
 }

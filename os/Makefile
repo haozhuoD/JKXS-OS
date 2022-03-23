@@ -1,6 +1,6 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
-MODE ?= debug
+MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -38,12 +38,12 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 # Disassembly
 DISASM ?= -x
 
-build: env switch-check $(KERNEL_BIN) fs-img 
+build: env switch-check $(KERNEL_BIN) fs-img asm
 build-light: env switch-check $(KERNEL_BIN) 
 	
 # 反汇编并把文件保存到target/riscv64gc-unknown-none-elf/release/os.S
 asm:
-	@$(OBJDUMP) -all $(KERNEL_ELF) > $(KERNEL_ELF).S
+	@$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
 #	@$(OBJDUMP) -S $(KERNEL_ELF) > $(KERNEL_ELF).S
 
 switch-check:

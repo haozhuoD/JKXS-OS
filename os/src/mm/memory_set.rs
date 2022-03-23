@@ -280,11 +280,18 @@ impl MemorySet {
         -1
     }
 
-    pub fn insert_heap_dataframe(&mut self, va: usize, user_heap_base: usize, user_heap_top: usize) -> isize {
+    pub fn insert_heap_dataframe(
+        &mut self,
+        va: usize,
+        user_heap_base: usize,
+        user_heap_top: usize,
+    ) -> isize {
         if va >= user_heap_base && va < user_heap_top {
-            // 访问地址落在已预留的堆空间内，此时将分配页帧
-            let vpn = VirtPageNum::from(VirtAddr::from(va));
+            // alloc a frame
+            let vpn = VirtAddr::from(va).floor();
             let frame = frame_alloc().unwrap();
+            self.page_table
+                .map(vpn, frame.ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
             self.heap_frames.insert(vpn, frame);
             0
         } else {
@@ -293,11 +300,22 @@ impl MemorySet {
     }
 
     pub fn remove_heap_dataframes(&mut self, prev_top: usize, current_top: usize) {
+        // println!("remove_heap_dataframes {:#x?} {:#x}", prev_top, current_top);
         assert!(current_top < prev_top);
-        self.heap_frames.drain_filter(|vpn, _| {
-            let vpn_addr: usize = VirtAddr::from(VirtPageNum::from(*vpn)).into();
-            vpn_addr >= current_top && vpn_addr <= prev_top
-        });
+        let dropped: Vec<(_, _)> = self
+            .heap_frames
+            .drain_filter(|vpn, _| {
+                let vpn_addr: usize = VirtAddr::from(VirtPageNum::from(*vpn)).into();
+                vpn_addr >= current_top && vpn_addr <= prev_top
+            })
+            .collect();
+
+        // pagetalbe unmapping...
+        for (vpn, _) in dropped.iter() {
+            self.page_table.unmap(*vpn);
+        }
+
+        // Aautomatically drop FrameTrackers here...
     }
 }
 

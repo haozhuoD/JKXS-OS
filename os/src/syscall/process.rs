@@ -190,6 +190,12 @@ pub fn sys_munmap(start: usize, _len: usize) -> isize {
     let start = aligned_up(start);
 
     let ret = current_process().munmap(start, _len);
-    gdb_println!(SYSCALL_ENABLE, "sys_munmap(aligend_start: {:#x?}, len: {}) = {}", start, _len, ret);
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_munmap(aligend_start: {:#x?}, len: {}) = {}",
+        start,
+        _len,
+        ret
+    );
     ret
 }
