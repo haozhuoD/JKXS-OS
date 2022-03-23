@@ -13,7 +13,7 @@ fn lazy_alloc_mmap_page(vaddr: usize) -> isize {
 }
 
 fn lazy_alloc_heap_page(vaddr: usize) -> isize {
-    println!("lazy_alloc_heap_page({:#x?})", vaddr);
+    // println!("lazy_alloc_heap_page({:#x?})", vaddr);
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     let user_heap_base = inner.user_heap_base;

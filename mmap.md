@@ -13,3 +13,5 @@
 ! todo: munmap时写回文件
 
 ! todo: mmap_anonymus
+
+! todo: 完善fstat（目前只填入了file_size），完整支持需要等待文件系统实现
