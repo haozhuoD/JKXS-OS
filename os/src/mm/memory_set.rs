@@ -38,7 +38,7 @@ pub fn kernel_token() -> usize {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
-    heap_frames: BTreeMap<VirtPageNum, PhysPageNum>,
+    heap_frames: BTreeMap<VirtPageNum, FrameTracker>,
     mmap_areas: Vec<MmapArea>,
 }
 
@@ -278,6 +278,26 @@ impl MemorySet {
         }
         // if failed
         -1
+    }
+
+    pub fn insert_heap_dataframe(&mut self, va: usize, user_heap_base: usize, user_heap_top: usize) -> isize {
+        if va >= user_heap_base && va < user_heap_top {
+            // 访问地址落在已预留的堆空间内，此时将分配页帧
+            let vpn = VirtPageNum::from(VirtAddr::from(va));
+            let frame = frame_alloc().unwrap();
+            self.heap_frames.insert(vpn, frame);
+            0
+        } else {
+            -1
+        }
+    }
+
+    pub fn remove_heap_dataframes(&mut self, prev_top: usize, current_top: usize) {
+        assert!(current_top < prev_top);
+        self.heap_frames.drain_filter(|vpn, _| {
+            let vpn_addr: usize = VirtAddr::from(VirtPageNum::from(*vpn)).into();
+            vpn_addr >= current_top && vpn_addr <= prev_top
+        });
     }
 }
 

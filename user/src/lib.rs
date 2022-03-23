@@ -174,6 +174,9 @@ pub fn waittid(tid: usize) -> isize {
         }
     }
 }
+pub fn brk(addr: usize) -> isize {
+    sys_brk(addr)
+}
 
 pub fn mutex_create() -> isize {
     sys_mutex_create(false)

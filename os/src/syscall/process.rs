@@ -156,6 +156,10 @@ pub fn sys_brk(addr: usize) -> isize {
     if addr == 0 {
         inner.user_heap_top as isize
     } else if addr >= inner.user_heap_base {
+        if addr < inner.user_heap_top {
+            let prev_top = inner.user_heap_top;
+            inner.memory_set.remove_heap_dataframes(prev_top, addr);
+        }
         inner.user_heap_top = addr as usize;
         addr as isize
     } else {

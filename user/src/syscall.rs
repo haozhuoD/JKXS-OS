@@ -172,6 +172,10 @@ pub fn sys_waittid(tid: usize) -> isize {
     syscall(SYSCALL_WAITTID, [tid, 0, 0, 0, 0, 0])
 }
 
+pub fn sys_brk(addr: usize) -> isize {
+    syscall(SYSCALL_BRK, [addr, 0, 0, 0, 0, 0])
+}
+
 pub fn sys_mutex_create(blocking: bool) -> isize {
     syscall(SYSCALL_MUTEX_CREATE, [blocking as usize, 0, 0, 0, 0, 0])
 }
