@@ -133,3 +133,7 @@ New value = (void *) 0x4bb9bcb08
 
 增加额外入栈信息后，再次出现了一个page fault，出错指令为0xde0cc，stval = 0。这个0就很灵性，我也不清楚是怎么回事。
 需要进一步调试！
+
+## 解决
+
+对比ultraos发现缺少了ph_head_addr这个aux。添加之后，busybox成功跑起！

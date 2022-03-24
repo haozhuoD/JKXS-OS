@@ -3,9 +3,9 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
+use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE, is_aligned};
 use crate::sync::UPSafeCell;
-use crate::task::{FdTable, AuxHeader, AT_PHENT, AT_PHNUM, AT_PAGESZ, AT_BASE, AT_FLAGS, AT_ENTRY, AT_UID, AT_EUID, AT_GID, AT_PLATFORM, AT_EGID, AT_HWCAP, AT_CLKTCK, AT_SECURE, AT_NOTELF};
+use crate::task::{FdTable, AuxHeader, AT_PHENT, AT_PHNUM, AT_PAGESZ, AT_BASE, AT_FLAGS, AT_ENTRY, AT_UID, AT_EUID, AT_GID, AT_PLATFORM, AT_EGID, AT_HWCAP, AT_CLKTCK, AT_SECURE, AT_NOTELF, AT_PHDR};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -208,6 +208,8 @@ impl MemorySet {
         auxv.push(AuxHeader{aux_type: AT_SECURE, value: 0 as usize});
         auxv.push(AuxHeader{aux_type: AT_NOTELF, value: 0x112d as usize});
         
+        let mut head_va = 0;
+
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -231,11 +233,15 @@ impl MemorySet {
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                     start_va.page_offset()
                 );
+
+                if start_va.aligned() {
+                    head_va = start_va.0;
+                }
             }
         }
 
-        // let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
-        // auxv.push(AuxHeader{aux_type: AT_PHDR, value: ph_head_addr as usize});
+        let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        auxv.push(AuxHeader{aux_type: AT_PHDR, value: ph_head_addr as usize});
 
         let max_end_va: VirtAddr = max_end_vpn.into();
         let user_heap_base: usize = max_end_va.into();
