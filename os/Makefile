@@ -1,12 +1,18 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
-MODE := release
+MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
-FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
+FS_IMG := ../user/target/$(TARGET)/release/fs.img
 SDCARD := /dev/sdb
 APPS := ../user/src/bin/*
+
+ifeq ($(MODE), release)
+	BUILD_MODE := --release
+else
+	BUILD_MODE := 
+endif
 
 # BOARD
 BOARD ?= qemu
@@ -32,12 +38,12 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 # Disassembly
 DISASM ?= -x
 
-build: env switch-check $(KERNEL_BIN) fs-img 
+build: env switch-check $(KERNEL_BIN) fs-img asm
 build-light: env switch-check $(KERNEL_BIN) 
 	
 # 反汇编并把文件保存到target/riscv64gc-unknown-none-elf/release/os.S
 asm:
-	@$(OBJDUMP) -all $(KERNEL_ELF) > $(KERNEL_ELF).S
+	@$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
 #	@$(OBJDUMP) -S $(KERNEL_ELF) > $(KERNEL_ELF).S
 
 switch-check:
@@ -64,14 +70,14 @@ $(KERNEL_BIN): kernel
 fs-img: $(APPS)
 	@cd ../user && make build
 	@rm -f $(FS_IMG)
-	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/ -T ../user/riscv64/
+	@cd ../easy-fs-fuse && cargo run $(BUILD_MODE) -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/ -T ../user/riscv64/
 
 $(APPS):
 
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build --release --features "board_$(BOARD)"
+	@cargo build $(BUILD_MODE) --features "board_$(BOARD)"
 	@rm src/linker.ld
 
 clean:

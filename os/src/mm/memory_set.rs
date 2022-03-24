@@ -1,9 +1,11 @@
+use super::mmap::MmapArea;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::sync::UPSafeCell;
+use crate::task::FdTable;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -36,6 +38,8 @@ pub fn kernel_token() -> usize {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    heap_frames: BTreeMap<VirtPageNum, FrameTracker>,
+    mmap_areas: Vec<MmapArea>,
 }
 
 impl MemorySet {
@@ -43,6 +47,8 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            heap_frames: BTreeMap::new(),
+            mmap_areas: Vec::new(),
         }
     }
     pub fn token(&self) -> usize {
@@ -242,6 +248,75 @@ impl MemorySet {
         //*self = Self::new_bare();
         self.areas.clear();
     }
+
+    /// 插入一个mmap区域
+    pub fn push_mmap_area(&mut self, mmap_area: MmapArea) {
+        self.mmap_areas.push(mmap_area);
+    }
+
+    /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
+    pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum, fd_table: FdTable) -> isize {
+        for mmap_area in self.mmap_areas.iter_mut() {
+            if vpn >= mmap_area.start_vpn && vpn < mmap_area.end_vpn {
+                return mmap_area.map_one(&mut self.page_table, fd_table, vpn);
+            }
+        }
+        // if failed
+        -1
+    }
+
+    pub fn remove_mmap_area_with_start_vpn(&mut self, vpn: VirtPageNum) -> isize {
+        if let Some((idx, area)) = self
+            .mmap_areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.start_vpn == vpn)
+        {
+            area.unmap(&mut self.page_table);
+            self.mmap_areas.remove(idx);
+            return 0;
+        }
+        // if failed
+        -1
+    }
+
+    pub fn insert_heap_dataframe(
+        &mut self,
+        va: usize,
+        user_heap_base: usize,
+        user_heap_top: usize,
+    ) -> isize {
+        if va >= user_heap_base && va < user_heap_top {
+            // alloc a frame
+            let vpn = VirtAddr::from(va).floor();
+            let frame = frame_alloc().unwrap();
+            self.page_table
+                .map(vpn, frame.ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            self.heap_frames.insert(vpn, frame);
+            0
+        } else {
+            -1
+        }
+    }
+
+    pub fn remove_heap_dataframes(&mut self, prev_top: usize, current_top: usize) {
+        // println!("remove_heap_dataframes {:#x?} {:#x}", prev_top, current_top);
+        assert!(current_top < prev_top);
+        let dropped: Vec<(_, _)> = self
+            .heap_frames
+            .drain_filter(|vpn, _| {
+                let vpn_addr: usize = VirtAddr::from(VirtPageNum::from(*vpn)).into();
+                vpn_addr >= current_top && vpn_addr <= prev_top
+            })
+            .collect();
+
+        // pagetalbe unmapping...
+        for (vpn, _) in dropped.iter() {
+            self.page_table.unmap(*vpn);
+        }
+
+        // Aautomatically drop FrameTrackers here...
+    }
 }
 
 pub struct MapArea {
@@ -351,26 +426,20 @@ pub fn remap_test() {
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
-    assert!(
-        !kernel_space
-            .page_table
-            .translate(mid_text.floor())
-            .unwrap()
-            .writable(),
-    );
-    assert!(
-        !kernel_space
-            .page_table
-            .translate(mid_rodata.floor())
-            .unwrap()
-            .writable(),
-    );
-    assert!(
-        !kernel_space
-            .page_table
-            .translate(mid_data.floor())
-            .unwrap()
-            .executable(),
-    );
+    assert!(!kernel_space
+        .page_table
+        .translate(mid_text.floor())
+        .unwrap()
+        .writable(),);
+    assert!(!kernel_space
+        .page_table
+        .translate(mid_rodata.floor())
+        .unwrap()
+        .writable(),);
+    assert!(!kernel_space
+        .page_table
+        .translate(mid_data.floor())
+        .unwrap()
+        .executable(),);
     println!("remap_test passed!");
 }

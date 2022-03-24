@@ -3,8 +3,11 @@ use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
 use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
-use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
+use crate::config::{is_aligned, MMAP_BASE};
+use crate::fs::{FileClass, Stdin, Stdout};
+use crate::mm::{
+    translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
+};
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
@@ -20,21 +23,26 @@ pub struct ProcessControlBlock {
     inner: UPSafeCell<ProcessControlBlockInner>,
 }
 
+pub type FdTable = Vec<Option<FileClass>>;
+
 pub struct ProcessControlBlockInner {
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: FdTable,
     pub signals: SignalFlags,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    // user heap
     pub user_heap_base: usize,
     pub user_heap_top: usize,
+    // mmap area
+    pub mmap_area_top: usize,
 }
 
 impl ProcessControlBlockInner {
@@ -90,11 +98,11 @@ impl ProcessControlBlock {
                     exit_code: 0,
                     fd_table: vec![
                         // 0 -> stdin
-                        Some(Arc::new(Stdin)),
+                        Some(FileClass::Abs(Arc::new(Stdin))),
                         // 1 -> stdout
-                        Some(Arc::new(Stdout)),
+                        Some(FileClass::Abs(Arc::new(Stdout))),
                         // 2 -> stderr
-                        Some(Arc::new(Stdout)),
+                        Some(FileClass::Abs(Arc::new(Stdout))),
                     ],
                     signals: SignalFlags::empty(),
                     tasks: Vec::new(),
@@ -104,6 +112,7 @@ impl ProcessControlBlock {
                     condvar_list: Vec::new(),
                     user_heap_base: uheap_base,
                     user_heap_top: uheap_base,
+                    mmap_area_top: MMAP_BASE,
                 })
             },
         });
@@ -145,9 +154,10 @@ impl ProcessControlBlock {
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
 
-        // ****设置用户堆顶****
+        // ****设置用户堆顶和mmap顶端位置****
         self.inner_exclusive_access().user_heap_base = uheap_base;
         self.inner_exclusive_access().user_heap_top = uheap_base;
+        self.inner_exclusive_access().mmap_area_top = MMAP_BASE;
         // then we alloc user resource for main thread again
         // since memory_set has been changed
         let task = self.inner_exclusive_access().get_task(0);
@@ -202,7 +212,7 @@ impl ProcessControlBlock {
         // alloc a pid
         let pid = pid_alloc();
         // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        let mut new_fd_table = Vec::new();
         for fd in parent.fd_table.iter() {
             if let Some(file) = fd {
                 new_fd_table.push(Some(file.clone()));
@@ -211,7 +221,6 @@ impl ProcessControlBlock {
             }
         }
 
-        let uheap_base = parent.user_heap_base;
         // create child process pcb
         let child = Arc::new(Self {
             pid,
@@ -229,8 +238,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
-                    user_heap_base: uheap_base,
-                    user_heap_top: uheap_base,
+                    user_heap_base: parent.user_heap_base,
+                    user_heap_top: parent.user_heap_top,
+                    mmap_area_top: parent.mmap_area_top,
                 })
             },
         });
@@ -263,6 +273,45 @@ impl ProcessControlBlock {
         // add this thread to scheduler
         add_task(task);
         child
+    }
+
+    /// 插入一个mmap区域（此时尚未实际分配数据页），并更新进程mmap顶部位置
+    pub fn mmap(
+        &self,
+        start: usize,
+        len: usize,
+        prot: usize,
+        flags: usize,
+        fd: isize,
+        offset: usize,
+    ) -> isize {
+        // `flags` field unimplemented
+        assert!(is_aligned(start) && is_aligned(len));
+        let mut inner = self.inner_exclusive_access();
+        assert_eq!(start, inner.mmap_area_top);
+
+        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
+        let end_vpn = VirtPageNum::from(VirtAddr::from(start + len));
+        let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
+
+        inner.memory_set.push_mmap_area(MmapArea::new(
+            start_vpn,
+            end_vpn,
+            map_perm,
+            flags,
+            fd as usize,
+            offset,
+        ));
+        inner.mmap_area_top = VirtAddr::from(end_vpn).0;
+
+        start as isize
+    }
+
+    pub fn munmap(&self, start: usize, _len: usize) -> isize {
+        assert!(is_aligned(start));
+        let mut inner = self.inner_exclusive_access();
+        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
+        inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
     }
 
     pub fn getpid(&self) -> usize {

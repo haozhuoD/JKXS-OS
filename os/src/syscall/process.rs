@@ -1,10 +1,12 @@
+use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::{USEC_PER_SEC, get_time_us};
+use crate::timer::{get_time_us, USEC_PER_SEC};
+use crate::{gdb_println, monitor::*};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -63,6 +65,13 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         let all_data = app_inode.read_all();
         let process = current_process();
         let argc = args_vec.len();
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_exec(path: {:?}, args: {:x?} ) = {}",
+            path,
+            args,
+            argc
+        );
         process.exec(all_data.as_slice(), args_vec);
         // return argc because cx.x[10] will be covered with it later
         argc as isize
@@ -147,9 +156,46 @@ pub fn sys_brk(addr: usize) -> isize {
     if addr == 0 {
         inner.user_heap_top as isize
     } else if addr >= inner.user_heap_base {
+        if addr < inner.user_heap_top {
+            let prev_top = inner.user_heap_top;
+            inner.memory_set.remove_heap_dataframes(prev_top, addr);
+        }
         inner.user_heap_top = addr as usize;
         addr as isize
     } else {
         -1
     }
+}
+
+pub fn sys_mmap(
+    start: usize,
+    len: usize,
+    prot: usize,
+    flags: usize,
+    fd: isize,
+    offset: usize,
+) -> isize {
+    if start != 0 {
+        unimplemented!();
+    }
+    let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
+    let aligned_len = aligned_up(len);
+
+    let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
+    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, ret);
+    ret
+}
+
+pub fn sys_munmap(start: usize, _len: usize) -> isize {
+    let start = aligned_up(start);
+
+    let ret = current_process().munmap(start, _len);
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_munmap(aligend_start: {:#x?}, len: {}) = {}",
+        start,
+        _len,
+        ret
+    );
+    ret
 }

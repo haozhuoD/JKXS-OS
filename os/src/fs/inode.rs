@@ -41,6 +41,16 @@ impl OSInode {
         }
         v
     }
+
+    pub fn file_size(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.inode.size()
+    }
+
+    pub fn set_offset(&self, offset: usize) -> usize {
+        self.inner.exclusive_access().offset = offset;
+        offset
+    }
 }
 
 lazy_static! {
@@ -63,7 +73,7 @@ bitflags! {
         const RDONLY = 0;
         const WRONLY = 1 << 0;
         const RDWR = 1 << 1;
-        const CREATE = 1 << 9;
+        const CREATE = 1 << 6;
         const TRUNC = 1 << 10;
     }
 }
@@ -85,6 +95,7 @@ impl OpenFlags {
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
+        // println!("open_file(CREATE)");
         if let Some(inode) = ROOT_INODE.find(name) {
             // clear size
             inode.clear();

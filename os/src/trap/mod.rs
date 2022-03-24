@@ -1,4 +1,5 @@
 mod context;
+mod page_fault;
 
 use crate::config::TRAMPOLINE;
 use crate::syscall::syscall;
@@ -63,15 +64,18 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            /*
-            println!(
-                "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                scause.cause(),
-                stval,
-                current_trap_cx().sepc,
-            );
-            */
-            current_add_signal(SignalFlags::SIGSEGV);
+            // let is_load = scause.cause() == Trap::Exception(Exception::LoadFault)
+            //     || scause.cause() == Trap::Exception(Exception::LoadPageFault);
+            let ret = page_fault_handler(stval);
+            if ret == -1 {
+                println!(
+                    "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    scause.cause(),
+                    stval,
+                    current_trap_cx().sepc,
+                );
+                current_add_signal(SignalFlags::SIGSEGV);
+            }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             current_add_signal(SignalFlags::SIGILL);
@@ -126,3 +130,5 @@ pub fn trap_from_kernel() -> ! {
 }
 
 pub use context::TrapContext;
+
+use self::page_fault::page_fault_handler;
