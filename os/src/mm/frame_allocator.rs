@@ -4,6 +4,8 @@ use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
+use crate::monitor::*;
+use crate::gdb_println;
 
 pub struct FrameTracker {
     pub ppn: PhysPageNum,
@@ -91,6 +93,7 @@ pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
+    gdb_println!(MAPPING_ENABLE,"[frame_allocator] manage pa[0x{:X} - 0x{:X}]",PhysAddr::from(ekernel as usize).ceil().0, PhysAddr::from(MEMORY_END).floor().0);
     FRAME_ALLOCATOR.exclusive_access().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),

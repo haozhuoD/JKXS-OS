@@ -12,6 +12,8 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
+use crate::monitor::*;
+use crate::gdb_println;
 
 extern "C" {
     fn stext();
@@ -86,6 +88,7 @@ impl MemorySet {
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
+        gdb_println!(MAPPING_ENABLE,"map_trampoline onepage va[0x{:X}-] -> pa[0x{:X}-]",TRAMPOLINE,strampoline as usize);
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
             PhysAddr::from(strampoline as usize).into(),
@@ -98,14 +101,14 @@ impl MemorySet {
         // map trampoline
         memory_set.map_trampoline();
         // map kernel sections
-        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+        println!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
+        println!(".rodata va[{:#x}, {:#x})", srodata as usize, erodata as usize);
+        println!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
         println!(
-            ".bss [{:#x}, {:#x})",
+            ".bss va[{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
-        println!("mapping .text section");
+        println!("mapping .text section Identical");
         memory_set.push(
             MapArea::new(
                 (stext as usize).into(),
@@ -115,7 +118,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .rodata section");
+        println!("mapping .rodata section Identical");
         memory_set.push(
             MapArea::new(
                 (srodata as usize).into(),
@@ -125,7 +128,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .data section");
+        println!("mapping .data section Identical");
         memory_set.push(
             MapArea::new(
                 (sdata as usize).into(),
@@ -135,7 +138,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .bss section");
+        println!("mapping .bss section Identical");
         memory_set.push(
             MapArea::new(
                 (sbss_with_stack as usize).into(),
@@ -145,7 +148,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping physical memory");
+        println!("mapping physical memory Identical");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -155,7 +158,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping memory-mapped registers");
+        println!("mapping memory-mapped registers Identical");
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
@@ -204,6 +207,7 @@ impl MemorySet {
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
+                gdb_println!(MAPPING_ENABLE,"[user-elfmap] va[0x{:X} - 0x{:X}] Framed",start_va.0,end_va.0);
             }
         }
         let max_end_va: VirtAddr = max_end_vpn.into();
