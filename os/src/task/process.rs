@@ -165,8 +165,56 @@ impl ProcessControlBlock {
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
         task_inner.res.as_mut().unwrap().alloc_user_res();
         task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
-        // push arguments on user stack
+
+        // ******************** 0. initialize user_sp ********************
         let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
+
+        let mut env: Vec<String> = Vec::new();
+        env.push(String::from("SHELL=/user_shell"));
+        env.push(String::from("PWD=/"));
+        env.push(String::from("USER=root"));
+        env.push(String::from("MOTD_SHOWN=pam"));
+        env.push(String::from("LANG=C.UTF-8"));
+        env.push(String::from(
+            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        ));
+        env.push(String::from("TERM=vt220"));
+        env.push(String::from("SHLVL=2"));
+        env.push(String::from("JOURNAL_STREAM=8:9265"));
+        env.push(String::from("OLDPWD=/root"));
+        env.push(String::from("_=busybox"));
+        env.push(String::from("LOGNAME=root"));
+        env.push(String::from("HOME=/"));
+        env.push(String::from("PATH=/"));
+
+        // ******************** 1. push env args (strtings and pointers) ********************
+        user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
+        let env_base = user_sp;
+        let mut envp: Vec<_> = (0..=env.len())
+            .map(|i| {
+                translated_refmut(
+                    new_token,
+                    (env_base + i * core::mem::size_of::<usize>()) as *mut usize,
+                )
+            })
+            .collect();
+        *envp[env.len()] = 0;
+
+        for i in 0..env.len() {
+            user_sp -= env[i].len() + 1;
+            *envp[i] = user_sp;
+            let mut p = user_sp;
+            // write strings
+            for c in env[i].as_bytes() {
+                *translated_refmut(new_token, p as *mut u8) = *c;
+                p += 1;
+            }
+            *translated_refmut(new_token, p as *mut u8) = 0;
+        }
+        // make the user_sp aligned to 8B for k210 platform
+        user_sp -= user_sp % core::mem::size_of::<usize>();
+
+        // ******************** 2. push argv (strtings and pointers) ********************
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
         let argv_base = user_sp;
         let mut argv: Vec<_> = (0..=args.len())
@@ -178,6 +226,7 @@ impl ProcessControlBlock {
             })
             .collect();
         *argv[args.len()] = 0;
+
         for i in 0..args.len() {
             user_sp -= args[i].len() + 1;
             *argv[i] = user_sp;
@@ -190,6 +239,11 @@ impl ProcessControlBlock {
         }
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
+
+        // ****argc入栈，否则busybox无法运行
+        user_sp -= core::mem::size_of::<usize>();
+        *translated_refmut(new_token, user_sp as *mut usize) = args.len();
+
         // initialize trap_cx
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
@@ -200,6 +254,7 @@ impl ProcessControlBlock {
         );
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;
+        trap_cx.x[12] = env_base;
         *task_inner.get_trap_cx() = trap_cx;
     }
 

@@ -64,6 +64,7 @@ impl MemorySet {
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
+            0
         );
     }
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
@@ -77,10 +78,11 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
-    fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
+    /// 添加了offset字段以解决内存不对齐的问题
+    fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>, offset: usize) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
-            map_area.copy_data(&mut self.page_table, data);
+            map_area.copy_data(&mut self.page_table, data, offset);
         }
         self.areas.push(map_area);
     }
@@ -114,6 +116,7 @@ impl MemorySet {
                 MapPermission::R | MapPermission::X,
             ),
             None,
+            0
         );
         println!("mapping .rodata section");
         memory_set.push(
@@ -124,6 +127,7 @@ impl MemorySet {
                 MapPermission::R,
             ),
             None,
+            0
         );
         println!("mapping .data section");
         memory_set.push(
@@ -134,6 +138,7 @@ impl MemorySet {
                 MapPermission::R | MapPermission::W,
             ),
             None,
+            0
         );
         println!("mapping .bss section");
         memory_set.push(
@@ -144,6 +149,7 @@ impl MemorySet {
                 MapPermission::R | MapPermission::W,
             ),
             None,
+            0
         );
         println!("mapping physical memory");
         memory_set.push(
@@ -154,6 +160,7 @@ impl MemorySet {
                 MapPermission::R | MapPermission::W,
             ),
             None,
+            0
         );
         println!("mapping memory-mapped registers");
         for pair in MMIO {
@@ -165,6 +172,7 @@ impl MemorySet {
                     MapPermission::R | MapPermission::W,
                 ),
                 None,
+                0
             );
         }
         memory_set
@@ -203,6 +211,7 @@ impl MemorySet {
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    start_va.page_offset()
                 );
             }
         }
@@ -222,7 +231,7 @@ impl MemorySet {
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
-            memory_set.push(new_area, None);
+            memory_set.push(new_area, None, 0);
             // copy data from another space
             for vpn in area.vpn_range {
                 let src_ppn = user_space.translate(vpn).unwrap().ppn();
@@ -383,20 +392,24 @@ impl MapArea {
     }
     /// data: start-aligned but maybe with shorter length
     /// assume that all frames were cleared before
-    pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
+    pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8], mut offset: usize) {
+        // println!("copy_data offset = {:#x?}", offset);
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;
         let mut current_vpn = self.vpn_range.get_start();
         let len = data.len();
         loop {
-            let src = &data[start..len.min(start + PAGE_SIZE)];
+            let copy_len = PAGE_SIZE.min(len - start).min(PAGE_SIZE - offset);
+            let src = &data[start..start + copy_len];
             let dst = &mut page_table
                 .translate(current_vpn)
                 .unwrap()
                 .ppn()
-                .get_bytes_array()[..src.len()];
+                .get_bytes_array()[offset..offset + copy_len];
+            // println!("offset = {:#x?}, copy_len = {:#x?}, start = {:#x?}", offset, copy_len, start);
             dst.copy_from_slice(src);
-            start += PAGE_SIZE;
+            start += copy_len;
+            offset = 0;
             if start >= len {
                 break;
             }

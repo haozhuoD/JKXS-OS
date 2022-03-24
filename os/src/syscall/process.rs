@@ -69,7 +69,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             SYSCALL_ENABLE,
             "sys_exec(path: {:?}, args: {:x?} ) = {}",
             path,
-            args,
+            args_vec,
             argc
         );
         process.exec(all_data.as_slice(), args_vec);
