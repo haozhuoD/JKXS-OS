@@ -9,7 +9,7 @@ use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
-use crate::task::{AuxHeader, AT_EXECFN, AT_NULL};
+use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -167,18 +167,16 @@ impl ProcessControlBlock {
         task_inner.res.as_mut().unwrap().alloc_user_res();
         task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
 
-        // ******************** 0. initialize user_sp ********************
         let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
 
+        ////////////// envp[] ///////////////////
         let mut env: Vec<String> = Vec::new();
         env.push(String::from("SHELL=/user_shell"));
         env.push(String::from("PWD=/"));
         env.push(String::from("USER=root"));
         env.push(String::from("MOTD_SHOWN=pam"));
         env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from(
-            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
-        ));
+        env.push(String::from("INVOCATION_ID=e9500a871cf044d9886a157f53826684"));
         env.push(String::from("TERM=vt220"));
         env.push(String::from("SHLVL=2"));
         env.push(String::from("JOURNAL_STREAM=8:9265"));
@@ -187,25 +185,14 @@ impl ProcessControlBlock {
         env.push(String::from("LOGNAME=root"));
         env.push(String::from("HOME=/"));
         env.push(String::from("PATH=/"));
-
-        // ******************** 1. push env args (strtings and pointers) ********************
-        user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
-        let env_base = user_sp;
-        let mut envp: Vec<_> = (0..=env.len())
-            .map(|i| {
-                translated_refmut(
-                    new_token,
-                    (env_base + i * core::mem::size_of::<usize>()) as *mut usize,
-                )
-            })
-            .collect();
-        *envp[env.len()] = 0;
+        let mut envp: Vec<usize> = (0..=env.len()).collect();
+        envp[env.len()] = 0;
 
         for i in 0..env.len() {
             user_sp -= env[i].len() + 1;
-            *envp[i] = user_sp;
+            envp[i] = user_sp;
             let mut p = user_sp;
-            // write strings
+            // write chars to [user_sp, user_sp + len]
             for c in env[i].as_bytes() {
                 *translated_refmut(new_token, p as *mut u8) = *c;
                 p += 1;
@@ -215,58 +202,79 @@ impl ProcessControlBlock {
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
-        // ******************** 2. push argv (strtings and pointers) ********************
-        user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
-        let argv_base = user_sp;
-        let mut argv: Vec<_> = (0..=args.len())
-            .map(|arg| {
-                translated_refmut(
-                    new_token,
-                    (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize,
-                )
-            })
-            .collect();
-        *argv[args.len()] = 0;
-
+        ////////////// argv[] ///////////////////
+        let mut argv: Vec<usize> = (0..=args.len()).collect();
+        argv[args.len()] = 0;
         for i in 0..args.len() {
             user_sp -= args[i].len() + 1;
-            *argv[i] = user_sp;
+            // println!("user_sp {:X}", user_sp);
+            argv[i] = user_sp;
             let mut p = user_sp;
+            // write chars to [user_sp, user_sp + len]
             for c in args[i].as_bytes() {
                 *translated_refmut(new_token, p as *mut u8) = *c;
+                // print!("({})",*c as char);
                 p += 1;
             }
             *translated_refmut(new_token, p as *mut u8) = 0;
         }
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
+        
+        ////////////// platform String ///////////////////
+        let platform = "RISC-V64";
+        user_sp -= platform.len() + 1;
+        user_sp -= user_sp % core::mem::size_of::<usize>();
+        let mut p = user_sp;
+        for c in platform.as_bytes() {
+            *translated_refmut(new_token, p as *mut u8) = *c;
+            p += 1;
+        }
+        *translated_refmut(new_token, p as *mut u8) = 0;
 
-        // ******************** 3. push auxv (headers and pointers) ********************
-        auxv.push(AuxHeader{aux_type: AT_EXECFN, value: *argv[0]}); // file name
-        auxv.push(AuxHeader{aux_type: AT_NULL, value:0}); // end
-
-        user_sp -= (auxv.len() + 1) * core::mem::size_of::<usize>();
+        ////////////// rand bytes ///////////////////
+        user_sp -= 16;
+        p = user_sp;
+        auxv.push(AuxHeader{aux_type: AT_RANDOM, value: user_sp});
+        for i in 0..0xf {
+            *translated_refmut(new_token, p as *mut u8) = i as u8;
+            p += 1;
+        }
+        
+        ////////////// padding //////////////////////
+        user_sp -= user_sp % 16;
+        
+        ////////////// auxv[] //////////////////////
+        auxv.push(AuxHeader{aux_type: AT_EXECFN, value: argv[0]});// file name
+        auxv.push(AuxHeader{aux_type: AT_NULL, value:0});// end
+        user_sp -= auxv.len() * core::mem::size_of::<AuxHeader>();
         let auxv_base = user_sp;
-        let mut auxvp: Vec<_> = (0..=auxv.len())
-            .map(|i| {
-                translated_refmut(
-                    new_token,
-                    (auxv_base + i * core::mem::size_of::<usize>()) as *mut usize,
-                )
-            })
-            .collect();
-        *auxvp[auxv.len()] = 0;
-
+        // println!("[auxv]: base 0x{:X}", auxv_base);
         for i in 0..auxv.len() {
-            user_sp -= core::mem::size_of::<AuxHeader>();
-            *auxvp[i] = user_sp;
-            *translated_refmut(new_token, user_sp as *mut AuxHeader) = auxv[i];
+            // println!("[auxv]: {:?}", auxv[i]);
+            let addr = user_sp + core::mem::size_of::<AuxHeader>() * i;
+            *translated_refmut(new_token, addr as *mut usize) = auxv[i].aux_type ;
+            *translated_refmut(new_token, (addr + core::mem::size_of::<usize>()) as *mut usize) = auxv[i].value ;
         }
 
-        // make the user_sp aligned to 8B for k210 platform
-        user_sp -= user_sp % core::mem::size_of::<usize>();
 
-        // ****argc入栈，否则busybox无法运行
+        ////////////// *envp [] //////////////////////
+        user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
+        let envp_base = user_sp;
+        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize) = 0;
+        for i in 0..env.len() {
+            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = envp[i] ;
+        }
+        
+        ////////////// *argv [] //////////////////////
+        user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
+        let argv_base = user_sp;
+        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (args.len())) as *mut usize) = 0;
+        for i in 0..args.len() {
+            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = argv[i] ;
+        }
+
+        ////////////// argc //////////////////////
         user_sp -= core::mem::size_of::<usize>();
         *translated_refmut(new_token, user_sp as *mut usize) = args.len();
 
@@ -280,7 +288,8 @@ impl ProcessControlBlock {
         );
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;
-        trap_cx.x[12] = env_base;
+        trap_cx.x[12] = envp_base;
+        trap_cx.x[13] = auxv_base;
         *task_inner.get_trap_cx() = trap_cx;
     }
 
