@@ -5,7 +5,7 @@ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::sync::UPSafeCell;
-use crate::task::FdTable;
+use crate::task::{FdTable, AuxHeader, AT_PHENT, AT_PHNUM, AT_PAGESZ, AT_BASE, AT_FLAGS, AT_ENTRY, AT_UID, AT_EUID, AT_GID, AT_PLATFORM, AT_EGID, AT_HWCAP, AT_CLKTCK, AT_SECURE, AT_NOTELF};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -179,7 +179,8 @@ impl MemorySet {
     }
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize) {
+    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
+        let mut auxv:Vec<AuxHeader> = Vec::new();
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();
@@ -190,6 +191,23 @@ impl MemorySet {
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirtPageNum(0);
+
+        auxv.push(AuxHeader{aux_type: AT_PHENT, value: elf.header.pt2.ph_entry_size() as usize});// ELF64 header 64bytes
+        auxv.push(AuxHeader{aux_type: AT_PHNUM, value: ph_count as usize});
+        auxv.push(AuxHeader{aux_type: AT_PAGESZ, value: PAGE_SIZE as usize});
+        auxv.push(AuxHeader{aux_type: AT_BASE, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_FLAGS, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_ENTRY, value: elf.header.pt2.entry_point() as usize});
+        auxv.push(AuxHeader{aux_type: AT_UID, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_EUID, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_GID, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_EGID, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_PLATFORM, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_HWCAP, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_CLKTCK, value: 100 as usize});
+        auxv.push(AuxHeader{aux_type: AT_SECURE, value: 0 as usize});
+        auxv.push(AuxHeader{aux_type: AT_NOTELF, value: 0x112d as usize});
+        
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -215,6 +233,10 @@ impl MemorySet {
                 );
             }
         }
+
+        // let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        // auxv.push(AuxHeader{aux_type: AT_PHDR, value: ph_head_addr as usize});
+
         let max_end_va: VirtAddr = max_end_vpn.into();
         let user_heap_base: usize = max_end_va.into();
         (
@@ -222,6 +244,7 @@ impl MemorySet {
             USER_STACK_BASE,
             elf.header.pt2.entry_point() as usize,
             user_heap_base,
+            auxv
         )
     }
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {

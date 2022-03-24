@@ -9,6 +9,7 @@ use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::task::{AuxHeader, AT_EXECFN, AT_NULL};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -84,7 +85,7 @@ impl ProcessControlBlock {
 
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, ustack_base, entry_point, uheap_base) = MemorySet::from_elf(elf_data);
+        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) = MemorySet::from_elf(elf_data);
         // allocate a pid
         let pid_handle = pid_alloc();
         let process = Arc::new(Self {
@@ -149,7 +150,7 @@ impl ProcessControlBlock {
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, ustack_base, entry_point, uheap_base) = MemorySet::from_elf(elf_data);
+        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) = MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
@@ -237,6 +238,31 @@ impl ProcessControlBlock {
             }
             *translated_refmut(new_token, p as *mut u8) = 0;
         }
+        // make the user_sp aligned to 8B for k210 platform
+        user_sp -= user_sp % core::mem::size_of::<usize>();
+
+        // ******************** 3. push auxv (headers and pointers) ********************
+        auxv.push(AuxHeader{aux_type: AT_EXECFN, value: *argv[0]}); // file name
+        auxv.push(AuxHeader{aux_type: AT_NULL, value:0}); // end
+
+        user_sp -= (auxv.len() + 1) * core::mem::size_of::<usize>();
+        let auxv_base = user_sp;
+        let mut auxvp: Vec<_> = (0..=auxv.len())
+            .map(|i| {
+                translated_refmut(
+                    new_token,
+                    (auxv_base + i * core::mem::size_of::<usize>()) as *mut usize,
+                )
+            })
+            .collect();
+        *auxvp[auxv.len()] = 0;
+
+        for i in 0..auxv.len() {
+            user_sp -= core::mem::size_of::<AuxHeader>();
+            *auxvp[i] = user_sp;
+            *translated_refmut(new_token, user_sp as *mut AuxHeader) = auxv[i];
+        }
+
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
