@@ -1,6 +1,12 @@
+use core::mem::size_of;
+use core::ptr::slice_from_raw_parts;
+use core::slice::from_raw_parts;
+
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_ref, translated_refmut, translated_str};
+use crate::mm::{
+    translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+};
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
@@ -198,4 +204,68 @@ pub fn sys_munmap(start: usize, _len: usize) -> isize {
         ret
     );
     ret
+}
+
+pub fn sys_getppid() -> isize {
+    let parent = current_process()
+        .inner_exclusive_access()
+        .parent
+        .clone()
+        .unwrap()
+        .upgrade();
+    parent.unwrap().getpid() as isize
+}
+
+pub fn sys_times(time: *mut usize) -> isize {
+    let token = current_user_token();
+    let sec = get_time_us();
+    *translated_refmut(token, time) = sec;
+    *translated_refmut(token, unsafe { time.add(1) }) = sec;
+    *translated_refmut(token, unsafe { time.add(2) }) = sec;
+    *translated_refmut(token, unsafe { time.add(3) }) = sec;
+    0
+}
+
+#[repr(C)]
+pub struct uname {
+    sysname: [u8; 65],
+    nodename: [u8; 65],
+    release: [u8; 65],
+    version: [u8; 65],
+    machine: [u8; 65],
+    domainname: [u8; 65],
+}
+
+impl uname {
+    pub fn new() -> Self {
+        Self {
+            sysname: uname::fill_field("oscomp-2022"),
+            nodename: uname::fill_field("oscomp-2022"),
+            release: uname::fill_field("???"),
+            version: uname::fill_field("1.0"),
+            machine: uname::fill_field("riscv-64"),
+            domainname: uname::fill_field(""),
+        }
+    }
+
+    pub fn fill_field(s: &str) -> [u8; 65] {
+        let mut ret = [0u8; 65];
+        for (i, ch) in String::from(s).chars().enumerate() {
+            ret[i] = ch as u8;
+        }
+        ret
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { from_raw_parts(self as *const _ as usize as *const u8, 65 * 6) }
+    }
+}
+
+pub fn sys_uname(buf: *mut u8) -> isize {
+    let token = current_user_token();
+    let mut buf_vec = translated_byte_buffer(token, buf, size_of::<uname>());
+    let uname = uname::new();
+    let mut userbuf = UserBuffer::new(buf_vec);
+    userbuf.write(uname.as_bytes());
+    0
 }

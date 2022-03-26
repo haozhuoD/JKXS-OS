@@ -17,4 +17,5 @@
     3. 用户栈`user_stack`，分布在`[0x80000000, ..)`。
     4. 内核栈`kernel_stack`，分布在`[.., TRAMPOLINE - PAGE_SIZE)`
 
-- 下一步计划实现`mmap`
+- 2022-3-27
+  + 实现了`getppid, uname, times`系统调用。
