@@ -4,7 +4,9 @@ use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
-use crate::sync::UPSafeCell;
+
+use crate::gdb_println;
+use crate::monitor::*;
 use crate::task::FdTable;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -12,8 +14,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
-use crate::monitor::*;
-use crate::gdb_println;
+use spin::Mutex;
 
 extern "C" {
     fn stext();
@@ -31,12 +32,12 @@ extern "C" {
 pub static mut SATP: usize = 0;
 
 lazy_static! {
-    pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
-        Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
+        Arc::new(Mutex::new(MemorySet::new_kernel()));
 }
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.exclusive_access().token()
+    KERNEL_SPACE.lock().token()
 }
 
 pub struct MemorySet {
@@ -90,7 +91,12 @@ impl MemorySet {
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
-        gdb_println!(MAPPING_ENABLE,"map_trampoline onepage va[0x{:X}-] -> pa[0x{:X}-]",TRAMPOLINE,strampoline as usize);
+        gdb_println!(
+            MAPPING_ENABLE,
+            "map_trampoline onepage va[0x{:X}-] -> pa[0x{:X}-]",
+            TRAMPOLINE,
+            strampoline as usize
+        );
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
             PhysAddr::from(strampoline as usize).into(),
@@ -104,7 +110,10 @@ impl MemorySet {
         memory_set.map_trampoline();
         // map kernel sections
         println!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(".rodata va[{:#x}, {:#x})", srodata as usize, erodata as usize);
+        println!(
+            ".rodata va[{:#x}, {:#x})",
+            srodata as usize, erodata as usize
+        );
         println!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
         println!(
             ".bss va[{:#x}, {:#x})",
@@ -209,7 +218,12 @@ impl MemorySet {
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                gdb_println!(MAPPING_ENABLE,"[user-elfmap] va[0x{:X} - 0x{:X}] Framed",start_va.0,end_va.0);
+                gdb_println!(
+                    MAPPING_ENABLE,
+                    "[user-elfmap] va[0x{:X} - 0x{:X}] Framed",
+                    start_va.0,
+                    end_va.0
+                );
             }
         }
         let max_end_va: VirtAddr = max_end_vpn.into();
@@ -243,13 +257,13 @@ impl MemorySet {
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
-            SATP =satp;         //其他核初始化 
+            SATP = satp; //其他核初始化
             satp::write(satp);
             asm!("sfence.vma");
         }
     }
     // pub fn activate_other(&self) {
-    //     unsafe {       
+    //     unsafe {
     //         satp::write(SATP);
     //         asm!("sfence.vma");
     //     }
@@ -435,7 +449,7 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let mut kernel_space = KERNEL_SPACE.lock();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();

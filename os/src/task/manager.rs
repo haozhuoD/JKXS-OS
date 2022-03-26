@@ -1,8 +1,9 @@
 use super::{ProcessControlBlock, TaskControlBlock};
-use crate::sync::UPSafeCell;
+
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
 use lazy_static::*;
+use spin::Mutex;
 
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
@@ -24,31 +25,31 @@ impl TaskManager {
 }
 
 lazy_static! {
-    pub static ref TASK_MANAGER: UPSafeCell<TaskManager> =
-        unsafe { UPSafeCell::new(TaskManager::new()) };
-    pub static ref PID2PCB: UPSafeCell<BTreeMap<usize, Arc<ProcessControlBlock>>> =
-        unsafe { UPSafeCell::new(BTreeMap::new()) };
+    pub static ref TASK_MANAGER: Arc<Mutex<TaskManager>> =
+        unsafe { Arc::new(Mutex::new(TaskManager::new())) };
+    pub static ref PID2PCB: Arc<Mutex<BTreeMap<usize, Arc<ProcessControlBlock>>>> =
+        unsafe { Arc::new(Mutex::new(BTreeMap::new())) };
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {
-    TASK_MANAGER.exclusive_access().add(task);
+    TASK_MANAGER.lock().add(task);
 }
 
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-    TASK_MANAGER.exclusive_access().fetch()
+    TASK_MANAGER.lock().fetch()
 }
 
 pub fn pid2process(pid: usize) -> Option<Arc<ProcessControlBlock>> {
-    let map = PID2PCB.exclusive_access();
+    let map = PID2PCB.lock();
     map.get(&pid).map(Arc::clone)
 }
 
 pub fn insert_into_pid2process(pid: usize, process: Arc<ProcessControlBlock>) {
-    PID2PCB.exclusive_access().insert(pid, process);
+    PID2PCB.lock().insert(pid, process);
 }
 
 pub fn remove_from_pid2process(pid: usize) {
-    let mut map = PID2PCB.exclusive_access();
+    let mut map = PID2PCB.lock();
     if map.remove(&pid).is_none() {
         panic!("cannot find pid {} in pid2task!", pid);
     }

@@ -1,21 +1,22 @@
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
-use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
 use core::cell::RefMut;
+use spin::{Mutex, MutexGuard};
 
 pub struct TaskControlBlock {
     // immutable
     pub process: Weak<ProcessControlBlock>,
     pub kstack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    inner: Arc<Mutex<TaskControlBlockInner>>,
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
-        self.inner.exclusive_access()
+    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, TaskControlBlockInner> {
+        self.inner.lock()
     }
 
     pub fn get_user_token(&self) -> usize {
@@ -57,15 +58,13 @@ impl TaskControlBlock {
         Self {
             process: Arc::downgrade(&process),
             kstack,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    res: Some(res),
-                    trap_cx_ppn,
-                    task_cx: TaskContext::goto_trap_return(kstack_top),
-                    task_status: TaskStatus::Ready,
-                    exit_code: None,
-                })
-            },
+            inner: Arc::new(Mutex::new(TaskControlBlockInner {
+                res: Some(res),
+                trap_cx_ppn,
+                task_cx: TaskContext::goto_trap_return(kstack_top),
+                task_status: TaskStatus::Ready,
+                exit_code: None,
+            })),
         }
     }
 }

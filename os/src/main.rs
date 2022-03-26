@@ -48,14 +48,14 @@ fn clear_bss() {
     }
 }
 
-pub fn get_hartid() -> usize
-{
+pub fn get_hartid() -> usize {
     let mut hartid;
     unsafe {
         core::arch::asm!("mv {}, tp", out(reg) hartid);
     }
     hartid
 }
+
 fn save_hartid() {
     unsafe {
         // core::arch::asm!("mv tp, x10", in("x10") hartid);
@@ -68,12 +68,12 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 #[no_mangle]
 pub fn rust_main() -> ! {
     save_hartid();
-    let hartid=get_hartid();
+    let hartid = get_hartid();
     if hartid != 0 {
         while !AP_CAN_INIT.load(Ordering::Relaxed) {}
         others_main(hartid);
     }
-    println!("[kernel] Riscv hartid {} run ",hartid);
+    println!("[kernel] Riscv hartid {} run ", hartid);
     clear_bss();
     println!("[kernel] Hello, Risc-V!");
     mm::init();
@@ -81,7 +81,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    fs::list_apps();
+    // fs::list_apps();
     task::add_initproc();
 
     AP_CAN_INIT.store(true, Ordering::Relaxed);
@@ -90,10 +90,10 @@ pub fn rust_main() -> ! {
 }
 
 fn others_main(hartid: usize) -> ! {
-    println!("[kernel] Riscv hartid {} run ",hartid);
+    println!("[kernel] Riscv hartid {} run ", hartid);
     mm::init_other();
     trap::init();
-    panic!("MultiCore Not implemented");
+    // panic!("MultiCore Not implemented");
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     task::run_tasks();

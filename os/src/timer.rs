@@ -2,7 +2,7 @@
 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
-// use crate::sync::UPSafeCell;
+//
 // use crate::task::{add_task, TaskControlBlock};
 // use alloc::collections::BinaryHeap;
 // use alloc::sync::Arc;
@@ -60,13 +60,13 @@ pub fn set_next_trigger() {
 // }
 
 // pub fn add_timer(expire_ns: usize, task: Arc<TaskControlBlock>) {
-//     let mut timers = TIMERS.exclusive_access();
+//     let mut timers = TIMERS.lock();
 //     timers.push(TimerCondVar { expire_ns, task });
 // }
 
 // pub fn check_timer() {
 //     let current_ns = get_time_ns();
-//     let mut timers = TIMERS.exclusive_access();
+//     let mut timers = TIMERS.lock();
 //     while let Some(timer) = timers.peek() {
 //         if timer.expire_ns <= current_ns {
 //             add_task(Arc::clone(&timer.task));

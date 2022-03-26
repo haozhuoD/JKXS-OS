@@ -8,20 +8,19 @@ use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefMut;
+use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
     // immutable
     pub pid: PidHandle,
     // mutable
-    inner: UPSafeCell<ProcessControlBlockInner>,
+    inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub type FdTable = Vec<Option<FileClass>>;
@@ -36,9 +35,9 @@ pub struct ProcessControlBlockInner {
     pub signals: SignalFlags,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
-    pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
-    pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
-    pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    // pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
+    // pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
+    // pub condvar_list: Vec<Option<Arc<Condvar>>>,
     // user heap
     pub user_heap_base: usize,
     pub user_heap_top: usize,
@@ -79,8 +78,8 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, ProcessControlBlockInner> {
-        self.inner.exclusive_access()
+    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, ProcessControlBlockInner> {
+        self.inner.lock()
     }
 
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
@@ -91,7 +90,7 @@ impl ProcessControlBlock {
         let process = Arc::new(Self {
             pid: pid_handle,
             inner: unsafe {
-                UPSafeCell::new(ProcessControlBlockInner {
+                Arc::new(Mutex::new(ProcessControlBlockInner {
                     is_zombie: false,
                     memory_set,
                     parent: None,
@@ -108,13 +107,13 @@ impl ProcessControlBlock {
                     signals: SignalFlags::empty(),
                     tasks: Vec::new(),
                     task_res_allocator: RecycleAllocator::new(),
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    condvar_list: Vec::new(),
+                    // mutex_list: Vec::new(),
+                    // semaphore_list: Vec::new(),
+                    // condvar_list: Vec::new(),
                     user_heap_base: uheap_base,
                     user_heap_top: uheap_base,
                     mmap_area_top: MMAP_BASE,
-                })
+                }))
             },
         });
         // create a main thread, we should allocate ustack and trap_cx here
@@ -132,7 +131,7 @@ impl ProcessControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             ustack_top,
-            KERNEL_SPACE.exclusive_access().token(),
+            KERNEL_SPACE.lock().token(),
             kstack_top,
             trap_handler as usize,
         );
@@ -195,7 +194,7 @@ impl ProcessControlBlock {
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
+            KERNEL_SPACE.lock().token(),
             task.kstack.get_top(),
             trap_handler as usize,
         );
@@ -226,7 +225,7 @@ impl ProcessControlBlock {
         let child = Arc::new(Self {
             pid,
             inner: unsafe {
-                UPSafeCell::new(ProcessControlBlockInner {
+                Arc::new(Mutex::new(ProcessControlBlockInner {
                     is_zombie: false,
                     memory_set,
                     parent: Some(Arc::downgrade(self)),
@@ -236,13 +235,13 @@ impl ProcessControlBlock {
                     signals: SignalFlags::empty(),
                     tasks: Vec::new(),
                     task_res_allocator: RecycleAllocator::new(),
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    condvar_list: Vec::new(),
+                    // mutex_list: Vec::new(),
+                    // semaphore_list: Vec::new(),
+                    // condvar_list: Vec::new(),
                     user_heap_base: parent.user_heap_base,
                     user_heap_top: parent.user_heap_top,
                     mmap_area_top: parent.mmap_area_top,
-                })
+                }))
             },
         });
         // add child

@@ -1,17 +1,18 @@
 use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
-use crate::sync::UPSafeCell;
+
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
+use spin::Mutex;
 
 pub struct OSInode {
     readable: bool,
     writable: bool,
-    inner: UPSafeCell<OSInodeInner>,
+    inner: Arc<Mutex<OSInodeInner>>,
 }
 
 pub struct OSInodeInner {
@@ -24,11 +25,11 @@ impl OSInode {
         Self {
             readable,
             writable,
-            inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
+            inner: unsafe { Arc::new(Mutex::new(OSInodeInner { offset: 0, inode })) },
         }
     }
     pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::new();
         loop {
@@ -43,12 +44,12 @@ impl OSInode {
     }
 
     pub fn file_size(&self) -> usize {
-        let inner = self.inner.exclusive_access();
+        let inner = self.inner.lock();
         inner.inode.size()
     }
 
     pub fn set_offset(&self, offset: usize) -> usize {
-        self.inner.exclusive_access().offset = offset;
+        self.inner.lock().offset = offset;
         offset
     }
 }
@@ -124,7 +125,7 @@ impl File for OSInode {
         self.writable
     }
     fn read(&self, mut buf: UserBuffer) -> usize {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
             let read_size = inner.inode.read_at(inner.offset, *slice);
@@ -137,7 +138,7 @@ impl File for OSInode {
         total_read_size
     }
     fn write(&self, buf: UserBuffer) -> usize {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter() {
             let write_size = inner.inode.write_at(inner.offset, *slice);

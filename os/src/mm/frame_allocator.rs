@@ -1,11 +1,12 @@
 use super::{PhysAddr, PhysPageNum};
 use crate::config::MEMORY_END;
-use crate::sync::UPSafeCell;
+use crate::gdb_println;
+use crate::monitor::*;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
-use crate::monitor::*;
-use crate::gdb_println;
+use spin::Mutex;
 
 pub struct FrameTracker {
     pub ppn: PhysPageNum,
@@ -85,30 +86,32 @@ impl FrameAllocator for StackFrameAllocator {
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
-        unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
+    pub static ref FRAME_ALLOCATOR: Arc<Mutex<FrameAllocatorImpl>> =
+        unsafe { Arc::new(Mutex::new(FrameAllocatorImpl::new())) };
 }
 
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    gdb_println!(MAPPING_ENABLE,"[frame_allocator] manage pa[0x{:X} - 0x{:X}]",PhysAddr::from(ekernel as usize).ceil().0, PhysAddr::from(MEMORY_END).floor().0);
-    FRAME_ALLOCATOR.exclusive_access().init(
+    gdb_println!(
+        MAPPING_ENABLE,
+        "[frame_allocator] manage pa[0x{:X} - 0x{:X}]",
+        PhysAddr::from(ekernel as usize).ceil().0,
+        PhysAddr::from(MEMORY_END).floor().0
+    );
+    FRAME_ALLOCATOR.lock().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
     );
 }
 
 pub fn frame_alloc() -> Option<FrameTracker> {
-    FRAME_ALLOCATOR
-        .exclusive_access()
-        .alloc()
-        .map(FrameTracker::new)
+    FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
 }
 
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
+    FRAME_ALLOCATOR.lock().dealloc(ppn);
 }
 
 #[allow(unused)]

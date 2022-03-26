@@ -1,14 +1,15 @@
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
 use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
-use crate::sync::UPSafeCell;
+
+use crate::gdb_println;
+use crate::monitor::*;
 use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
 use lazy_static::*;
-use crate::monitor::*;
-use crate::gdb_println;
+use spin::Mutex;
 
 pub struct RecycleAllocator {
     current: usize,
@@ -42,21 +43,21 @@ impl RecycleAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
-    static ref KSTACK_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
+    static ref PID_ALLOCATOR: Arc<Mutex<RecycleAllocator>> =
+        unsafe { Arc::new(Mutex::new(RecycleAllocator::new())) };
+    static ref KSTACK_ALLOCATOR: Arc<Mutex<RecycleAllocator>> =
+        unsafe { Arc::new(Mutex::new(RecycleAllocator::new())) };
 }
 
 pub struct PidHandle(pub usize);
 
 pub fn pid_alloc() -> PidHandle {
-    PidHandle(PID_ALLOCATOR.exclusive_access().alloc())
+    PidHandle(PID_ALLOCATOR.lock().alloc())
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 
@@ -70,10 +71,16 @@ pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
 pub struct KernelStack(pub usize);
 
 pub fn kstack_alloc() -> KernelStack {
-    let kstack_id = KSTACK_ALLOCATOR.exclusive_access().alloc();
+    let kstack_id = KSTACK_ALLOCATOR.lock().alloc();
     let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
-    gdb_println!(MAPPING_ENABLE,"[kstack-map] kstack_id:{}  va[0x{:X} - 0x{:X}] Framed",kstack_id,kstack_bottom,kstack_top);
-    KERNEL_SPACE.exclusive_access().insert_framed_area(
+    gdb_println!(
+        MAPPING_ENABLE,
+        "[kstack-map] kstack_id:{}  va[0x{:X} - 0x{:X}] Framed",
+        kstack_id,
+        kstack_bottom,
+        kstack_top
+    );
+    KERNEL_SPACE.lock().insert_framed_area(
         kstack_bottom.into(),
         kstack_top.into(),
         MapPermission::R | MapPermission::W,
@@ -86,7 +93,7 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .exclusive_access()
+            .lock()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
@@ -148,7 +155,13 @@ impl TaskUserRes {
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE;
-        gdb_println!(MAPPING_ENABLE,"[user-stack-map] tid:{} va[0x{:X} - 0x{:X}]",self.tid,ustack_bottom,ustack_top);
+        gdb_println!(
+            MAPPING_ENABLE,
+            "[user-stack-map] tid:{} va[0x{:X} - 0x{:X}]",
+            self.tid,
+            ustack_bottom,
+            ustack_top
+        );
         process_inner.memory_set.insert_framed_area(
             ustack_bottom.into(),
             ustack_top.into(),
@@ -157,7 +170,12 @@ impl TaskUserRes {
         // alloc trap_cx
         let trap_cx_bottom = trap_cx_bottom_from_tid(self.tid);
         let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
-        gdb_println!(MAPPING_ENABLE,"[trap_cx-map] onepage va[0x{:X} - 0x{:X}]",trap_cx_bottom,trap_cx_top);
+        gdb_println!(
+            MAPPING_ENABLE,
+            "[trap_cx-map] onepage va[0x{:X} - 0x{:X}]",
+            trap_cx_bottom,
+            trap_cx_top
+        );
         process_inner.memory_set.insert_framed_area(
             trap_cx_bottom.into(),
             trap_cx_top.into(),
