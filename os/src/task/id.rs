@@ -44,9 +44,9 @@ impl RecycleAllocator {
 
 lazy_static! {
     static ref PID_ALLOCATOR: Arc<Mutex<RecycleAllocator>> =
-        unsafe { Arc::new(Mutex::new(RecycleAllocator::new())) };
+        Arc::new(Mutex::new(RecycleAllocator::new()));
     static ref KSTACK_ALLOCATOR: Arc<Mutex<RecycleAllocator>> =
-        unsafe { Arc::new(Mutex::new(RecycleAllocator::new())) };
+        Arc::new(Mutex::new(RecycleAllocator::new()));
 }
 
 pub struct PidHandle(pub usize);

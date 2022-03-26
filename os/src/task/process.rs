@@ -89,32 +89,30 @@ impl ProcessControlBlock {
         let pid_handle = pid_alloc();
         let process = Arc::new(Self {
             pid: pid_handle,
-            inner: unsafe {
-                Arc::new(Mutex::new(ProcessControlBlockInner {
-                    is_zombie: false,
-                    memory_set,
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: vec![
-                        // 0 -> stdin
-                        Some(FileClass::Abs(Arc::new(Stdin))),
-                        // 1 -> stdout
-                        Some(FileClass::Abs(Arc::new(Stdout))),
-                        // 2 -> stderr
-                        Some(FileClass::Abs(Arc::new(Stdout))),
-                    ],
-                    signals: SignalFlags::empty(),
-                    tasks: Vec::new(),
-                    task_res_allocator: RecycleAllocator::new(),
-                    // mutex_list: Vec::new(),
-                    // semaphore_list: Vec::new(),
-                    // condvar_list: Vec::new(),
-                    user_heap_base: uheap_base,
-                    user_heap_top: uheap_base,
-                    mmap_area_top: MMAP_BASE,
-                }))
-            },
+            inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                is_zombie: false,
+                memory_set,
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: vec![
+                    // 0 -> stdin
+                    Some(FileClass::Abs(Arc::new(Stdin))),
+                    // 1 -> stdout
+                    Some(FileClass::Abs(Arc::new(Stdout))),
+                    // 2 -> stderr
+                    Some(FileClass::Abs(Arc::new(Stdout))),
+                ],
+                signals: SignalFlags::empty(),
+                tasks: Vec::new(),
+                task_res_allocator: RecycleAllocator::new(),
+                // mutex_list: Vec::new(),
+                // semaphore_list: Vec::new(),
+                // condvar_list: Vec::new(),
+                user_heap_base: uheap_base,
+                user_heap_top: uheap_base,
+                mmap_area_top: MMAP_BASE,
+            })),
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -224,25 +222,23 @@ impl ProcessControlBlock {
         // create child process pcb
         let child = Arc::new(Self {
             pid,
-            inner: unsafe {
-                Arc::new(Mutex::new(ProcessControlBlockInner {
-                    is_zombie: false,
-                    memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: new_fd_table,
-                    signals: SignalFlags::empty(),
-                    tasks: Vec::new(),
-                    task_res_allocator: RecycleAllocator::new(),
-                    // mutex_list: Vec::new(),
-                    // semaphore_list: Vec::new(),
-                    // condvar_list: Vec::new(),
-                    user_heap_base: parent.user_heap_base,
-                    user_heap_top: parent.user_heap_top,
-                    mmap_area_top: parent.mmap_area_top,
-                }))
-            },
+            inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                is_zombie: false,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: new_fd_table,
+                signals: SignalFlags::empty(),
+                tasks: Vec::new(),
+                task_res_allocator: RecycleAllocator::new(),
+                // mutex_list: Vec::new(),
+                // semaphore_list: Vec::new(),
+                // condvar_list: Vec::new(),
+                user_heap_base: parent.user_heap_base,
+                user_heap_top: parent.user_heap_top,
+                mmap_area_top: parent.mmap_area_top,
+            })),
         });
         // add child
         parent.children.push(Arc::clone(&child));

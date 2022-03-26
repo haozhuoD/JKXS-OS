@@ -3,7 +3,7 @@ use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
 use alloc::sync::{Arc, Weak};
-use core::cell::RefMut;
+
 use spin::{Mutex, MutexGuard};
 
 pub struct TaskControlBlock {

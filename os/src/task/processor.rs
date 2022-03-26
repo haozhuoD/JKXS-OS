@@ -31,8 +31,7 @@ impl Processor {
 }
 
 lazy_static! {
-    pub static ref PROCESSOR: Arc<Mutex<Processor>> =
-        unsafe { Arc::new(Mutex::new(Processor::new())) };
+    pub static ref PROCESSOR: Arc<Mutex<Processor>> = Arc::new(Mutex::new(Processor::new()));
 }
 
 pub fn run_tasks() {

@@ -87,7 +87,7 @@ type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
     pub static ref FRAME_ALLOCATOR: Arc<Mutex<FrameAllocatorImpl>> =
-        unsafe { Arc::new(Mutex::new(FrameAllocatorImpl::new())) };
+        Arc::new(Mutex::new(FrameAllocatorImpl::new()));
 }
 
 pub fn init_frame_allocator() {
