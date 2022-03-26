@@ -32,6 +32,7 @@ mod timer;
 mod trap;
 
 use core::arch::global_asm;
+use core::sync::atomic::{AtomicBool, Ordering};
 // use crate::monitor::*;
 
 global_asm!(include_str!("entry.asm"));
@@ -47,10 +48,34 @@ fn clear_bss() {
     }
 }
 
+pub fn get_hartid() -> usize
+{
+    let mut hartid;
+    unsafe {
+        core::arch::asm!("mv {}, tp", out(reg) hartid);
+    }
+    hartid
+}
+fn save_hartid() {
+    unsafe {
+        // core::arch::asm!("mv tp, x10", in("x10") hartid);
+        core::arch::asm!("mv tp, a0");
+    }
+}
+
+static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+
 #[no_mangle]
 pub fn rust_main() -> ! {
+    save_hartid();
+    let hartid=get_hartid();
+    if hartid != 0 {
+        while !AP_CAN_INIT.load(Ordering::Relaxed) {}
+        others_main(hartid);
+    }
+    println!("[kernel] Riscv hartid {} run ",hartid);
     clear_bss();
-    println!("[kernel] Hello, world!");
+    println!("[kernel] Hello, Risc-V!");
     mm::init();
     mm::remap_test();
     trap::init();
@@ -58,6 +83,26 @@ pub fn rust_main() -> ! {
     timer::set_next_trigger();
     fs::list_apps();
     task::add_initproc();
+
+    AP_CAN_INIT.store(true, Ordering::Relaxed);
     task::run_tasks();
     panic!("Unreachable in rust_main!");
+}
+
+fn others_main(hartid: usize) -> ! {
+    println!("[kernel] Riscv hartid {} run ",hartid);
+    mm::init_other();
+    trap::init();
+    panic!("MultiCore Not implemented");
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
+    task::run_tasks();
+    panic!("Unreachable in others_main!");
+    // unsafe {
+    //     trapframe::init();
+    // }
+    // memory::init_other();
+    // timer::init();
+    // info!("Hello RISCV! in hart {}", hartid);
+    // crate::kmain();
 }

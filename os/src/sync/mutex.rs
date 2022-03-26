@@ -31,13 +31,13 @@ impl Mutex for MutexSpin {
                 continue;
             } else {
                 *locked = true;
-                return;
+                return; 
             }
         }
     }
 
-    fn unlock(&self) {
-        let mut locked = self.locked.exclusive_access();
+    fn unlock(&self) { 
+        let mut locked = self.locked.exclusive_access(); 
         *locked = false;
     }
 }

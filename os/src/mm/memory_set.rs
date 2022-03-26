@@ -28,6 +28,8 @@ extern "C" {
     fn strampoline();
 }
 
+pub static mut SATP: usize = 0;
+
 lazy_static! {
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
@@ -241,10 +243,17 @@ impl MemorySet {
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
+            SATP =satp;         //其他核初始化 
             satp::write(satp);
             asm!("sfence.vma");
         }
     }
+    // pub fn activate_other(&self) {
+    //     unsafe {       
+    //         satp::write(SATP);
+    //         asm!("sfence.vma");
+    //     }
+    // }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }

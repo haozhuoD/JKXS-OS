@@ -15,9 +15,14 @@ else
 endif
 
 # BOARD
+BOOTMODE ?= 020
 BOARD ?= qemu
 SBI ?= rustsbi
-BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+ifeq ($(BOOTMODE), 020)
+	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+else
+	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD)-022.bin
+endif
 K210_BOOTLOADER_SIZE := 131072
 
 # KERNEL ENTRY
@@ -102,7 +107,9 @@ ifeq ($(BOARD),qemu)
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-        -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+        -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-smp 2
+# -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
@@ -132,7 +139,9 @@ gdb:
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-smp 2 \
 		-s -S
+# -smp threads=2
 
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
@@ -141,13 +150,15 @@ monitor:
 
 run-light:
 ifeq ($(BOARD),qemu)
-	@qemu-system-riscv64 \
+	qemu-system-riscv64 \
 		-machine virt \
 		-nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-        -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+        -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-smp 2
+# -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy

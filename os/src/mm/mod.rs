@@ -16,9 +16,20 @@ pub use page_table::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
     PageTableEntry, UserBuffer, UserBufferIterator,
 };
+use core::arch::asm;
+use riscv::register::satp;
+
 
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
+}
+
+pub fn init_other() {
+    // KERNEL_SPACE.exclusive_access().activate_other();
+        unsafe {       
+            satp::write(memory_set::SATP);
+            asm!("sfence.vma");
+        }
 }
