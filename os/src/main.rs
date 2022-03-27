@@ -30,9 +30,12 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
+mod multicore;
 
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+use crate::multicore::{get_hartid, save_hartid};
 // use crate::monitor::*;
 
 global_asm!(include_str!("entry.asm"));
@@ -45,21 +48,6 @@ fn clear_bss() {
     unsafe {
         core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
             .fill(0);
-    }
-}
-
-pub fn get_hartid() -> usize {
-    let mut hartid;
-    unsafe {
-        core::arch::asm!("mv {}, tp", out(reg) hartid);
-    }
-    hartid
-}
-
-fn save_hartid() {
-    unsafe {
-        // core::arch::asm!("mv tp, x10", in("x10") hartid);
-        core::arch::asm!("mv tp, a0");
     }
 }
 

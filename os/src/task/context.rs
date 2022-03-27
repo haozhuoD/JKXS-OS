@@ -1,6 +1,7 @@
 use crate::trap::trap_return;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct TaskContext {
     ra: usize,
     sp: usize,

@@ -1,27 +1,45 @@
+use core::cell::{RefCell, RefMut};
+
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 
+use crate::config::MAX_CPU_NUM;
+use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
-use spin::Mutex;
 
 pub struct Processor {
+    inner: RefCell<ProcessorInner>,
+}
+
+pub struct ProcessorInner {
     current: Option<Arc<TaskControlBlock>>,
     idle_task_cx: TaskContext,
 }
 
+unsafe impl Sync for Processor {}
+
 impl Processor {
     pub fn new() -> Self {
         Self {
-            current: None,
-            idle_task_cx: TaskContext::zero_init(),
+            inner: RefCell::new(ProcessorInner {
+                current: None,
+                idle_task_cx: TaskContext::zero_init(),
+            }),
         }
     }
+    pub fn inner_exclusive_access(&self) -> RefMut<'_, ProcessorInner> {
+        self.inner.borrow_mut()
+    }
+}
+
+impl ProcessorInner {
     fn get_idle_task_cx_ptr(&mut self) -> *mut TaskContext {
         &mut self.idle_task_cx as *mut _
     }
+
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.current.take()
     }
@@ -31,12 +49,17 @@ impl Processor {
 }
 
 lazy_static! {
-    pub static ref PROCESSOR: Arc<Mutex<Processor>> = Arc::new(Mutex::new(Processor::new()));
+    pub static ref PROCESSORS: [Processor; MAX_CPU_NUM] = [
+        Processor::new(),
+        Processor::new(),
+        Processor::new(),
+        Processor::new()
+    ];
 }
 
 pub fn run_tasks() {
     loop {
-        let mut processor = PROCESSOR.lock();
+        let mut processor = PROCESSORS[get_hartid()].inner_exclusive_access();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -58,11 +81,11 @@ pub fn run_tasks() {
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.lock().take_current()
+    PROCESSORS[get_hartid()].inner_exclusive_access().take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.lock().current()
+    PROCESSORS[get_hartid()].inner_exclusive_access().current()
 }
 
 pub fn current_process() -> Arc<ProcessControlBlock> {
@@ -96,7 +119,7 @@ pub fn current_kstack_top() -> usize {
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let mut processor = PROCESSOR.lock();
+    let mut processor = PROCESSORS[get_hartid()].inner_exclusive_access();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
     unsafe {

@@ -1,12 +1,13 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
-MODE ?= release
+MODE ?= debug
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 FS_IMG := ../user/target/$(TARGET)/release/fs.img
 SDCARD := /dev/sdb
 APPS := ../user/src/bin/*
+CPUS ?= 2
 
 ifeq ($(MODE), release)
 	BUILD_MODE := --release
@@ -108,7 +109,7 @@ ifeq ($(BOARD),qemu)
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-		-smp 2
+		-smp $(CPUS)
 # -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
@@ -139,7 +140,7 @@ gdb:
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-		-smp 2 \
+		-smp $(CPUS) \
 		-s -S
 # -smp threads=2
 
@@ -157,7 +158,7 @@ ifeq ($(BOARD),qemu)
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-		-smp 2
+		-smp $(CPUS)
 # -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
