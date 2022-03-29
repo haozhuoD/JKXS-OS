@@ -1,6 +1,6 @@
 use core::cell::{RefCell, RefMut};
 
-use super::__switch;
+use super::{__switch, add_task};
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 
@@ -43,6 +43,7 @@ impl ProcessorInner {
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.current.take()
     }
+
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
@@ -60,6 +61,14 @@ lazy_static! {
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSORS[get_hartid()].inner_exclusive_access();
+
+        // 本来下面这段代码应该由suspend_current_and_run_next完成
+        // 但是若如此做，则内核栈会被其他核“趁虚而入”
+        // 将suspend_current_and_run_next中的add_task延后到调度完成后
+        if let Some(last_task) = processor.take_current() {
+            // println!("add a task...");
+            add_task(last_task);
+        }
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -71,17 +80,18 @@ pub fn run_tasks() {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
+
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
-        } else {
-            println!("no tasks available in run_tasks");
         }
     }
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSORS[get_hartid()].inner_exclusive_access().take_current()
+    PROCESSORS[get_hartid()]
+        .inner_exclusive_access()
+        .take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
@@ -114,8 +124,13 @@ pub fn current_trap_cx_user_va() -> usize {
         .trap_cx_user_va()
 }
 
-pub fn current_kstack_top() -> usize {
-    current_task().unwrap().kstack.get_top()
+pub fn current_kstack_top() -> Option<usize> {
+    // backtrace时一些核心可能没有current_task
+    if let Some(task) = current_task() {
+        Some(task.kstack.get_top())
+    } else {
+        None
+    }
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

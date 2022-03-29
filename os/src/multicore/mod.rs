@@ -1,3 +1,4 @@
+#[inline(always)]
 pub fn get_hartid() -> usize {
     let mut hartid;
     unsafe {

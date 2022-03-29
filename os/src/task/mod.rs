@@ -28,7 +28,8 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
-    let task = take_current_task().unwrap();
+    // 将原来的take_current改为current_task，也就是说suspend之后，task仍然保留在processor中
+    let task = current_task().unwrap();
 
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
@@ -36,21 +37,31 @@ pub fn suspend_current_and_run_next() {
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
     drop(task_inner);
+    drop(task);
     // ---- release current TCB
 
+    // 将“add_task”延迟到调度完成（即切换到idle控制流）之后
+    // 若不这么做，该线程将自己挂到就绪队列，另一cpu核可能趁此机会取出该线程，并进入该线程的内核栈
+    // 从而引发错乱。
+    
+    /*
     // push back to ready queue.
     add_task(task);
+    */
     // jump to scheduling cycle
     schedule(task_cx_ptr);
+
+    // 若没有其他的就绪线程，则返回原来的线程
 }
 
 pub fn block_current_and_run_next() {
-    let task = take_current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
-    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-    task_inner.task_status = TaskStatus::Blocking;
-    drop(task_inner);
-    schedule(task_cx_ptr);
+    unimplemented!();
+    // let task = take_current_task().unwrap();
+    // let mut task_inner = task.inner_exclusive_access();
+    // let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+    // task_inner.task_status = TaskStatus::Blocking;
+    // drop(task_inner);
+    // schedule(task_cx_ptr);
 }
 
 pub fn exit_current_and_run_next(exit_code: i32) {
@@ -109,7 +120,7 @@ lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v = inode.read_all();
-        ProcessControlBlock::new(v.as_slice())
+        ProcessControlBlock::new(v.as_slice()) // add_task here
     };
 }
 

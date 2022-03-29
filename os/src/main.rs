@@ -61,10 +61,9 @@ pub fn rust_main() -> ! {
         while !AP_CAN_INIT.load(Ordering::Relaxed) {}
         others_main(hartid);
     }
-    println!("[kernel] Riscv hartid {} run ", hartid);
     clear_bss();
-    println!("[kernel] Hello, Risc-V!");
     mm::init();
+    println!("[kernel] Riscv hartid {} run ", hartid);
     mm::remap_test();
     trap::init();
     trap::enable_timer_interrupt();

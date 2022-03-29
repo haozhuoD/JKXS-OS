@@ -38,6 +38,10 @@ pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
     TASK_MANAGER.lock().fetch()
 }
 
+pub fn task_count() -> usize {
+    TASK_MANAGER.lock().ready_queue.clone().into_iter().count()
+}
+
 pub fn pid2process(pid: usize) -> Option<Arc<ProcessControlBlock>> {
     let map = PID2PCB.lock();
     map.get(&pid).map(Arc::clone)
