@@ -24,3 +24,7 @@
   + 初步实现`sbrk`和`mmap`, 并支持`lazy allocation`
     [mmap文档](./mmap.md)
   + 为虚拟空间创建过程添加pin, 可观察虚拟空间mapping信息
+
+- 2022-3-30
+  + 多核初步实现，目前可以稳定跑4核，暂未发现问题。（或许将来会有呢？）
+    [multicore文档](./multicore.md)

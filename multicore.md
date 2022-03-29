@@ -42,3 +42,104 @@ thr x 切换到x号线程
 >- loop块的作用域等等细节实现问题
 
 ## 多核退出竞争问题
+
+开三核测试，发现执行用户程序时经常会产生死锁，下面利用gdb调试工具分析某一次死锁出现的情况（此时usershell刚执行完mmap用户程序，mmap准备退出时发生死锁）。先打印堆栈信息，如下：
+
+**核心1：**
+```shell
+(gdb) bac
+#0  0x0000000080218162 in core::sync::atomic::AtomicUsize::load (self=0x806bb218 <os::mm::heap_allocator::HEAP_SPACE+4182552>,
+    order=core::sync::atomic::Ordering::Acquire)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/sync/atomic.rs:1503
+#1  0x000000008023e936 in spin::mutex::ticket::TicketMutex<T>::lock (self=0x806bb210 <os::mm::heap_allocator::HEAP_SPACE+4182544>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex/ticket.rs:161
+#2  spin::mutex::Mutex<T>::lock (self=0x806bb210 <os::mm::heap_allocator::HEAP_SPACE+4182544>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex.rs:174
+#3  os::task::process::ProcessControlBlock::inner_exclusive_access (self=0x806ba630 <os::mm::heap_allocator::HEAP_SPACE+4179504>)
+    at src/task/process.rs:82
+#4  0x0000000080240f08 in os::syscall::process::sys_waitpid::{{closure}} () at src/syscall/process.rs:108
+#5  0x0000000080235a0a in core::iter::traits::iterator::Iterator::find::check::{{closure}} (x=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:2455
+#6  0x00000000802141c8 in <core::iter::adapters::enumerate::Enumerate<I> as core::iter::traits::iterator::Iterator>::try_fold::enumerate::{{closure}} (acc=(), item=0x806ba840 <os::mm::heap_allocator::HEAP_SPACE+4180032>)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/adapters/enumerate.rs:85
+#7  0x0000000080214cc4 in core::iter::traits::iterator::Iterator::try_fold (self=0xffffffffffff9be0, init=(), f=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:1991
+#8  0x0000000080213fb8 in <core::iter::adapters::enumerate::Enumerate<I> as core::iter::traits::iterator::Iterator>::try_fold (
+    self=0xffffffffffff9be0, init=(), fold=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/adapters/enumerate.rs:91
+#9  0x0000000080214438 in core::iter::traits::iterator::Iterator::find (self=0xffffffffffff9be0, predicate=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:2459
+#10 0x000000008021a9f6 in os::syscall::process::sys_waitpid (pid=2, wstatus=0xf0003e88, options=1) at src/syscall/process.rs:106
+#11 0x000000008023d534 in os::syscall::syscall (syscall_id=260, args=...) at src/syscall/mod.rs:118
+#12 0x00000000802345a8 in os::trap::trap_handler () at src/trap/mod.rs:53
+#13 0x0000000000010cc8 in ?? ()
+```
+
+**核心2：**
+```shell
+#0  0x0000000080217cc8 in core::hint::spin_loop () at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/hint.rs:137
+#1  0x00000000802180fc in core::sync::atomic::spin_loop_hint ()
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/sync/atomic.rs:2807
+#2  0x000000008023e948 in spin::mutex::ticket::TicketMutex<T>::lock (self=0x806ba410 <os::mm::heap_allocator::HEAP_SPACE+4178960>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex/ticket.rs:162
+#3  spin::mutex::Mutex<T>::lock (self=0x806ba410 <os::mm::heap_allocator::HEAP_SPACE+4178960>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex.rs:174
+#4  os::task::process::ProcessControlBlock::inner_exclusive_access (self=0x806bc650 <os::mm::heap_allocator::HEAP_SPACE+4187728>)
+    at src/task/process.rs:82
+#5  0x0000000080240f08 in os::syscall::process::sys_waitpid::{{closure}} () at src/syscall/process.rs:108
+#6  0x0000000080235a0a in core::iter::traits::iterator::Iterator::find::check::{{closure}} (x=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:2455
+#7  0x00000000802141c8 in <core::iter::adapters::enumerate::Enumerate<I> as core::iter::traits::iterator::Iterator>::try_fold::enumerate::{{closure}} (acc=(), item=0x806b81e0 <os::mm::heap_allocator::HEAP_SPACE+4170208>)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/adapters/enumerate.rs:85
+#8  0x0000000080214cc4 in core::iter::traits::iterator::Iterator::try_fold (self=0xffffffffffffebe0, init=(), f=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:1991
+#9  0x0000000080213fb8 in <core::iter::adapters::enumerate::Enumerate<I> as core::iter::traits::iterator::Iterator>::try_fold (
+    self=0xffffffffffffebe0, init=(), fold=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/adapters/enumerate.rs:91
+#10 0x0000000080214438 in core::iter::traits::iterator::Iterator::find (self=0xffffffffffffebe0, predicate=...)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/iter/traits/iterator.rs:2459
+#11 0x000000008021a9f6 in os::syscall::process::sys_waitpid (pid=-1, wstatus=0xf0003f6c, options=1) at src/syscall/process.rs:106
+#12 0x000000008023d534 in os::syscall::syscall (syscall_id=260, args=...) at src/syscall/mod.rs:118
+#13 0x00000000802345a8 in os::trap::trap_handler () at src/trap/mod.rs:53
+#14 0x0000000000010156 in ?? ()
+```
+
+**核心3：**·
+```shell
+(gdb) bac
+#0  core::sync::atomic::atomic_load (dst=0x806b8218 <os::mm::heap_allocator::HEAP_SPACE+4170264>,
+    order=core::sync::atomic::Ordering::Relaxed)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/sync/atomic.rs:2360
+#1  0x0000000080218162 in core::sync::atomic::AtomicUsize::load (self=0x806b8218 <os::mm::heap_allocator::HEAP_SPACE+4170264>,
+    order=core::sync::atomic::Ordering::Acquire)
+    at /rustc/9ad5d82f822b3cb67637f11be2e65c5662b66ec0/library/core/src/sync/atomic.rs:1503
+#2  0x000000008023e936 in spin::mutex::ticket::TicketMutex<T>::lock (self=0x806b8210 <os::mm::heap_allocator::HEAP_SPACE+4170256>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex/ticket.rs:161
+#3  spin::mutex::Mutex<T>::lock (self=0x806b8210 <os::mm::heap_allocator::HEAP_SPACE+4170256>)
+    at /home/user/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd/spin-0.7.1/src/mutex.rs:174
+#4  os::task::process::ProcessControlBlock::inner_exclusive_access (self=0x806b8130 <os::mm::heap_allocator::HEAP_SPACE+4170032>)
+    at src/task/process.rs:82
+#5  0x000000008022e2b8 in os::task::exit_current_and_run_next (exit_code=0) at src/task/mod.rs:91
+#6  0x000000008021a1a0 in os::syscall::process::sys_exit (exit_code=0) at src/syscall/process.rs:15
+#7  0x000000008023d458 in os::syscall::syscall (syscall_id=93, args=...) at src/syscall/mod.rs:100
+#8  0x00000000802345a8 in os::trap::trap_handler () at src/trap/mod.rs:53
+#9  0x000000000000110e in ?? ()
+```
+分析得知出现循环等待现象：
+
+``waitpid``获取锁的顺序是 **自己->孩子**
+``exit``获取锁的顺序是 **自己->孩子->INITPROC**
+
+**cpu_1**为`initproc`，它先获取自己的锁。此时它正在进行`waitpid`系统调用，试图获取其子进程`usershell`的锁。
+**cpu_2**为`user_shell`，它先获取自己的锁。此时它正在进行`waitpid`系统调用，试图获取其子进程`mmap`的锁。
+**cpu_3**为`mmap`，它先获取自己和孩子（虽然没有）的锁。此时它退出，正想获取`initproc`的锁，从而把它的所有子进程（虽然没有）挂到`initproc`下面。
+
+但是这三个进程的锁都被自己占有，谁也无法获取另一进程的锁，因而发生死锁。
+
+这一情况在`ultraos`中有类似的情况出现。参考学长的解决方案，可以想到一种简单的策略：改变资源获取的顺序，将`exit_current_and_next`（对应上文中的cpu_3）中获取锁的顺序改变一下，即先获取`initproc`的锁，再获取自己和孩子的锁，变为**INITPROC->自己->孩子**。这种方法破坏了死锁的循环等待条件，避免了死锁的出现。
+
+这种策略也可以完美解决`ultraos`之前遇到的父子进程同时退出的死锁问题。
+
+## 成果
+
+多核机制初步实现，目前可以稳定跑4核，且经过数次测试暂未发现问题。
