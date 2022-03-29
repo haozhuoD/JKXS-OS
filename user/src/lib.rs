@@ -68,6 +68,32 @@ bitflags! {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct TimeVal{
+    pub sec: usize,
+    pub usec: usize,
+}
+
+impl TimeVal{
+    pub fn new() -> Self{
+        Self{
+            sec:0,
+            usec:0
+        }
+    }
+
+    pub fn add_usec(&mut self, usec:usize){
+        self.usec += usec;
+        self.sec += self.usec/1000_000;
+        self.usec %= 1000_000;
+    }
+
+    pub fn is_zero(&self) -> bool{
+        self.sec == 0 && self.usec == 0
+    }
+
+}
+
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
@@ -96,8 +122,9 @@ pub fn yield_() -> isize {
     sys_yield()
 }
 pub fn get_time() -> isize {
-    panic!("outdated function");
-    // sys_get_time()
+    let mut time = TimeVal::new();
+    sys_get_time(&mut time);
+    (time.sec*1000 + time.usec/1000) as isize
 }
 pub fn getpid() -> isize {
     sys_getpid()

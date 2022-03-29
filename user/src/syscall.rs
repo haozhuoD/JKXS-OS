@@ -2,6 +2,8 @@
 
 use core::arch::asm;
 
+use crate::TimeVal;
+
 const SYSCALL_GETCWD: usize = 17;
 const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3:usize = 24;
@@ -137,8 +139,10 @@ pub fn sys_kill(pid: usize, signal: i32) -> isize {
     syscall(SYSCALL_KILL, [pid, signal as usize, 0, 0, 0, 0])
 }
 
-pub fn sys_get_time() -> isize {
-    syscall(SYSCALL_GETTIMEOFDAY, [0, 0, 0, 0, 0, 0])
+pub fn sys_get_time(time:&mut TimeVal) -> isize {
+    unsafe{
+        syscall(SYSCALL_GETTIMEOFDAY, [time as *mut TimeVal as usize, 0, 0, 0, 0, 0])
+    }    
 }
 
 pub fn sys_getpid() -> isize {
