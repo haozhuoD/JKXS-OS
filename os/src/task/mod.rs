@@ -7,6 +7,7 @@ mod signal;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
+mod aux;
 
 use crate::fs::{open_file, OpenFlags};
 use alloc::sync::Arc;
@@ -25,6 +26,7 @@ pub use processor::{
 };
 pub use signal::SignalFlags;
 pub use task::{TaskControlBlock, TaskStatus};
+pub use aux::*;
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
