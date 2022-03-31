@@ -163,7 +163,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
         }
         // not found yet
         assert!(!found || !exited);
-        if !found && options == WNOHANG {
+        if !found || options == WNOHANG {
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",

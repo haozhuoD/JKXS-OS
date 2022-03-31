@@ -66,7 +66,6 @@ pub fn run_tasks() {
         // 但是若如此做，则内核栈会被其他核“趁虚而入”
         // 将suspend_current_and_run_next中的add_task延后到调度完成后
         if let Some(last_task) = processor.take_current() {
-            // println!("add a task...");
             add_task(last_task);
         }
         if let Some(task) = fetch_task() {
@@ -77,10 +76,11 @@ pub fn run_tasks() {
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
             // release coming task TCB manually
+            // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
             processor.current = Some(task);
+            
             // release processor manually
             drop(processor);
-
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }

@@ -139,27 +139,11 @@ pub fn exec(path: &str, args: &[*const u8]) -> isize {
 const WNOHANG: isize = 1;
 
 pub fn wait(wstatus: &mut i32) -> isize {
-    loop {
-        match sys_waitpid(-1, wstatus as *mut _, WNOHANG) {
-            -2 => {
-                yield_();
-            }
-            // -1 or a real pid
-            exit_pid => return exit_pid,
-        }
-    }
+    sys_waitpid(-1, wstatus as *mut _, 0)
 }
 
 pub fn waitpid(pid: usize, wstatus: &mut i32) -> isize {
-    loop {
-        match sys_waitpid(pid as isize, wstatus as *mut _, WNOHANG) {
-            -2 => {
-                yield_();
-            }
-            // -1 or a real pid
-            exit_pid => return exit_pid,
-        }
-    }
+    sys_waitpid(pid as isize, wstatus as *mut _, 0)
 }
 
 pub fn waitpid_nb(pid: usize, exit_code: &mut i32) -> isize {
