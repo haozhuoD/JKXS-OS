@@ -52,8 +52,6 @@ pub fn suspend_current_and_run_next() {
     */
     // jump to scheduling cycle
     schedule(task_cx_ptr);
-
-    // 若没有其他的就绪线程，则返回原来的线程
 }
 
 pub fn block_current_and_run_next() {
@@ -66,7 +64,7 @@ pub fn block_current_and_run_next() {
     // schedule(task_cx_ptr);
 }
 
-pub fn exit_current_and_run_next(exit_code: i32) {
+pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
     let task = take_current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
     let process = task.process.upgrade().unwrap();
@@ -80,7 +78,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     drop(task);
     // however, if this is the main thread of current process
     // the process should terminate at once
-    if tid == 0 {
+    if tid == 0 || is_exit_group {
         remove_from_pid2process(process.getpid());
         let mut initproc_inner = INITPROC.inner_exclusive_access();
         let mut process_inner = process.inner_exclusive_access();

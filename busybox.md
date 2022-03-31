@@ -1,3 +1,7 @@
+## exec段偏移问题
+
+见ultraos，已解决。
+
 ## 运行busybox，产生错误。
 
 在0xc50cc指令产生缺页错误，stval=0x4bb9bcb08。
@@ -137,3 +141,57 @@ New value = (void *) 0x4bb9bcb08
 ## 解决
 
 对比ultraos发现缺少了ph_head_addr这个aux。添加之后，busybox成功跑起！
+
+## busybox需要支持的系统调用
+
+发现busybox跑多核时会panic，因为`processor`的`index`被设为了一个奇怪的值，推测是执行`busybox`时`tp`寄存器被修改了。
+
+另一个要注意的点：`trap.S`中，skip tp(x4), application does not use it这句话不再适用。
+
+`ultraos`已给出解决方法：
+
+```c
+// strace ./busybox sleep 3
+execve("./busybox", ["./busybox", "sleep", "3"], 0x3fffab8d70 /* 9 vars */) = 0
+set_tid_address(0x122d08)               = 73
+getuid()                                = 0
+nanosleep({tv_sec=3, tv_nsec=0}, 0x3fffae6b70) = 0
+exit_group(0)                           = ?
+```
+
+```c
+root@oscomp:/mnt# strace ./busybox ls
+execve("./busybox", ["./busybox", "ls"], 0x3fffc29d78 /* 9 vars */) = 0
+set_tid_address(0x122d08)               = 78
+getuid()                                = 0
+clock_gettime(CLOCK_REALTIME, {tv_sec=4209, tv_nsec=486776700}) = 0
+ioctl(0, TIOCGWINSZ, {ws_row=0, ws_col=0, ws_xpixel=0, ws_ypixel=0}) = 0
+ioctl(1, TIOCGWINSZ, {ws_row=0, ws_col=0, ws_xpixel=0, ws_ypixel=0}) = 0
+ioctl(1, TIOCGWINSZ, {ws_row=0, ws_col=0, ws_xpixel=0, ws_ypixel=0}) = 0
+brk(NULL)                               = 0x123000
+brk(0x125000)                           = 0x125000
+mmap(0x123000, 4096, PROT_NONE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x123000
+mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fd3be5000
+newfstatat(AT_FDCWD, ".", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, ".", O_RDONLY|O_LARGEFILE|O_CLOEXEC|O_DIRECTORY) = 3
+fcntl(3, F_SETFD, FD_CLOEXEC)           = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fd3be3000
+getdents64(3, 0x3fd3be3048 /* 6 entries */, 2048) = 184
+newfstatat(AT_FDCWD, "./riscv64-syscalls.tgz", {st_mode=S_IFREG|0755, st_size=649227, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "./riscv64", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "./gtd___", {st_mode=S_IFREG|0755, st_size=62920, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "./busybox", {st_mode=S_IFREG|0755, st_size=1116184, ...}, AT_SYMLINK_NOFOLLOW) = 0
+getdents64(3, 0x3fd3be3048 /* 0 entries */, 2048) = 0
+close(3)                                = 0
+munmap(0x3fd3be3000, 8192)              = 0
+ioctl(1, TIOCGWINSZ, {ws_row=0, ws_col=0, ws_xpixel=0, ws_ypixel=0}) = 0
+writev(1, [{iov_base="\33[1;32mbusybox\33[m               "..., iov_len=49}, {iov_base="\n", iov_len=1}], 2busybox               riscv64
+) = 50
+writev(1, [{iov_base="\33[1;32mgtd___\33[m                "..., iov_len=62}, {iov_base="\n", iov_len=1}], 2gtd___                riscv64-syscalls.tgz
+) = 63
+exit_group(0)                           = ?
++++ exited with 0 +++
+```
+
+## busybox新问题：
+运行`busybox sleep 3`时出现非法指令错误，问题正在排查。

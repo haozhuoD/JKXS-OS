@@ -1,7 +1,7 @@
 use crate::{
     mm::kernel_token,
     task::{add_task, current_task, TaskControlBlock},
-    trap::{trap_handler, TrapContext},
+    trap::{trap_handler, TrapContext}, multicore::get_hartid,
 };
 use alloc::sync::Arc;
 
@@ -37,6 +37,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
         kernel_token(),
         new_task.kstack.get_top(),
         trap_handler as usize,
+        get_hartid()
     );
     (*new_task_trap_cx).x[10] = arg;
     new_task_tid as isize

@@ -13,6 +13,6 @@ in gdb-debug:
     set {char}0x807ff000 = 0        -修改内存值,关闭信息输出
     set {char}0x807ff000 = 1        -开启信息输出
 ```
-
+set {char}0x87fff000 = 1
 插入pin
 `gdb_println!(SYSCALL_ENABLE,"+++ gdb_println test1");`

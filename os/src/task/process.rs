@@ -8,6 +8,7 @@ use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
+use crate::multicore::get_hartid;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
@@ -133,6 +134,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             kstack_top,
             trap_handler as usize,
+            get_hartid()
         );
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
@@ -283,6 +285,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             task.kstack.get_top(),
             trap_handler as usize,
+            get_hartid()
         );
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;
@@ -354,6 +357,8 @@ impl ProcessControlBlock {
         let task_inner = task.inner_exclusive_access();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
+        // sys_fork return value ...
+        trap_cx.x[10] = 0;
         drop(task_inner);
         insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler

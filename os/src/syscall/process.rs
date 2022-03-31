@@ -18,7 +18,18 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 pub fn sys_exit(exit_code: i32) -> ! {
-    exit_current_and_run_next(exit_code);
+    gdb_println!(SYSCALL_ENABLE, "sys_exit(exit_code: {} ) = ?", exit_code);
+    exit_current_and_run_next(exit_code, false);
+    panic!("Unreachable in sys_exit!");
+}
+
+pub fn sys_exit_group(exit_code: i32) -> ! {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_exit_group(exit_code: {} ) = ?",
+        exit_code
+    );
+    exit_current_and_run_next(exit_code, true);
     panic!("Unreachable in sys_exit!");
 }
 
@@ -32,24 +43,33 @@ pub fn sys_get_time(ts: *mut u64, _tz: usize) -> isize {
     let curtime = get_time_us();
     *translated_refmut(token, ts) = (curtime / USEC_PER_SEC) as u64;
     *translated_refmut(token, unsafe { ts.add(1) }) = (curtime % USEC_PER_SEC) as u64;
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_get_time(ts: {:#x?}, tz = {:x?} ) = 0",
+        ts,
+        _tz
+    );
     0
 }
 
 pub fn sys_getpid() -> isize {
-    current_task().unwrap().process.upgrade().unwrap().getpid() as isize
+    let ret = current_task().unwrap().process.upgrade().unwrap().getpid() as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_getpid() = {}", ret);
+    ret
 }
 
 pub fn sys_fork() -> isize {
     let current_process = current_process();
     let new_process = current_process.fork();
     let new_pid = new_process.getpid();
-    // modify trap context of new_task, because it returns immediately after switching
-    let new_process_inner = new_process.inner_exclusive_access();
-    let task = new_process_inner.tasks[0].as_ref().unwrap();
-    let trap_cx = task.inner_exclusive_access().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.x[10] = 0;
+    // // modify trap context of new_task, because it returns immediately after switching
+    // let new_process_inner = new_process.inner_exclusive_access();
+    // let task = new_process_inner.tasks[0].as_ref().unwrap();
+    // let trap_cx = task.inner_exclusive_access().get_trap_cx();
+    // // we do not have to move to next instruction since we have done it before
+    // // for child process, fork returns 0
+    // trap_cx.x[10] = 0;
+    gdb_println!(SYSCALL_ENABLE, "sys_fork() = {}", new_pid as isize);
     new_pid as isize
 }
 
@@ -126,6 +146,14 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     if wstatus as usize != 0 {
                         *translated_refmut(inner.memory_set.token(), wstatus) = 3 << 8;
                     }
+                    gdb_println!(
+                        SYSCALL_ENABLE,
+                        "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
+                        pid,
+                        wstatus,
+                        options,
+                        found_pid as isize
+                    );
                     return found_pid as isize;
                 } else {
                     exited = false;
@@ -136,6 +164,14 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
         // not found yet
         assert!(!found || !exited);
         if !found && options == WNOHANG {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
+                pid,
+                wstatus,
+                options,
+                -1
+            );
             return -1;
         }
         suspend_current_and_run_next();
@@ -143,7 +179,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
 }
 
 pub fn sys_kill(pid: usize, signal: u32) -> isize {
-    if let Some(process) = pid2process(pid) {
+    let ret = if let Some(process) = pid2process(pid) {
         if let Some(flag) = SignalFlags::from_bits(signal) {
             process.inner_exclusive_access().signals |= flag;
             0
@@ -152,14 +188,22 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
         }
     } else {
         -1
-    }
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_kill(pid: {}, signal: {:#x?}) = {}",
+        pid,
+        signal,
+        ret
+    );
+    ret
 }
 
 pub fn sys_brk(addr: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     // println!("syscall brk addr = {:x?}, base = {:x?}, top = {:x?}", addr, inner.user_heap_base, inner.user_heap_top);
-    if addr == 0 {
+    let ret = if addr == 0 {
         inner.user_heap_top as isize
     } else if addr >= inner.user_heap_base {
         if addr < inner.user_heap_top {
@@ -170,7 +214,9 @@ pub fn sys_brk(addr: usize) -> isize {
         addr as isize
     } else {
         -1
-    }
+    };
+    gdb_println!(SYSCALL_ENABLE, "sys_brk(addr: {:#x?}) = {}", addr, ret);
+    ret
 }
 
 pub fn sys_mmap(
@@ -213,7 +259,15 @@ pub fn sys_getppid() -> isize {
         .clone()
         .unwrap()
         .upgrade();
-    parent.unwrap().getpid() as isize
+    let ret = parent.unwrap().getpid() as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_getppid() = {}", ret);
+    ret
+}
+
+pub fn sys_getuid() -> isize {
+    // only support root user
+    gdb_println!(SYSCALL_ENABLE, "sys_getuid() = {}", 0);
+    0
 }
 
 pub fn sys_times(time: *mut usize) -> isize {
@@ -223,7 +277,16 @@ pub fn sys_times(time: *mut usize) -> isize {
     *translated_refmut(token, unsafe { time.add(1) }) = sec;
     *translated_refmut(token, unsafe { time.add(2) }) = sec;
     *translated_refmut(token, unsafe { time.add(3) }) = sec;
+    gdb_println!(SYSCALL_ENABLE, "sys_times(time: {:#x?}) = {}", time, 0);
     0
+}
+
+pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
+    let token = current_user_token();
+    *translated_refmut(token, ptr) = current_process().pid.0;
+    let ret = current_process().pid.0 as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_set_tid_address(ptr: {:#x?}) = {}", ptr, ret);
+    ret
 }
 
 #[repr(C)]
@@ -267,5 +330,7 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     let uname = uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
     userbuf.write(uname.as_bytes());
+    gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
     0
 }
+
