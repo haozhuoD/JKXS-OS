@@ -1,18 +1,21 @@
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
-use lazy_static::*;
 use spin::Mutex;
 
 struct Stdout;
 
 pub struct ConsoleInner;
 
-lazy_static! {
-    pub static ref CONSOLE: Mutex<ConsoleInner> = Mutex::new(ConsoleInner {});
+impl ConsoleInner {
+    fn puts(&self, args: fmt::Arguments) {
+        Stdout.write_fmt(args).unwrap();
+    }
 }
 
-impl ConsoleInner {
-    pub fn putstr(&self, s: &str) -> fmt::Result {
+static CONSOLE: Mutex<ConsoleInner> = Mutex::new(ConsoleInner {});
+
+impl Write for Stdout {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
             console_putchar(c as usize);
         }
@@ -20,14 +23,8 @@ impl ConsoleInner {
     }
 }
 
-impl Write for Stdout {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        CONSOLE.lock().putstr(s)
-    }
-}
-
 pub fn print(args: fmt::Arguments) {
-    Stdout.write_fmt(args).unwrap();
+    CONSOLE.lock().puts(args);
 }
 
 #[macro_export]
