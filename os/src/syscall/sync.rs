@@ -1,4 +1,5 @@
 use crate::gdb_println;
+use crate::monitor::QEMU;
 use crate::mm::translated_ref;
 use crate::monitor::SYSCALL_ENABLE;
 // use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
@@ -18,7 +19,7 @@ pub fn sys_sleep(req: *mut u64) -> isize {
     while get_time_us() - start_time < t {
         suspend_current_and_run_next();
     }
-    gdb_println!(SYSCALL_ENABLE, "sys_sleep({s: {}, us: {})", sec, usec);
+    gdb_println!(SYSCALL_ENABLE, "sys_sleep(s: {}, us: {})", sec, usec);
     0
 }
 
