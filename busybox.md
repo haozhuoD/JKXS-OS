@@ -193,6 +193,95 @@ exit_group(0)                           = ?
 +++ exited with 0 +++
 ```
 
+```c
+root@oscomp:/mnt# strace ./busybox sh
+execve("/bin/busybox", ["busybox", "sh"], 0x3fffc63d68 /* 9 vars */) = 0
+brk(NULL)                               = 0xf8000
+faccessat(AT_FDCWD, "/etc/ld.so.preload", R_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/lib64/lp64d/tls/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/lib64/lp64d/tls", 0x3fff9c8e50, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/lib64/lp64d/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\260\261\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=2957368, ...}) = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fd69e9000
+mmap(NULL, 528536, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fd6967000
+mmap(0x3fd69e7000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x7f000) = 0x3fd69e7000
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/lp64d/libresolv.so.2", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\3201\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=460088, ...}) = 0
+mmap(NULL, 59128, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fd6958000
+mmap(0x3fd6965000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xc000) = 0x3fd6965000
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/lp64d/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\300\1\2\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=17493888, ...}) = 0
+mmap(NULL, 1065496, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fd6853000
+mmap(0x3fd694e000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xfa000) = 0x3fd694e000
+mmap(0x3fd6954000, 12824, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x3fd6954000
+close(3)                                = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fd6851000
+mprotect(0x3fd694e000, 16384, PROT_READ) = 0
+mprotect(0x3fd6965000, 4096, PROT_READ) = 0
+mprotect(0x3fd69e7000, 4096, PROT_READ) = 0
+mprotect(0xf5000, 4096, PROT_READ)      = 0
+mprotect(0x3fd6a04000, 4096, PROT_READ) = 0
+getuid()                                = 0
+brk(NULL)                               = 0xf8000
+brk(0x119000)                           = 0x119000
+getpid()                                = 76
+rt_sigaction(SIGCHLD, {sa_handler=0x6685c, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+getppid()                               = 73
+uname({sysname="Linux", nodename="oscomp", ...}) = 0
+newfstatat(AT_FDCWD, "/mnt", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, ".", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+ioctl(0, TCGETS, {B115200 opost isig icanon echo ...}) = 0
+ioctl(1, TCGETS, {B115200 opost isig icanon echo ...}) = 0
+rt_sigaction(SIGINT, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGINT, {sa_handler=0x6685c, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGQUIT, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGQUIT, {sa_handler=SIG_IGN, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGTERM, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGTERM, {sa_handler=SIG_IGN, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+openat(AT_FDCWD, "/dev/tty", O_RDWR)    = 3
+fcntl(3, F_DUPFD_CLOEXEC, 10)           = 10
+close(3)                                = 0
+ioctl(10, TIOCGPGRP, [73])              = 0
+getpgid(0)                              = 73
+rt_sigaction(SIGTSTP, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGTSTP, {sa_handler=SIG_IGN, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGTTOU, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGTTOU, {sa_handler=SIG_IGN, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGTTIN, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+setpgid(0, 76)                          = 0
+ioctl(10, TIOCSPGRP, [76])              = 0
+rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[HUP], sa_flags=SA_RESTART}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+ioctl(0, TCGETS, {B115200 opost isig icanon echo ...}) = 0
+openat(AT_FDCWD, "/root/.ash_history", O_RDONLY) = 3
+fstat(3, {st_mode=S_IFREG|0600, st_size=3357, ...}) = 0
+read(3, "fdisk  -l \ndf -h\nmount \nmount -v"..., 1024) = 1024
+read(3, ".bin \nscp os@192.168.100.1:/tmp/"..., 1024) = 1024
+read(3, "busybox \nclear \nstrace busybox\nc"..., 1024) = 1024
+read(3, "/\nls\nstrace ./busybox shell\nstra"..., 1024) = 285
+read(3, "", 1024)                       = 0
+close(3)                                = 0
+ioctl(0, SNDCTL_TMR_START or TCSETS, {B115200 opost -isig -icanon -echo ...}) = 0
+geteuid()                               = 0
+openat(AT_FDCWD, "/etc/passwd", O_RDONLY) = 3
+fstat(3, {st_mode=S_IFREG|0664, st_size=30, ...}) = 0
+read(3, "root:x:0:0:root:/root:/bin/sh\n", 1024) = 30
+close(3)                                = 0
+ioctl(0, TIOCGWINSZ, {ws_row=0, ws_col=0, ws_xpixel=0, ws_ypixel=0}) = 0
+getcwd("/mnt", 192)                     = 5
+geteuid()                               = 0
+fstat(1, {st_mode=S_IFCHR|0600, st_rdev=makedev(0x4, 0x40), ...}) = 0
+ioctl(1, TCGETS, {B115200 opost -isig -icanon -echo ...}) = 0
+rt_sigaction(SIGWINCH, {sa_handler=0xbe544, sa_mask=[], sa_flags=SA_RESTART}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+write(1, "/mnt # ", 7/mnt # )                  = 7
+ppoll([{fd=0, events=POLLIN}], 1, NULL, NULL, 0) = 1 ([{fd=0, revents=POLLIN}])
+```
+
 ## busybox新问题：
 运行`busybox sleep 3`时出现非法指令错误，问题正在排查。
 
@@ -201,4 +290,4 @@ exit_group(0)                           = ?
 a0b62:	f2000453          	fmv.d.x	fs0,zero
 ```
 
-检查得知这是一条将整型数转换为浮点数的指令。由于`rustsbi`未开启浮点指令，故该指令为非法。
+检查得知这是一条将整型数转换为浮点数的指令。由于`rustsbi`未开启浮点指令，故该指令为非法。QEMU模拟时需要使用`opensbi`。
