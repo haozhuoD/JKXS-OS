@@ -100,8 +100,8 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
 
             // find a child process
             if !inner
-                .children
-                .iter()
+                .children 
+                .iter() 
                 .any(|p| pid == -1 || pid as usize == p.getpid())
             {
                 found = false;
