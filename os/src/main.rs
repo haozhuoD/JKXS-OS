@@ -37,7 +37,6 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::multicore::{get_hartid, save_hartid};
 // use crate::monitor::*;
-use easy_fs::SuperBlock;
 
 global_asm!(include_str!("entry.asm"));
 

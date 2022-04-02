@@ -5,6 +5,7 @@ use super::{
 use crate::BLOCK_SZ;
 use alloc::sync::Arc;
 use spin::Mutex;
+use crate::println;
 
 pub struct EasyFileSystem {
     pub block_device: Arc<dyn BlockDevice>,
@@ -31,6 +32,11 @@ impl EasyFileSystem {
         let data_total_blocks = total_blocks - 1 - inode_total_blocks;
         let data_bitmap_blocks = (data_total_blocks + 4096) / 4097;
         let data_area_blocks = data_total_blocks - data_bitmap_blocks;
+        // println!("[create EasyFileSystem]  \n inode_total_blocks:{}  \n  
+        //         inode_bitmap_blocks:{}  inode_area_blocks:{} \n
+        //         data_total_blocks:{} \n   
+        //         data_bitmap_blocks:{}  data_area_blocks:{} "
+        //         ,inode_total_blocks,inode_bitmap_blocks,inode_area_blocks,data_total_blocks,data_bitmap_blocks,data_area_blocks);
         let data_bitmap = Bitmap::new(
             (1 + inode_bitmap_blocks + inode_area_blocks) as usize,
             data_bitmap_blocks as usize,
