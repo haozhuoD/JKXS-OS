@@ -37,7 +37,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::multicore::{get_hartid, save_hartid};
 // use crate::monitor::*;
-use crate::fs::SuperBlock;
+use easy_fs::SuperBlock;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -70,7 +70,6 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
-    println!("easy-fs SuperBlock : {#?}",SuperBlock);
     task::add_initproc();
 
     AP_CAN_INIT.store(true, Ordering::Relaxed);
