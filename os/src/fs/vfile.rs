@@ -5,27 +5,27 @@ use crate::mm::UserBuffer;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
-use easy_fs::{EasyFileSystem, Inode};
+use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
 use lazy_static::*;
 use spin::Mutex;
 
-pub struct OSInode {
+pub struct OSFile {
     readable: bool,
     writable: bool,
-    inner: Arc<Mutex<OSInodeInner>>,
+    inner: Arc<Mutex<OSFileInner>>,
 }
 
-pub struct OSInodeInner {
+pub struct OSFileInner {
     offset: usize,
-    inode: Arc<Inode>,
+    vfile: Arc<VFile>,
 }
 
-impl OSInode {
-    pub fn new(readable: bool, writable: bool, inode: Arc<Inode>) -> Self {
+impl OSFile {
+    pub fn new(readable: bool, writable: bool, vfile: Arc<VFile>) -> Self {
         Self {
             readable,
             writable,
-            inner: Arc::new(Mutex::new(OSInodeInner { offset: 0, inode })),
+            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, vfile })),
         }
     }
     pub fn read_all(&self) -> Vec<u8> {
@@ -33,7 +33,7 @@ impl OSInode {
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::new();
         loop {
-            let len = inner.inode.read_at(inner.offset, &mut buffer);
+            let len = inner.vfile.read_at(inner.offset, &mut buffer);
             if len == 0 {
                 break;
             }
@@ -45,7 +45,7 @@ impl OSInode {
 
     pub fn file_size(&self) -> usize {
         let inner = self.inner.lock();
-        inner.inode.size()
+        inner.vfile.get_size() as usize
     }
 
     pub fn set_offset(&self, offset: usize) -> usize {
@@ -55,15 +55,16 @@ impl OSInode {
 }
 
 lazy_static! {
-    pub static ref ROOT_INODE: Arc<Inode> = {
-        let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
-        Arc::new(EasyFileSystem::root_inode(&efs))
+    pub static ref ROOT_VFILE: Arc<VFile> = {
+        let fat32_fs = FAT32Manager::open(BLOCK_DEVICE.clone());
+        let fs_inner = fat32_fs.read();
+        Arc::new(fs_inner.get_root_vfile(&fat32_fs))
     };
 }
 
 pub fn list_apps() {
     println!("/**** APPS ****");
-    for app in ROOT_INODE.ls() {
+    for (app, _) in ROOT_VFILE.ls().unwrap() {
         println!("{}", app);
     }
     println!("**************/")
@@ -75,7 +76,7 @@ bitflags! {
         const WRONLY = 1 << 0;
         const RDWR = 1 << 1;
         const CREATE = 1 << 6;
-        const TRUNC = 1 << 10;
+        const DIRECTORY = 1 << 21;
     }
 }
 
@@ -93,31 +94,44 @@ impl OpenFlags {
     }
 }
 
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
     let (readable, writable) = flags.read_write();
+
+    let mut pathv: Vec<&str> = path.split("/").collect();
+
     if flags.contains(OpenFlags::CREATE) {
-        // println!("open_file(CREATE)");
-        if let Some(inode) = ROOT_INODE.find(name) {
-            // clear size
-            inode.clear();
-            Some(Arc::new(OSInode::new(readable, writable, inode)))
-        } else {
-            // create file
-            ROOT_INODE
-                .create(name)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
-        }
-    } else {
-        ROOT_INODE.find(name).map(|inode| {
-            if flags.contains(OpenFlags::TRUNC) {
-                inode.clear();
+        // 先找到父级目录对应节点
+        let filename = pathv.pop().unwrap();
+        if let Some(parent_dir) = ROOT_VFILE.find_vfile_bypath(pathv) {
+            if let Some(vfile) = parent_dir.find_vfile_byname(filename) {
+                // 删除已存在的文件
+                vfile.remove();
             }
-            Arc::new(OSInode::new(readable, writable, inode))
+            // 新建文件
+            let mut filetype = ATTRIBUTE_ARCHIVE;
+            if flags.contains(OpenFlags::DIRECTORY) {
+                filetype = ATTRIBUTE_DIRECTORY;
+            }
+            if let Some(osfile) = parent_dir
+                .create(filename, filetype)
+                .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
+            {
+                Some(osfile)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+    else {
+        ROOT_VFILE.find_vfile_bypath(pathv).map(|vfile| {
+            Arc::new(OSFile::new(readable, writable, vfile))
         })
     }
 }
 
-impl File for OSInode {
+impl File for OSFile {
     fn readable(&self) -> bool {
         self.readable
     }
@@ -128,7 +142,7 @@ impl File for OSInode {
         let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
-            let read_size = inner.inode.read_at(inner.offset, *slice);
+            let read_size = inner.vfile.read_at(inner.offset, *slice);
             if read_size == 0 {
                 break;
             }
@@ -141,7 +155,7 @@ impl File for OSInode {
         let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter() {
-            let write_size = inner.inode.write_at(inner.offset, *slice);
+            let write_size = inner.vfile.write_at(inner.offset, *slice);
             assert_eq!(write_size, slice.len());
             inner.offset += write_size;
             total_write_size += write_size;

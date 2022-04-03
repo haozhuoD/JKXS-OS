@@ -1,5 +1,5 @@
 [package]
-name = "simple-fat32"
+name = "fat32-fs"
 version = "0.0.1"
 authors = ["Haochen Gong <1527198893@qq.com>"]
 edition = "2018"
@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 spin = "0.7.0"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-riscv = { path = "../dependency/riscv", features = ["inline-asm"] }
+riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
 #os = {path = "../os"}

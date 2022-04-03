@@ -1,7 +1,7 @@
 #[repr(C)]
 pub struct Kstat {
     st_dev: u64,   /* ID of device containing file */
-    st_ino: u64,   /* Inode number */
+    st_ino: u64,   /* VFile number */
     st_mode: u32,  /* File type and mode */
     st_nlink: u32, /* Number of hard links */
     st_uid: u32,
@@ -21,7 +21,7 @@ impl Kstat {
     pub fn empty() -> Self {
         Self {
             st_dev: 0,   /* ID of device containing file */
-            st_ino: 0,   /* Inode number */
+            st_ino: 0,   /* VFile number */
             st_mode: 0,  /* File type and mode */
             st_nlink: 0, /* Number of hard links */
             st_uid: 0,

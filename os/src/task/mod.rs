@@ -118,8 +118,8 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
 
 lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {
-        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
-        let v = inode.read_all();
+        let vfile = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let v = vfile.read_all();
         ProcessControlBlock::new(v.as_slice()) // add_task here
     };
 }
