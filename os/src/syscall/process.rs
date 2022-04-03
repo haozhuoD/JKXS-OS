@@ -1,5 +1,4 @@
 use core::mem::size_of;
-use core::ptr::slice_from_raw_parts;
 use core::slice::from_raw_parts;
 
 use crate::config::aligned_up;
@@ -87,7 +86,10 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             args = args.add(1);
         }
     }
-    if let Some(app_vfile) = open_file(path.as_str(), OpenFlags::RDONLY) {
+
+    let cwd = current_process().inner_exclusive_access().cwd.clone();
+
+    if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
         let argc = args_vec.len();
@@ -331,7 +333,7 @@ impl uname {
 
 pub fn sys_uname(buf: *mut u8) -> isize {
     let token = current_user_token();
-    let mut buf_vec = translated_byte_buffer(token, buf, size_of::<uname>());
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<uname>());
     let uname = uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
     userbuf.write(uname.as_bytes());

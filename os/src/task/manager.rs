@@ -38,6 +38,7 @@ pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
     TASK_MANAGER.lock().fetch()
 }
 
+#[allow(unused)]
 pub fn task_count() -> usize {
     TASK_MANAGER.lock().ready_queue.clone().into_iter().count()
 }

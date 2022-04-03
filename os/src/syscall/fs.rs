@@ -2,7 +2,8 @@ use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags};
 use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::monitor::*;
-use crate::task::{current_process, current_task, current_user_token};
+use crate::task::{current_process, current_user_token};
+use alloc::string::String;
 use alloc::sync::Arc;
 use core::mem::size_of;
 
@@ -16,7 +17,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         return -1;
     }
     if let Some(file) = &inner.fd_table[fd] {
-        let mut f: Arc<dyn File + Send + Sync>;
+        let f: Arc<dyn File + Send + Sync>;
         match file {
             FileClass::File(fi) => f = fi.clone(),
             FileClass::Abs(fi) => f = fi.clone(),
@@ -61,7 +62,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         return -1;
     }
     if let Some(file) = &inner.fd_table[fd] {
-        let mut f: Arc<dyn File + Send + Sync>;
+        let f: Arc<dyn File + Send + Sync>;
         match file {
             FileClass::File(fi) => f = fi.clone(),
             FileClass::Abs(fi) => f = fi.clone(),
@@ -92,7 +93,13 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, mode: u32) -> isiz
     let token = current_user_token();
     let path = translated_str(token, path);
 
-    if let Some(vfile) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
+    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+        process.inner_exclusive_access().cwd.clone()
+    } else {
+        String::from("/")
+    };
+    
+    if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = process.inner_exclusive_access();
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(FileClass::File(vfile));

@@ -1,3 +1,5 @@
+use crate::println;
+
 use super::{
     BlockDevice,
     fat32_manager::*,
@@ -38,7 +40,7 @@ impl VFile{
         long_pos_vec:Vec<(usize, usize)>, 
         //first_cluster: u32,
         attribute:u8,
-        size:u32,
+        _size:u32,
         fs: Arc<RwLock<FAT32Manager>>,
         block_device: Arc<dyn BlockDevice>
     )->Self{
@@ -172,7 +174,7 @@ impl VFile{
             && long_ent.attribute() == ATTRIBUTE_LFN {
                 // 匹配：如果名一致，且第一字段为0x4*，获取该order，以及校验和
                 let mut order = long_ent.get_order();
-                let l_checksum = long_ent.get_checksum(); 
+                // let l_checksum = long_ent.get_checksum(); 
                 if order & 0x40 == 0 || order == 0xE5 { offset += step * DIRENT_SZ; continue; }
                 order = order ^ 0x40;
                 if order as usize != long_ent_num { offset += step * DIRENT_SZ; continue; }

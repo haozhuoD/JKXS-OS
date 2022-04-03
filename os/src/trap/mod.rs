@@ -5,7 +5,7 @@ use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
-    check_signals_of_current, current_add_signal, current_task, current_trap_cx,
+    check_signals_of_current, current_add_signal, current_trap_cx,
     current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next, SignalFlags,
 };

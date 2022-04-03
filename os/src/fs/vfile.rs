@@ -94,17 +94,22 @@ impl OpenFlags {
     }
 }
 
-pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
     let (readable, writable) = flags.read_write();
+
+    let cwd_pathv: Vec<&str> = cwd.split("/").collect();
+    let cwd_vfile = ROOT_VFILE.find_vfile_bypath(cwd_pathv).unwrap();
 
     let mut pathv: Vec<&str> = path.split("/").collect();
 
-    // println!("pathv = {:#x?}", pathv);
+    println!("cwd_pathv: {:#x?}", cwd.split("/").collect::<Vec<&str>>());
+    println!("cwd_vfile: {:#x?}", cwd_vfile.get_name());
+    // println!("**pathv: {:#x?}", path.split("/").collect::<Vec<&str>>());
 
     if flags.contains(OpenFlags::CREATE) {
         // 先找到父级目录对应节点
         let filename = pathv.pop().unwrap();
-        if let Some(parent_dir) = ROOT_VFILE.find_vfile_bypath(pathv) {
+        if let Some(parent_dir) = cwd_vfile.find_vfile_bypath(pathv) {
             if let Some(vfile) = parent_dir.find_vfile_byname(filename) {
                 // 删除已存在的文件
                 vfile.remove();
@@ -122,7 +127,8 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
         }
     }
     else {
-        ROOT_VFILE.find_vfile_bypath(pathv).map(|vfile| {
+        cwd_vfile.find_vfile_bypath(pathv).map(|vfile| {
+            println!("success-vfile: {:#x?}", vfile.get_name());
             Arc::new(OSFile::new(readable, writable, vfile))
         })
     }

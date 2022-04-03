@@ -1,18 +1,19 @@
+## 构建fat32文件系统
+
+构建文件系统映像：
+```sh
+cd fat32-fuse
+dd if=/dev/zero of=fs.img bs=1k count=512k
+cd ../os
+./makefs.sh
+# 或 make fs-img
+```
+
 ## fat32内核接口设计
 
-## bug: 尝试将efs换成fat32，发生错误
+...
 
-[kernel] Panicked at /home/user/OSComp-2022/simple_fat32/src/vfs.rs:159 attempt to subtract with overflow
----START BACKTRACE---
-#0:ra=0x80243676
-#1:ra=0x8027d452
-#2:ra=0x802706f8
-#3:ra=0x8026fc4c
-#4:ra=0x802567d2
-#5:ra=0x802569de
-#6:ra=0x8020fe42
-#7:ra=0x80248ce8
-#8:ra=0x80242772
-#9:ra=0x802442fc
----END   BACKTRACE---
+## 存在的问题
 
+1. `ultraos`的校验和算法写的有问题，目前的策略是不进行checksum。
+2. `mmap`执行三次之后会panic，目前观察到是创建文件时，clear出现了问题。
