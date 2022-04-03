@@ -421,17 +421,17 @@ impl ShortDirEntry{
     /* 计算校验和 */ // DEBUG
     pub fn checksum(&self)->u8{
         let mut name_buff:[u8;11] = [0u8;11]; 
-        let mut sum:u8 = 0;
+        let mut sum:usize = 0;
         for i in 0..8 { name_buff[i] = self.name[i]; }
         for i in 0..3 { name_buff[i+8] = self.extension[i]; }
         for i in 0..11{ 
             if (sum & 1) != 0 {
-                sum = 0x80 + (sum>>1) + name_buff[i];
+                sum = 0x80 + (sum>>1) + name_buff[i] as usize;
             }else{
-                sum = (sum>>1) + name_buff[i];
+                sum = (sum>>1) + name_buff[i] as usize;
             }
         }
-        sum
+        sum as u8
     }
 
     /* 设置当前文件的大小 */ 

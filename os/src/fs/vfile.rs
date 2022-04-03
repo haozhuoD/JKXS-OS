@@ -99,6 +99,8 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
 
     let mut pathv: Vec<&str> = path.split("/").collect();
 
+    // println!("pathv = {:#x?}", pathv);
+
     if flags.contains(OpenFlags::CREATE) {
         // 先找到父级目录对应节点
         let filename = pathv.pop().unwrap();
@@ -112,14 +114,9 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
             if flags.contains(OpenFlags::DIRECTORY) {
                 filetype = ATTRIBUTE_DIRECTORY;
             }
-            if let Some(osfile) = parent_dir
+            parent_dir
                 .create(filename, filetype)
                 .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
-            {
-                Some(osfile)
-            } else {
-                None
-            }
         } else {
             None
         }

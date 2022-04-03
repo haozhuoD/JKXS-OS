@@ -155,14 +155,8 @@ impl VFile{
         let long_ent_num = name_vec.len();
         let mut long_pos_vec:Vec<(usize, usize)> = Vec::new(); 
         let name_last =  name_vec[long_ent_num-1].clone();
-        let mut step:usize = long_ent_num;
-        for i in (long_ent_num - 2) ..0 {
-            if name_last == name_vec[i] {
-                step = step - i - 1;
-                break;
-            }
-        }
-        step = 1;
+
+        let step = 1;
         loop{
             long_pos_vec.clear();
             // 读取offset处的目录项
@@ -210,7 +204,8 @@ impl VFile{
                         &self.block_device
                     );
                     if read_sz != DIRENT_SZ {return None}
-                    if short_ent.is_valid() && l_checksum == short_ent.checksum(){
+                    // if short_ent.is_valid() && l_checksum == short_ent.checksum(){
+                    if short_ent.is_valid() {
                         let ( short_sector, short_offset) = self.get_pos(s_off);
                         for i in 0..order as usize { // 存入长名目录项位置了，第一个在栈顶
                             let pos = self.get_pos(offset + i);
