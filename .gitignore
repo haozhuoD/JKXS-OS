@@ -11,9 +11,7 @@ user/build
 user/target/*
 user/.idea/*
 user/Cargo.lock
-easy-fs/Cargo.lock
-easy-fs/target/*
-easy-fs-fuse/Cargo.lock
-easy-fs-fuse/target/*
+fat32-fuse/fs
+fat32-fuse/fs.img
 tools/
 pushall.sh

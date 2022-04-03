@@ -4,7 +4,7 @@ MODE ?= debug
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
-FS_IMG := ../user/target/$(TARGET)/release/fs.img
+FS_IMG := ../fat32-fuse/fs.img
 SDCARD := /dev/sdb
 APPS := ../user/src/bin/*
 CPUS ?= 2
@@ -74,9 +74,7 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 fs-img: $(APPS)
-	@cd ../user && make build
-	@rm -f $(FS_IMG)
-	@cd ../easy-fs-fuse && cargo run $(BUILD_MODE) -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/ -T ../user/riscv64/
+	@./makefs.sh
 
 $(APPS):
 
