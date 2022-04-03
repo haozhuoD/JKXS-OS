@@ -1,3 +1,4 @@
+mod aux;
 mod context;
 mod id;
 mod manager;
@@ -7,7 +8,6 @@ mod signal;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-mod aux;
 
 use crate::fs::{open_file, OpenFlags};
 use alloc::sync::Arc;
@@ -16,6 +16,7 @@ use manager::fetch_task;
 use process::ProcessControlBlock;
 use switch::__switch;
 
+pub use aux::*;
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::{add_task, pid2process, remove_from_pid2process};
@@ -26,7 +27,6 @@ pub use processor::{
 };
 pub use signal::SignalFlags;
 pub use task::{TaskControlBlock, TaskStatus};
-pub use aux::*;
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
@@ -45,7 +45,7 @@ pub fn suspend_current_and_run_next() {
     // 将“add_task”延迟到调度完成（即切换到idle控制流）之后
     // 若不这么做，该线程将自己挂到就绪队列，另一cpu核可能趁此机会取出该线程，并进入该线程的内核栈
     // 从而引发错乱。
-    
+
     /*
     // push back to ready queue.
     add_task(task);

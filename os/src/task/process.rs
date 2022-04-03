@@ -134,7 +134,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             kstack_top,
             trap_handler as usize,
-            get_hartid()
+            get_hartid(),
         );
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
@@ -150,7 +150,8 @@ impl ProcessControlBlock {
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) = MemorySet::from_elf(elf_data);
+        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
+            MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
@@ -176,7 +177,9 @@ impl ProcessControlBlock {
         env.push(String::from("USER=root"));
         env.push(String::from("MOTD_SHOWN=pam"));
         env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from("INVOCATION_ID=e9500a871cf044d9886a157f53826684"));
+        env.push(String::from(
+            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        ));
         env.push(String::from("TERM=vt220"));
         env.push(String::from("SHLVL=2"));
         env.push(String::from("JOURNAL_STREAM=8:9265"));
@@ -220,7 +223,7 @@ impl ProcessControlBlock {
         }
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
-        
+
         ////////////// platform String ///////////////////
         let platform = "RISC-V64";
         user_sp -= platform.len() + 1;
@@ -235,43 +238,66 @@ impl ProcessControlBlock {
         ////////////// rand bytes ///////////////////
         user_sp -= 16;
         p = user_sp;
-        auxv.push(AuxHeader{aux_type: AT_RANDOM, value: user_sp});
+        auxv.push(AuxHeader {
+            aux_type: AT_RANDOM,
+            value: user_sp,
+        });
         for i in 0..0xf {
             *translated_refmut(new_token, p as *mut u8) = i as u8;
             p += 1;
         }
-        
+
         ////////////// padding //////////////////////
         user_sp -= user_sp % 16;
-        
+
         ////////////// auxv[] //////////////////////
-        auxv.push(AuxHeader{aux_type: AT_EXECFN, value: argv[0]});// file name
-        auxv.push(AuxHeader{aux_type: AT_NULL, value:0});// end
+        auxv.push(AuxHeader {
+            aux_type: AT_EXECFN,
+            value: argv[0],
+        }); // file name
+        auxv.push(AuxHeader {
+            aux_type: AT_NULL,
+            value: 0,
+        }); // end
         user_sp -= auxv.len() * core::mem::size_of::<AuxHeader>();
         let auxv_base = user_sp;
         // println!("[auxv]: base 0x{:X}", auxv_base);
         for i in 0..auxv.len() {
             // println!("[auxv]: {:?}", auxv[i]);
             let addr = user_sp + core::mem::size_of::<AuxHeader>() * i;
-            *translated_refmut(new_token, addr as *mut usize) = auxv[i].aux_type ;
-            *translated_refmut(new_token, (addr + core::mem::size_of::<usize>()) as *mut usize) = auxv[i].value ;
+            *translated_refmut(new_token, addr as *mut usize) = auxv[i].aux_type;
+            *translated_refmut(
+                new_token,
+                (addr + core::mem::size_of::<usize>()) as *mut usize,
+            ) = auxv[i].value;
         }
-
 
         ////////////// *envp [] //////////////////////
         user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
         let envp_base = user_sp;
-        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize) = 0;
+        *translated_refmut(
+            new_token,
+            (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize,
+        ) = 0;
         for i in 0..env.len() {
-            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = envp[i] ;
+            *translated_refmut(
+                new_token,
+                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
+            ) = envp[i];
         }
-        
+
         ////////////// *argv [] //////////////////////
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
         let argv_base = user_sp;
-        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (args.len())) as *mut usize) = 0;
+        *translated_refmut(
+            new_token,
+            (user_sp + core::mem::size_of::<usize>() * (args.len())) as *mut usize,
+        ) = 0;
         for i in 0..args.len() {
-            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = argv[i] ;
+            *translated_refmut(
+                new_token,
+                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
+            ) = argv[i];
         }
 
         ////////////// argc //////////////////////
@@ -285,7 +311,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             task.kstack.get_top(),
             trap_handler as usize,
-            get_hartid()
+            get_hartid(),
         );
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;

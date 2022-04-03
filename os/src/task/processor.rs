@@ -78,7 +78,7 @@ pub fn run_tasks() {
             // release coming task TCB manually
             // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
             processor.current = Some(task);
-            
+
             // release processor manually
             drop(processor);
             unsafe {

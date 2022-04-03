@@ -290,4 +290,21 @@ ppoll([{fd=0, events=POLLIN}], 1, NULL, NULL, 0) = 1 ([{fd=0, revents=POLLIN}])
 a0b62:	f2000453          	fmv.d.x	fs0,zero
 ```
 
-检查得知这是一条将整型数转换为浮点数的指令。由于`rustsbi`未开启浮点指令，故该指令为非法。QEMU模拟时需要使用`opensbi`。
+检查得知这是一条将整型数转换为浮点数的指令。由于`rustsbi`未开启浮点指令，故该指令为非法。
+
+## 浮点实现参考
+
+华科xv6-k210文档[https://gitlab.eduxiji.net/retrhelo/xv6-k210/-/blob/scene/doc/%E6%9E%84%E5%BB%BA%E8%B0%83%E8%AF%95-%E6%B5%AE%E7%82%B9%E6%93%8D%E4%BD%9C.md]
+
+具体实现方案：设置`sstatus`的`fs`位，这种方案可以不使用`opensbi`。
+```rust
+pub fn init() {
+    unsafe {
+        sstatus::set_fs(FS::Clean);
+    }
+}
+```
+
+## 浮点上下文保存
+
+// TODO...

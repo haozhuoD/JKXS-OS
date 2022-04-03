@@ -20,23 +20,22 @@ mod board;
 mod console;
 mod config;
 mod drivers;
+mod fpu;
 mod fs;
 mod lang_items;
 mod mm;
 mod monitor;
+mod multicore;
 mod sbi;
 mod sync;
 mod syscall;
 mod task;
 mod timer;
 mod trap;
-mod multicore;
-
-use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::multicore::{get_hartid, save_hartid};
-// use crate::monitor::*;
+use core::arch::global_asm;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -63,13 +62,14 @@ pub fn rust_main() -> ! {
     }
     clear_bss();
     mm::init();
-    println!("[kernel] Riscv hartid {} run ", hartid);
     mm::remap_test();
+    fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     // fs::list_apps();
     task::add_initproc();
+    println!("[kernel] Riscv hartid {} run ", hartid);
 
     AP_CAN_INIT.store(true, Ordering::Relaxed);
     task::run_tasks();
@@ -79,17 +79,10 @@ pub fn rust_main() -> ! {
 fn others_main(hartid: usize) -> ! {
     println!("[kernel] Riscv hartid {} run ", hartid);
     mm::init_other();
+    fpu::init();
     trap::init();
-    // panic!("MultiCore Not implemented");
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     task::run_tasks();
     panic!("Unreachable in others_main!");
-    // unsafe {
-    //     trapframe::init();
-    // }
-    // memory::init_other();
-    // timer::init();
-    // info!("Hello RISCV! in hart {}", hartid);
-    // crate::kmain();
 }

@@ -285,7 +285,12 @@ pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
     let token = current_user_token();
     *translated_refmut(token, ptr) = current_process().pid.0;
     let ret = current_process().pid.0 as isize;
-    gdb_println!(SYSCALL_ENABLE, "sys_set_tid_address(ptr: {:#x?}) = {}", ptr, ret);
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_set_tid_address(ptr: {:#x?}) = {}",
+        ptr,
+        ret
+    );
     ret
 }
 
@@ -333,4 +338,3 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
     0
 }
-

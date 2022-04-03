@@ -9,7 +9,7 @@ pub struct TrapContext {
     pub kernel_satp: usize,
     pub kernel_sp: usize,
     pub trap_handler: usize,
-    pub core_id: usize
+    pub core_id: usize,
 }
 
 impl TrapContext {
@@ -22,7 +22,7 @@ impl TrapContext {
         kernel_satp: usize,
         kernel_sp: usize,
         trap_handler: usize,
-        core_id: usize
+        core_id: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
@@ -34,7 +34,7 @@ impl TrapContext {
             kernel_satp,
             kernel_sp,
             trap_handler,
-            core_id
+            core_id,
         };
         cx.set_sp(sp);
         cx
