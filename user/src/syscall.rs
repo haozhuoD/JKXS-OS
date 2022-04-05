@@ -100,7 +100,7 @@ pub fn sys_dup(fd: usize) -> isize {
 }
 
 pub fn sys_open_at(dirfd: isize, path: &str, flags: u32, mode: u32) -> isize {
-    syscall(SYSCALL_OPENAT, [dirfd as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
+    syscall(SYSCALL_OPENAT, [dirfd as usize, path.as_ptr() as usize, flags as usize, mode as usize, 0, 0])
 }
 
 pub fn sys_close(fd: usize) -> isize {

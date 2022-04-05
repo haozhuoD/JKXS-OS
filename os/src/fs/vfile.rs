@@ -95,42 +95,45 @@ impl OpenFlags {
 }
 
 pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-    let (readable, writable) = flags.read_write();
+    let cur_vfile = {
+        if cwd == "/" {
+            ROOT_VFILE.clone()
+        } else {
+            let wpath: Vec<&str> = cwd.split('/').collect();
+            ROOT_VFILE.find_vfile_bypath(wpath).unwrap()
+        }
+    };
 
-    let cwd_pathv: Vec<&str> = cwd.split("/").collect();
-    let cwd_vfile = ROOT_VFILE.find_vfile_bypath(cwd_pathv).unwrap();
+    let (readable, writable) = flags.read_write();
 
     let mut pathv: Vec<&str> = path.split("/").collect();
 
-    println!("cwd_pathv: {:#x?}", cwd.split("/").collect::<Vec<&str>>());
-    println!("cwd_vfile: {:#x?}", cwd_vfile.get_name());
-    // println!("**pathv: {:#x?}", path.split("/").collect::<Vec<&str>>());
+    // println!("path: {:#x?}", path);
 
     if flags.contains(OpenFlags::CREATE) {
         // 先找到父级目录对应节点
-        let filename = pathv.pop().unwrap();
-        if let Some(parent_dir) = cwd_vfile.find_vfile_bypath(pathv) {
-            if let Some(vfile) = parent_dir.find_vfile_byname(filename) {
-                // 删除已存在的文件
-                vfile.remove();
-            }
-            // 新建文件
-            let mut filetype = ATTRIBUTE_ARCHIVE;
-            if flags.contains(OpenFlags::DIRECTORY) {
-                filetype = ATTRIBUTE_DIRECTORY;
-            }
+        if let Some(inode) = cur_vfile.find_vfile_bypath(pathv.clone()) {
+            inode.remove();
+        }
+        let name = pathv.pop().unwrap();
+        if let Some(parent_dir) = cur_vfile.find_vfile_bypath(pathv.clone()) {
+            let attribute = {
+                if flags.contains(OpenFlags::DIRECTORY) {
+                    ATTRIBUTE_DIRECTORY
+                } else {
+                    ATTRIBUTE_ARCHIVE
+                }
+            };
             parent_dir
-                .create(filename, filetype)
+                .create(name, attribute)
                 .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
         } else {
             None
         }
-    }
-    else {
-        cwd_vfile.find_vfile_bypath(pathv).map(|vfile| {
-            println!("success-vfile: {:#x?}", vfile.get_name());
-            Arc::new(OSFile::new(readable, writable, vfile))
-        })
+    } else {
+        cur_vfile
+            .find_vfile_bypath(pathv)
+            .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 }
 

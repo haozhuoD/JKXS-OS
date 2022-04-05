@@ -3,9 +3,11 @@ use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::monitor::*;
 use crate::task::{current_process, current_user_token};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::mem::size_of;
+use core::ptr::slice_from_raw_parts;
 
 const AT_FDCWD: isize = -100;
 
@@ -98,24 +100,32 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, mode: u32) -> isiz
     } else {
         String::from("/")
     };
-    
-    if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
-        let mut inner = process.inner_exclusive_access();
-        let fd = inner.alloc_fd();
-        inner.fd_table[fd] = Some(FileClass::File(vfile));
-        gdb_println!(
-            SYSCALL_ENABLE,
-            "sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = {}",
-            dirfd,
-            path,
-            flags,
-            mode,
-            0
-        );
-        fd as isize
-    } else {
-        -1
-    }
+
+    let ret = {
+        if let Some(vfile) = open_file(
+            cwd.as_str(),
+            path.as_str(),
+            OpenFlags::from_bits(flags).unwrap(),
+        ) {
+            let mut inner = process.inner_exclusive_access();
+            let fd = inner.alloc_fd();
+            inner.fd_table[fd] = Some(FileClass::File(vfile));
+            fd as isize
+        } else {
+            -1
+        }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = {}",
+        dirfd,
+        path,
+        flags,
+        mode,
+        ret
+    );
+    ret
 }
 
 pub fn sys_close(fd: usize) -> isize {
@@ -134,7 +144,7 @@ pub fn sys_close(fd: usize) -> isize {
     0
 }
 
-pub fn sys_pipe(pipe: *mut usize) -> isize {
+pub fn sys_pipe(pipe: *mut u32) -> isize {
     let process = current_process();
     let token = current_user_token();
     let mut inner = process.inner_exclusive_access();
@@ -143,8 +153,8 @@ pub fn sys_pipe(pipe: *mut usize) -> isize {
     inner.fd_table[read_fd] = Some(FileClass::Abs(pipe_read));
     let write_fd = inner.alloc_fd();
     inner.fd_table[write_fd] = Some(FileClass::Abs(pipe_write));
-    *translated_refmut(token, pipe) = read_fd;
-    *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd;
+    *translated_refmut(token, pipe) = read_fd as u32;
+    *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd as u32;
     gdb_println!(SYSCALL_ENABLE, "sys_pipe() = [{}, {}]", read_fd, write_fd);
     0
 }
@@ -161,6 +171,29 @@ pub fn sys_dup(fd: usize) -> isize {
     let new_fd = inner.alloc_fd();
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
     gdb_println!(SYSCALL_ENABLE, "sys_dup(fd: {}) = {}", fd, new_fd);
+    new_fd as isize
+}
+
+pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
+    let process = current_process();
+    let mut inner = process.inner_exclusive_access();
+    if old_fd >= inner.fd_table.len() {
+        return -1;
+    }
+    if inner.fd_table[old_fd].is_none() {
+        return -1;
+    }
+    while new_fd >= inner.fd_table.len() {
+        inner.fd_table.push(None);
+    }
+    inner.fd_table[new_fd] = inner.fd_table[old_fd].clone();
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_dup3(old_fd: {}, new_fd: {}) = {}",
+        old_fd,
+        new_fd,
+        new_fd as isize
+    );
     new_fd as isize
 }
 
@@ -199,4 +232,122 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     } else {
         -1
     }
+}
+
+pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let buf_vec = translated_byte_buffer(token, buf, size);
+    let inner = process.inner_exclusive_access();
+
+    let mut user_buf = UserBuffer::new(buf_vec);
+    let mut cwd = inner.cwd.clone();
+    cwd.push('\0');
+    let cwd_str = cwd.as_str();
+
+    let ret = unsafe {
+        let cwd_buf = core::slice::from_raw_parts(cwd_str.as_ptr(), cwd_str.len());
+        user_buf.write(cwd_buf) as isize
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_getcwd(buf: {:#x?}, size = {}) = {}",
+        buf,
+        size,
+        ret
+    );
+    ret
+}
+
+pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: u32) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let path = translated_str(token, path);
+
+    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+        process.inner_exclusive_access().cwd.clone()
+    } else {
+        String::from("/")
+    };
+
+    let ret = {
+        if let Some(vfile) = open_file(
+            cwd.as_str(),
+            path.as_str(),
+            OpenFlags::DIRECTORY | OpenFlags::RDWR | OpenFlags::CREATE,
+        ) {
+            0
+        } else {
+            -1
+        }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
+        dirfd,
+        path,
+        mode,
+        ret
+    );
+    ret
+}
+
+pub fn sys_chdir(path: *const u8) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    let mut inner = process.inner_exclusive_access();
+    
+    let old_cwd = if !path.starts_with("/") {
+        inner.cwd.clone()
+    } else {
+        String::from("/")
+    };
+
+    let ret = {
+        if let Some(vfile) = open_file(
+            old_cwd.as_str(),
+            path.as_str(),
+            OpenFlags::RDONLY,
+        ) {
+            if path.starts_with("/") {
+                inner.cwd = path.clone();
+            } else {
+                assert!(old_cwd.ends_with("/"));
+                let pathv: Vec<_> = path.split("/").collect();
+                let mut cwdv: Vec<_> = old_cwd.split("/").collect();
+                // println!("pathv = {:#x?}", pathv);
+                // println!("cwdv = {:#x?}", cwdv);
+                cwdv.pop();
+                for &path_element in pathv.iter() {
+                    if path_element == "." || path_element == "" {
+                        continue;
+                    } else if path_element == ".." {
+                        cwdv.pop();
+                    } else {
+                        cwdv.push(path_element);
+                    }
+                }                
+                inner.cwd = String::from("/");
+                for &cwd_element in cwdv.iter() {
+                    if cwd_element != "" {
+                        inner.cwd.push_str(cwd_element);
+                        inner.cwd.push('/');
+                    }
+                }
+            }
+            0
+        } else {
+            -1
+        }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_chdir(path: {:?}) = {}",
+        path,
+        ret
+    );
+    ret
 }
