@@ -78,6 +78,10 @@ pub fn trap_handler() -> ! {
                 );
                 current_add_signal(SignalFlags::SIGSEGV);
             }
+            unsafe {
+                asm!("sfence.vma");
+                asm!("fence.i");
+            }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             current_add_signal(SignalFlags::SIGILL);

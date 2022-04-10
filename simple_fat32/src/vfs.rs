@@ -172,7 +172,7 @@ impl VFile{
             && long_ent.attribute() == ATTRIBUTE_LFN {
                 // 匹配：如果名一致，且第一字段为0x4*，获取该order，以及校验和
                 let mut order = long_ent.get_order();
-                // let l_checksum = long_ent.get_checksum(); 
+                let l_checksum = long_ent.get_checksum(); 
                 if order & 0x40 == 0 || order == 0xE5 { offset += step * DIRENT_SZ; continue; }
                 order = order ^ 0x40;
                 if order as usize != long_ent_num { offset += step * DIRENT_SZ; continue; }
@@ -204,8 +204,7 @@ impl VFile{
                         &self.block_device
                     );
                     if read_sz != DIRENT_SZ {return None}
-                    // if short_ent.is_valid() && l_checksum == short_ent.checksum(){
-                    if short_ent.is_valid() {
+                    if short_ent.is_valid() && l_checksum == short_ent.checksum(){
                         let ( short_sector, short_offset) = self.get_pos(s_off);
                         for i in 0..order as usize { // 存入长名目录项位置了，第一个在栈顶
                             let pos = self.get_pos(offset + i);

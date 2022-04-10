@@ -1,3 +1,4 @@
+use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
 
@@ -69,6 +70,10 @@ pub fn sys_fork() -> isize {
     // // for child process, fork returns 0
     // trap_cx.x[10] = 0;
     gdb_println!(SYSCALL_ENABLE, "sys_fork() = {}", new_pid as isize);
+    unsafe {
+        asm!("sfence.vma");
+        asm!("fence.i");
+    }
     new_pid as isize
 }
 
@@ -101,6 +106,10 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             argc
         );
         process.exec(all_data.as_slice(), args_vec);
+        unsafe {
+            asm!("sfence.vma");
+            asm!("fence.i");
+        }
         // return argc because cx.x[10] will be covered with it later
         argc as isize
     } else {
@@ -296,8 +305,8 @@ pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
     ret
 }
 
-#[repr(C)]
-pub struct uname {
+#[repr(packed)]
+pub struct Uname {
     sysname: [u8; 65],
     nodename: [u8; 65],
     release: [u8; 65],
@@ -306,15 +315,15 @@ pub struct uname {
     domainname: [u8; 65],
 }
 
-impl uname {
+impl Uname {
     pub fn new() -> Self {
         Self {
-            sysname: uname::fill_field("oscomp-2022"),
-            nodename: uname::fill_field("oscomp-2022"),
-            release: uname::fill_field("???"),
-            version: uname::fill_field("1.0"),
-            machine: uname::fill_field("riscv-64"),
-            domainname: uname::fill_field(""),
+            sysname: Uname::fill_field("oscomp-2022"),
+            nodename: Uname::fill_field("oscomp-2022"),
+            release: Uname::fill_field("???"),
+            version: Uname::fill_field("1.0"),
+            machine: Uname::fill_field("riscv-64"),
+            domainname: Uname::fill_field(""),
         }
     }
 
@@ -333,8 +342,8 @@ impl uname {
 
 pub fn sys_uname(buf: *mut u8) -> isize {
     let token = current_user_token();
-    let buf_vec = translated_byte_buffer(token, buf, size_of::<uname>());
-    let uname = uname::new();
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<Uname>());
+    let uname = Uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
     userbuf.write(uname.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);

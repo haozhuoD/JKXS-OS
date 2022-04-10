@@ -426,9 +426,9 @@ impl ShortDirEntry{
         for i in 0..3 { name_buff[i+8] = self.extension[i]; }
         for i in 0..11{ 
             if (sum & 1) != 0 {
-                sum = 0x80 + (sum>>1) + name_buff[i] as usize;
+                sum = (0x80 + (sum>>1) + name_buff[i] as usize) & 0xff;
             }else{
-                sum = (sum>>1) + name_buff[i] as usize;
+                sum = ((sum>>1) + name_buff[i] as usize) & 0xff;
             }
         }
         sum as u8
