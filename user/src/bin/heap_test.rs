@@ -35,5 +35,4 @@ pub fn main() -> i32 {
         (addr0 as usize as *mut usize).write_volatile(MAGIC);
     }
     panic!("Should not reach here!");
-    0
 }

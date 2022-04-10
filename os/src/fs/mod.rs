@@ -21,6 +21,6 @@ pub trait File: Send + Sync {
 }
 
 pub use finfo::*;
-pub use vfile::{list_apps, open_file, OSFile, OpenFlags};
+pub use vfile::{list_apps, open_file, OSFile, OpenFlags, path2vec};
 pub use pipe::{make_pipe, Pipe};
 pub use stdio::{Stdin, Stdout};

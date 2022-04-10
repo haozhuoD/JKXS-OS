@@ -16,7 +16,7 @@ virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers" }
 k210-pac = { git = "https://github.com/wyfcyx/k210-pac" }
 k210-hal = { git = "https://github.com/wyfcyx/k210-hal" }
 k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
-fat32-fs = { path = "../simple_fat32" }
+fat32_fs = { path = "../fat32_fs" }
 spin = "0.7.0"
 
 [features]

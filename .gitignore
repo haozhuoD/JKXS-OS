@@ -11,6 +11,10 @@ user/build
 user/target/*
 user/.idea/*
 user/Cargo.lock
+fat32_fs/.cargo
+fat32_fs/target/*
+fat32_fs/Cargo.lock
+user/Cargo.lock
 fat32-fuse/fs
 fat32-fuse/fs.img
 tools/

@@ -57,8 +57,7 @@ impl OSFile {
 lazy_static! {
     pub static ref ROOT_VFILE: Arc<VFile> = {
         let fat32_fs = FAT32Manager::open(BLOCK_DEVICE.clone());
-        let fs_inner = fat32_fs.read();
-        Arc::new(fs_inner.get_root_vfile(&fat32_fs))
+        Arc::new(fat32_fs.get_root_vfile(&fat32_fs))
     };
 }
 
@@ -99,24 +98,22 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if cwd == "/" {
             ROOT_VFILE.clone()
         } else {
-            let wpath: Vec<&str> = cwd.split('/').collect();
-            ROOT_VFILE.find_vfile_bypath(wpath).unwrap()
+            let wpath = path2vec(path);
+            ROOT_VFILE.find_vfile_path(wpath).unwrap()
         }
     };
 
     let (readable, writable) = flags.read_write();
 
-    let mut pathv: Vec<&str> = path.split("/").collect();
-
-    // println!("path: {:#x?}", path);
+    let mut pathv = path2vec(path);
 
     if flags.contains(OpenFlags::CREATE) {
         // 先找到父级目录对应节点
-        if let Some(inode) = cur_vfile.find_vfile_bypath(pathv.clone()) {
+        if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
             inode.remove();
         }
         let name = pathv.pop().unwrap();
-        if let Some(parent_dir) = cur_vfile.find_vfile_bypath(pathv.clone()) {
+        if let Some(parent_dir) = cur_vfile.find_vfile_path(pathv.clone()) {
             let attribute = {
                 if flags.contains(OpenFlags::DIRECTORY) {
                     ATTRIBUTE_DIRECTORY
@@ -132,7 +129,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
     } else {
         cur_vfile
-            .find_vfile_bypath(pathv)
+            .find_vfile_path(pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 }
@@ -168,4 +165,8 @@ impl File for OSFile {
         }
         total_write_size
     }
+}
+
+pub fn path2vec(path: &str) -> Vec<&str> {
+    path.split("/").filter(|x| *x != "").collect()
 }
