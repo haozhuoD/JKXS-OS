@@ -8,7 +8,7 @@ FS_IMG := ../user/target/$(TARGET)/release/fs.img
 SDCARD := /dev/sdb
 APPS := ../user/src/bin/*
 CPUS ?= 2
-
+	
 ifeq ($(MODE), release)
 	BUILD_MODE := --release
 else
@@ -16,13 +16,15 @@ else
 endif
 
 # BOARD
-BOOTMODE ?= 020
+# BOOTMODE ?= 020
 BOARD ?= qemu
-SBI ?= rustsbi
-ifeq ($(BOOTMODE), 020)
+SBI ?= rustsbi  # opensbi rustsbi
+ifeq ($(SBI), rustsbi)
 	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
-else
-	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD)-022.bin
+else 
+	BOOTLOADER := ../bootloader/fw_jump.bin
+# else
+# 	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD)-022.bin
 endif
 K210_BOOTLOADER_SIZE := 131072
 
