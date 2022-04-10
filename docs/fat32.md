@@ -35,7 +35,7 @@ cd ../os
 
 ## 调试：`mkdir`再 `chdir`再 `mkdir`崩溃的原因
 
-发现问题在执行 `sys_exec`时。定位问题，发现在get_pos函数中，offset = 4096时，计算current_cluster出了问题。
+发现问题在执行 `sys_exec`时。定位问题，发现在 `get_pos`函数中，offset = 4096时，计算current_cluster出了问题。
 
 正常来说current cluster应该是1623.
 
@@ -47,4 +47,6 @@ in fat curr cluster = 1622, next cluster = 0
 first_sector_of_cluster: cluster = 0
 ```
 
-next cluster = 0就很有问题了！
+next cluster = 0就很有问题了！不过尝试println有问题的变量之后，问题反而消失。我猜测这可能不是文件系统的问题，而是内核实现的问题。
+
+一个有效的调试方法是在即将panic的地方插入loop{}语句，这样就可以开gdb调试，在卡住的地方backtrace。如果等到panic再backtrace则得不到正确的栈帧信息。
