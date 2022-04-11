@@ -99,14 +99,14 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if cwd == "/" {
             ROOT_VFILE.clone()
         } else {
-            let wpath: Vec<&str> = cwd.split('/').collect();
+            let wpath: Vec<&str> = path2vec(cwd);
             ROOT_VFILE.find_vfile_bypath(wpath).unwrap()
         }
     };
 
     let (readable, writable) = flags.read_write();
 
-    let mut pathv: Vec<&str> = path.split("/").collect();
+    let mut pathv: Vec<&str> = path2vec(path);
 
     // println!("path: {:#x?}", path);
 
@@ -115,6 +115,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if let Some(inode) = cur_vfile.find_vfile_bypath(pathv.clone()) {
             inode.remove();
         }
+        println!("creating a new file, cwd = {:?}, path = {:?}", cwd, path);
         let name = pathv.pop().unwrap();
         if let Some(parent_dir) = cur_vfile.find_vfile_bypath(pathv.clone()) {
             let attribute = {
@@ -131,6 +132,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
             None
         }
     } else {
+        println!("open a new file, cwd = {:?}, path = {:?}", cwd, path);
         cur_vfile
             .find_vfile_bypath(pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
@@ -168,4 +170,8 @@ impl File for OSFile {
         }
         total_write_size
     }
+}
+
+pub fn path2vec(path: &str) -> Vec<&str> {
+    path.split('/').filter(|x| *x != "").collect()
 }

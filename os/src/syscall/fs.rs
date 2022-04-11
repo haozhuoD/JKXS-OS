@@ -1,4 +1,4 @@
-use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags};
+use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags, path2vec};
 use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::monitor::*;
@@ -315,8 +315,8 @@ pub fn sys_chdir(path: *const u8) -> isize {
                 inner.cwd = path.clone();
             } else {
                 assert!(old_cwd.ends_with("/"));
-                let pathv: Vec<_> = path.split("/").collect();
-                let mut cwdv: Vec<_> = old_cwd.split("/").collect();
+                let pathv: Vec<_> = path2vec(path.as_str());
+                let mut cwdv: Vec<_> = path2vec(old_cwd.as_str());
                 // println!("pathv = {:#x?}", pathv);
                 // println!("cwdv = {:#x?}", cwdv);
                 cwdv.pop();
