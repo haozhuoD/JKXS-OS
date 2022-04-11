@@ -1,3 +1,5 @@
+use crate::println;
+
 //use core::fmt::{Debug, Formatter, Result};
 use super::{
     BLOCK_SZ,
@@ -1011,8 +1013,10 @@ impl FAT{
         .read(offset as usize,|&next_cluster: &u32|{
             next_cluster
         });
-        if fat1_rs == BAD_CLUSTER {
-            if fat2_rs == BAD_CLUSTER {
+        if fat1_rs == BAD_CLUSTER || fat1_rs < 2 {
+            if fat2_rs == BAD_CLUSTER || fat1_rs < 2 {
+                println!("fat1_rs & fat2_rs are all bad clusters");
+                loop {}
                 0
             } else {
                 fat2_rs & 0x0FFFFFFF
@@ -1055,6 +1059,8 @@ impl FAT{
             cluster = self.get_next_cluster(cluster, block_device.clone());
             //println!(", next cluster = {:X}", cluster);
             if cluster == 0 {
+                println!("bad cluster 0");
+                loop {}
                 break;
             }
         }

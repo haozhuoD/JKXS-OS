@@ -58,6 +58,10 @@ impl FAT32Manager {
     /* 某个簇的第一个扇区 */
     pub fn first_sector_of_cluster(&self, cluster: u32) -> usize {
         //println!("first_sector_of_cluster: cluster = {}", cluster);
+        if cluster < 2 {
+            println!("bad first cluster {}", cluster);
+            loop {}
+        }
         (cluster as usize - 2) * self.sectors_per_cluster as usize + self.root_sec as usize
     }
 
