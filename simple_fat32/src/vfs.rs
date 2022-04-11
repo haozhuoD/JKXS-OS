@@ -1,5 +1,3 @@
-use crate::println;
-
 use super::{
     BlockDevice,
     fat32_manager::*,
@@ -247,7 +245,6 @@ impl VFile{
         let mut short_ent = ShortDirEntry::empty();
         let mut offset = 0;
         let mut read_sz:usize;
-        println!("finding..., dirent = {:#?}", dir_ent);
         loop {
             read_sz = dir_ent.read_at(
                 offset, 
@@ -256,7 +253,6 @@ impl VFile{
                 &self.fs.read().get_fat(), 
                 &self.block_device
             );
-            println!("read_sz = {}, name = {:#x?}", read_sz, short_ent.get_name_uppercase());
             // println!("short_ent = {:#x?}", short_ent);
             if read_sz != DIRENT_SZ || short_ent.is_empty() {
                 return None

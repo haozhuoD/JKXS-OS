@@ -115,7 +115,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if let Some(inode) = cur_vfile.find_vfile_bypath(pathv.clone()) {
             inode.remove();
         }
-        println!("creating a new file, cwd = {:?}, path = {:?}", cwd, path);
+        // println!("creating a new file, cwd = {:?}, path = {:?}", cwd, path);
         let name = pathv.pop().unwrap();
         if let Some(parent_dir) = cur_vfile.find_vfile_bypath(pathv.clone()) {
             let attribute = {
@@ -132,7 +132,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
             None
         }
     } else {
-        println!("open a new file, cwd = {:?}, path = {:?}", cwd, path);
+        // println!("open a new file, cwd = {:?}, path = {:?}", cwd, path);
         cur_vfile
             .find_vfile_bypath(pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
