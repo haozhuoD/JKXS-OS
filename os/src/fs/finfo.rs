@@ -1,3 +1,8 @@
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+
+use fat32_fs::{ATTRIBUTE_DIRECTORY, ATTRIBUTE_ARCHIVE};
+
 #[repr(C)]
 pub struct Kstat {
     st_dev: u64,   /* ID of device containing file */
@@ -41,5 +46,54 @@ impl Kstat {
     pub fn as_bytes(&self) -> &[u8] {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *mut u8, size) }
+    }
+}
+
+#[repr(packed)]
+pub struct FSDirent {
+    d_ino: u64,    // 索引结点号
+    d_off: i64,    // 到下一个dirent的偏移
+    d_reclen: u16, // 当前dirent的长度
+    d_type: u8,    // 文件类型
+}
+
+impl FSDirent {
+    pub fn new(d_ino: u64, d_off: i64, d_reclen: u16, d_type: u8) -> Self {
+        Self {
+            d_ino,
+            d_off,
+            d_reclen,
+            d_type,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = core::mem::size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(self as *const _ as usize as *mut u8, size) }
+    }
+}
+
+pub enum DType
+{
+    DT_UNKNOWN = 0,
+    // DT_FIFO = 1,
+    // DT_CHR = 2,
+    DT_DIR = 4,
+    // DT_BLK = 6,
+    DT_REG = 8,
+    // DT_LNK = 10,
+    // DT_SOCK = 12,
+    // DT_WHT = 14
+}
+
+impl DType {
+    pub fn from_attribute(attribute: u8) -> Self {
+        if attribute & ATTRIBUTE_DIRECTORY != 0 {
+            Self::DT_DIR
+        } else if attribute & ATTRIBUTE_ARCHIVE != 0 {
+            Self::DT_REG
+        } else {
+            Self::DT_UNKNOWN
+        }
     }
 }
