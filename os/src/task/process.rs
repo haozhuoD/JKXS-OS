@@ -323,10 +323,11 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn fork(self: &Arc<Self>) -> Arc<Self> {
+    pub fn fork(self: &Arc<Self>, _flags: u32, stack: usize) -> Arc<Self> {
         let mut parent = self.inner_exclusive_access();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
+        // 复制trapframe等内存区域均在这里
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
         // alloc a pid
         let pid = pid_alloc();
@@ -364,6 +365,7 @@ impl ProcessControlBlock {
         });
         // add child
         parent.children.push(Arc::clone(&child));
+
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&child),
@@ -387,6 +389,9 @@ impl ProcessControlBlock {
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         // sys_fork return value ...
+        if stack != 0 {
+            trap_cx.set_sp(stack);
+        }
         trap_cx.x[10] = 0;
         drop(task_inner);
         insert_into_pid2process(child.getpid(), Arc::clone(&child));

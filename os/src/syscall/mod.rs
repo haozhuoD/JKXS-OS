@@ -115,7 +115,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETTIMEOFDAY => sys_get_time(args[0] as *mut u64, args[1]),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_CLONE => sys_fork(),
+        SYSCALL_CLONE => sys_fork(args[0] as u32, args[1]),
         SYSCALL_EXECVE => sys_exec(args[0] as *const u8, args[1] as *const usize),
         SYSCALL_MMAP => sys_mmap(
             args[0] as usize,
