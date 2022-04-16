@@ -58,9 +58,9 @@ pub fn sys_getpid() -> isize {
     ret
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_fork(flags: u32, stack: usize) -> isize {
     let current_process = current_process();
-    let new_process = current_process.fork();
+    let new_process = current_process.fork(flags, stack);
     let new_pid = new_process.getpid();
     // // modify trap context of new_task, because it returns immediately after switching
     // let new_process_inner = new_process.inner_exclusive_access();

@@ -2,7 +2,7 @@ use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
-use alloc::sync::Arc;
+use alloc::{sync::Arc, string::String};
 use alloc::vec::Vec;
 use bitflags::*;
 use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
@@ -46,6 +46,11 @@ impl OSFile {
     pub fn file_size(&self) -> usize {
         let inner = self.inner.lock();
         inner.vfile.get_size() as usize
+    }
+
+    pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
+        let inner = self.inner.lock();
+        inner.vfile.dirent_info(offset)
     }
 
     pub fn set_offset(&self, offset: usize) -> usize {

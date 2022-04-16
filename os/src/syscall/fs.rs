@@ -1,13 +1,15 @@
-use crate::fs::{make_pipe, open_file, File, FileClass, Kstat, OpenFlags, path2vec};
+use crate::fs::{
+    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OpenFlags,
+};
 use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::monitor::*;
 use crate::task::{current_process, current_user_token};
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::size_of;
-use core::ptr::slice_from_raw_parts;
+use fat32_fs::DIRENT_SZ;
 
 const AT_FDCWD: isize = -100;
 
@@ -271,7 +273,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: u32) -> isize {
     };
 
     let ret = {
-        if let Some(vfile) = open_file(
+        if let Some(_) = open_file(
             cwd.as_str(),
             path.as_str(),
             OpenFlags::DIRECTORY | OpenFlags::RDWR | OpenFlags::CREATE,
@@ -298,7 +300,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
     let mut inner = process.inner_exclusive_access();
-    
+
     let old_cwd = if !path.starts_with("/") {
         inner.cwd.clone()
     } else {
@@ -306,11 +308,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     };
 
     let ret = {
-        if let Some(vfile) = open_file(
-            old_cwd.as_str(),
-            path.as_str(),
-            OpenFlags::RDONLY,
-        ) {
+        if let Some(vfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if path.starts_with("/") {
                 inner.cwd = path.clone();
             } else {
@@ -328,7 +326,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
                     } else {
                         cwdv.push(path_element);
                     }
-                }                
+                }
                 inner.cwd = String::from("/");
                 for &cwd_element in cwdv.iter() {
                     if cwd_element != "" {
@@ -343,11 +341,85 @@ pub fn sys_chdir(path: *const u8) -> isize {
         }
     };
 
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_chdir(path: {:?}) = {}",
-        path,
-        ret
-    );
+    gdb_println!(SYSCALL_ENABLE, "sys_chdir(path: {:?}) = {}", path, ret);
     ret
+}
+
+pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let buf_vec = translated_byte_buffer(token, buf, len);
+    let inner = process.inner_exclusive_access();
+
+    // let os_file = if fd == AT_FDCWD {
+    //     open_file(inner.cwd.as_str(), ".", OpenFlags::DIRECTORY | OpenFlags::RDONLY)
+    // }
+    if fd == AT_FDCWD {
+        unimplemented!();
+    }
+
+    let mut userbuf = UserBuffer::new(buf_vec);
+
+    if fd < 0 || fd >= inner.fd_table.len() as isize {
+        -1
+    } else if let Some(file) = inner.fd_table[fd as usize].clone() {
+        match file {
+            FileClass::File(f) => {
+                let mut offset = 0;
+                let mut nread = 0;
+                let mut dentry_buf = Vec::<u8>::new();
+                loop {
+                    if let Some((mut name, new_offset, first_cluster, attribute)) =
+                        f.dirent_info(offset)
+                    {
+                        name.push('\0');
+                        let reclen = core::mem::size_of::<FSDirent>() + name.len();
+                        if nread + reclen > len {
+                            break;
+                        }
+                        let fs_dirent = FSDirent::new(
+                            first_cluster as u64,
+                            DIRENT_SZ as i64,
+                            reclen as u16,
+                            DType::from_attribute(attribute) as u8,
+                        );
+                        dentry_buf.extend_from_slice(fs_dirent.as_bytes());
+                        dentry_buf.extend_from_slice(name.as_bytes());
+                        nread += reclen;
+                        offset = new_offset as usize;
+                    } else {
+                        break;
+                    }
+                    offset += DIRENT_SZ;
+                }
+                userbuf.write(dentry_buf.as_slice());
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_getdents64(fd: {}, buf = {:x?}, len: {}) = {}",
+                    fd,
+                    buf,
+                    len,
+                    nread
+                );
+                nread as isize
+            }
+            _ => -1,
+        }
+    } else {
+        -1
+    }
+}
+
+pub fn sys_mount(
+    p_special: *const u8,
+    p_dir: *const u8,
+    p_fstype: *const u8,
+    flags: usize,
+    data: *const u8,
+) -> isize {
+    0
+}
+
+pub fn sys_umount(p_special: *const u8, flags: usize) -> isize {
+    0
 }
