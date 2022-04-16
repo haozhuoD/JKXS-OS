@@ -17,6 +17,8 @@ fat32_fs/Cargo.lock
 user/Cargo.lock
 fat32-fuse/fs
 fat32-fuse/fs.img
+fat32-fuse/fat32.img
+fat32-fuse/target/*
 simple_fat32/Cargo.lock
 simple_fat32/target/*
 tools/
