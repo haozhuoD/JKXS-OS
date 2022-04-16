@@ -1,5 +1,5 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OpenFlags,
+    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OpenFlags, OSFile,
 };
 use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
@@ -9,6 +9,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::size_of;
+use std::process;
 use fat32_fs::DIRENT_SZ;
 
 const AT_FDCWD: isize = -100;
@@ -422,4 +423,37 @@ pub fn sys_mount(
 
 pub fn sys_umount(p_special: *const u8, flags: usize) -> isize {
     0
+}
+
+pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    let mut base_path = inner.cwd.as_str();
+    // 如果path是绝对路径，则dirfd被忽略
+    if path.starts_with("/") {
+        base_path = "/";
+    } else if dirfd != AT_FDCWD {
+        let dirfd = dirfd as usize;
+        if dirfd >= inner.fd_table.len() {
+            return -1;
+        }
+        if let Some(FileClass::File(osfile)) = inner.fd_table[dirfd] {
+            if let Some(osfile) =  osfile.find(path.as_str(), OpenFlags::empty()) {
+                osfile.remove();
+                return 0;
+            }
+        }
+        return -1;
+    }
+    if let Some(osfile) = open_file(
+        base_path, 
+        path.as_str(), 
+        OpenFlags::empty()
+    ) {
+        osfile.remove();
+        return 0;
+    }
+    return -1;    
 }

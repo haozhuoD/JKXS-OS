@@ -17,5 +17,7 @@ fat32_fs/Cargo.lock
 user/Cargo.lock
 fat32-fuse/fs
 fat32-fuse/fs.img
+simple_fat32/Cargo.lock
+simple_fat32/target/*
 tools/
 pushall.sh

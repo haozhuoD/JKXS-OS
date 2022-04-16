@@ -28,6 +28,7 @@ impl OSFile {
             inner: Arc::new(Mutex::new(OSFileInner { offset: 0, vfile })),
         }
     }
+
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.lock();
         let mut buffer = [0u8; 512];
@@ -41,6 +42,19 @@ impl OSFile {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+
+    pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+        let inner = self.inner.lock();
+        let mut pathv: Vec<&str> = path.split('/').collect();
+        let (readable, writable) = flags.read_write();
+        inner.vfile.find_vfile_path(pathv)
+            .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
+    }
+
+    pub fn remove(&self) -> usize {
+        let inner = self.inner.lock();
+        inner.vfile.remove()
     }
 
     pub fn file_size(&self) -> usize {
@@ -103,7 +117,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if cwd == "/" {
             ROOT_VFILE.clone()
         } else {
-            let wpath = path2vec(path);
+            let wpath = path2vec(cwd);
             ROOT_VFILE.find_vfile_path(wpath).unwrap()
         }
     };
