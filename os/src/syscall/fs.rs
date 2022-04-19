@@ -1,5 +1,5 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OpenFlags, OSFile,
+    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OSFile, OpenFlags,
 };
 use crate::gdb_println;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
@@ -9,7 +9,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::size_of;
-use std::process;
 use fat32_fs::DIRENT_SZ;
 
 const AT_FDCWD: isize = -100;
@@ -200,41 +199,47 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     new_fd as isize
 }
 
+fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
+    let mut kstat = Kstat::empty();
+    kstat.st_size = f.file_size() as i64;
+    userbuf.write(kstat.as_bytes());
+    0
+}
+
 /// 将文件描述符为fd的文件信息填入buf
 pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let inner = process.inner_exclusive_access();
-
+    let cwd = inner.cwd.clone();
     let mut userbuf = UserBuffer::new(buf_vec);
-    let mut kstat = Kstat::empty();
 
-    if fd == AT_FDCWD {
-        unimplemented!();
-    }
-
-    if fd < 0 || fd >= inner.fd_table.len() as isize {
+    let ret = if fd == AT_FDCWD {
+        fstat_inner(
+            open_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+            &mut userbuf,
+        )
+    } else if fd < 0 || fd >= inner.fd_table.len() as isize {
         -1
-    } else if let Some(file) = inner.fd_table[fd as usize].clone() {
-        match file {
-            FileClass::File(f) => {
-                kstat.st_size = f.file_size() as i64;
-                userbuf.write(kstat.as_bytes());
-                gdb_println!(
-                    SYSCALL_ENABLE,
-                    "sys_dup(fd: {}, buf = {:x?}) = {}",
-                    fd,
-                    buf,
-                    0
-                );
-                0
-            }
-            _ => -1,
-        }
     } else {
-        -1
-    }
+        if let Some(file) = inner.fd_table[fd as usize].clone() {
+            match file {
+                FileClass::File(f) => fstat_inner(f, &mut userbuf),
+                _ => -1,
+            }
+        } else {
+            -1
+        }
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_fstat(fd: {}, buf: {:#x?}) = {}",
+        fd,
+        buf,
+        ret
+    );
+    ret
 }
 
 pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
@@ -309,15 +314,14 @@ pub fn sys_chdir(path: *const u8) -> isize {
     };
 
     let ret = {
-        if let Some(vfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+        if let Some(_) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if path.starts_with("/") {
                 inner.cwd = path.clone();
             } else {
                 assert!(old_cwd.ends_with("/"));
                 let pathv = path2vec(&path);
                 let mut cwdv: Vec<_> = path2vec(&old_cwd);
-                // println!("pathv = {:#x?}", pathv);
-                // println!("cwdv = {:#x?}", cwdv);
+
                 cwdv.pop();
                 for &path_element in pathv.iter() {
                     if path_element == "." || path_element == "" {
@@ -346,69 +350,75 @@ pub fn sys_chdir(path: *const u8) -> isize {
     ret
 }
 
+fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isize {
+    let mut offset = 0;
+    let mut nread = 0;
+    let mut dentry_buf = Vec::<u8>::new();
+    loop {
+        if let Some((mut name, new_offset, first_cluster, attribute)) = f.dirent_info(offset) {
+            name.push('\0');
+            let reclen = core::mem::size_of::<FSDirent>() + name.len();
+            if nread + reclen > len {
+                break;
+            }
+            let fs_dirent = FSDirent::new(
+                first_cluster as u64,
+                DIRENT_SZ as i64,
+                reclen as u16,
+                DType::from_attribute(attribute) as u8,
+            );
+            dentry_buf.extend_from_slice(fs_dirent.as_bytes());
+            dentry_buf.extend_from_slice(name.as_bytes());
+            nread += reclen;
+            offset = new_offset as usize;
+        } else {
+            break;
+        }
+        offset += DIRENT_SZ;
+    }
+    userbuf.write(dentry_buf.as_slice());
+
+    nread as isize
+}
+
 pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, len);
     let inner = process.inner_exclusive_access();
-
-    // let os_file = if fd == AT_FDCWD {
-    //     open_file(inner.cwd.as_str(), ".", OpenFlags::DIRECTORY | OpenFlags::RDONLY)
-    // }
-    if fd == AT_FDCWD {
-        unimplemented!();
-    }
+    let cwd = inner.cwd.clone();
 
     let mut userbuf = UserBuffer::new(buf_vec);
 
-    if fd < 0 || fd >= inner.fd_table.len() as isize {
+    let ret = if fd == AT_FDCWD {
+        getdents64_inner(
+            open_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+            &mut userbuf,
+            len,
+        )
+    } else if fd < 0 || fd >= inner.fd_table.len() as isize {
         -1
-    } else if let Some(file) = inner.fd_table[fd as usize].clone() {
-        match file {
-            FileClass::File(f) => {
-                let mut offset = 0;
-                let mut nread = 0;
-                let mut dentry_buf = Vec::<u8>::new();
-                loop {
-                    if let Some((mut name, new_offset, first_cluster, attribute)) =
-                        f.dirent_info(offset)
-                    {
-                        name.push('\0');
-                        let reclen = core::mem::size_of::<FSDirent>() + name.len();
-                        if nread + reclen > len {
-                            break;
-                        }
-                        let fs_dirent = FSDirent::new(
-                            first_cluster as u64,
-                            DIRENT_SZ as i64,
-                            reclen as u16,
-                            DType::from_attribute(attribute) as u8,
-                        );
-                        dentry_buf.extend_from_slice(fs_dirent.as_bytes());
-                        dentry_buf.extend_from_slice(name.as_bytes());
-                        nread += reclen;
-                        offset = new_offset as usize;
-                    } else {
-                        break;
-                    }
-                    offset += DIRENT_SZ;
-                }
-                userbuf.write(dentry_buf.as_slice());
-                gdb_println!(
-                    SYSCALL_ENABLE,
-                    "sys_getdents64(fd: {}, buf = {:x?}, len: {}) = {}",
-                    fd,
-                    buf,
-                    len,
-                    nread
-                );
-                nread as isize
-            }
-            _ => -1,
-        }
     } else {
-        -1
-    }
+        if let Some(file) = inner.fd_table[fd as usize].clone() {
+            match file {
+                FileClass::File(f) => getdents64_inner(f, &mut userbuf, len),
+                _ => -1,
+            }
+        } else {
+            -1
+        }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_getdents64(fd: {}, buf = {:x?}, len: {}) = {}",
+        fd,
+        buf,
+        len,
+        ret
+    );
+
+    ret
 }
 
 pub fn sys_mount(
@@ -427,33 +437,29 @@ pub fn sys_umount(p_special: *const u8, flags: usize) -> isize {
 
 pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
     let process = current_process();
-    let inner = process.inner_exclusive_access();
     let token = current_user_token();
+    let inner = process.inner_exclusive_access();
     let path = translated_str(token, path);
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
     if path.starts_with("/") {
         base_path = "/";
-    } else if dirfd != AT_FDCWD {
+    } else if dirfd != AT_FDCWD as i32 {
         let dirfd = dirfd as usize;
         if dirfd >= inner.fd_table.len() {
             return -1;
         }
-        if let Some(FileClass::File(osfile)) = inner.fd_table[dirfd] {
-            if let Some(osfile) =  osfile.find(path.as_str(), OpenFlags::empty()) {
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+            if let Some(osfile) = osfile.find(path.as_str(), OpenFlags::empty()) {
                 osfile.remove();
                 return 0;
             }
         }
         return -1;
     }
-    if let Some(osfile) = open_file(
-        base_path, 
-        path.as_str(), 
-        OpenFlags::empty()
-    ) {
+    if let Some(osfile) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
         osfile.remove();
         return 0;
     }
-    return -1;    
+    return -1;
 }
