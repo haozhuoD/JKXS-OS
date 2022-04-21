@@ -415,8 +415,8 @@ impl ProcessControlBlock {
         let mut inner = self.inner_exclusive_access();
         assert_eq!(start, inner.mmap_area_top);
 
-        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
-        let end_vpn = VirtPageNum::from(VirtAddr::from(start + len));
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(start + len).floor();
         let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
 
         inner.memory_set.push_mmap_area(MmapArea::new(
@@ -435,7 +435,7 @@ impl ProcessControlBlock {
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
         assert!(is_aligned(start));
         let mut inner = self.inner_exclusive_access();
-        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
+        let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
     }
 

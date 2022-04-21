@@ -463,3 +463,7 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
     }
     return -1;
 }
+
+pub fn sys_ioctl() -> isize {
+    0
+}

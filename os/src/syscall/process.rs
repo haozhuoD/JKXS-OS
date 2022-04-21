@@ -11,7 +11,7 @@ use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::{get_time_us, USEC_PER_SEC};
+use crate::timer::{get_time_us, USEC_PER_SEC, get_time_ns, NSEC_PER_SEC};
 use crate::{gdb_println, monitor::*};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -226,7 +226,7 @@ pub fn sys_brk(addr: usize) -> isize {
     } else {
         -1
     };
-    gdb_println!(SYSCALL_ENABLE, "sys_brk(addr: {:#x?}) = {}", addr, ret);
+    gdb_println!(SYSCALL_ENABLE, "sys_brk(addr: {:#x?}) = {:#x?}", addr, ret);
     ret
 }
 
@@ -238,14 +238,15 @@ pub fn sys_mmap(
     fd: isize,
     offset: usize,
 ) -> isize {
-    if start != 0 {
-        unimplemented!();
-    }
+    // if start != 0 {
+    //     unimplemented!();
+    // }
+    // 如果start != 0，也当start = 0处理
     let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
     let aligned_len = aligned_up(len);
 
     let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, ret);
+    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {:#x?}", start, aligned_len, prot, flags, fd, offset, ret);
     ret
 }
 
@@ -347,5 +348,23 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     let mut userbuf = UserBuffer::new(buf_vec);
     userbuf.write(uname.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
+    0
+}
+
+pub fn sys_clock_get_time(clk_id: usize, tp: *mut u64) -> isize{
+    // struct timespec {
+    //     time_t   tv_sec;        /* seconds */
+    //     long     tv_nsec;       /* nanoseconds */
+    // };
+    let token = current_user_token();
+    let curtime = get_time_ns();
+    *translated_refmut(token, tp) = (curtime / NSEC_PER_SEC) as u64;
+    *translated_refmut(token, unsafe { tp.add(1) }) = (curtime % NSEC_PER_SEC) as u64;
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_clock_get_time(clk_id: {}, tp = {:x?} ) = 0",
+        clk_id,
+        tp
+    );
     0
 }

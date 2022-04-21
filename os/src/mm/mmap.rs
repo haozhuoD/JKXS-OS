@@ -58,6 +58,10 @@ impl MmapArea {
 
         let token = page_table.token();
 
+        if self.fd as isize == -1 {
+            return 0;
+        }
+
         if let Some(file) = &fd_table[self.fd] {
             match file {
                 FileClass::File(f) => {

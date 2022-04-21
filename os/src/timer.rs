@@ -11,18 +11,19 @@ use riscv::register::time;
 
 // pub const MSEC_PER_SEC: usize = 1000;
 pub const USEC_PER_SEC: usize = 1000000;
-const TICKS_PER_SEC: usize = 100;
+pub const NSEC_PER_SEC: usize = USEC_PER_SEC * 1000;
+pub const TICKS_PER_SEC: usize = 100;
 
 pub fn get_time() -> usize {
     time::read()
 }
 
-// pub fn get_time_ms() -> usize {
-//     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
-// }
-
 pub fn get_time_us() -> usize {
     time::read() * 10 / (CLOCK_FREQ / 100000)
+}
+
+pub fn get_time_ns() -> usize {
+    time::read() * 10000 / (CLOCK_FREQ / 100000)
 }
 
 pub fn set_next_trigger() {

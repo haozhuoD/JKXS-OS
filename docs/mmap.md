@@ -1,17 +1,38 @@
 # mmap
 
-1. 修改`memoryset`内容，增加记录已分配的堆内存和`mmap`内存的数据结构。
-2. 修改用户栈基地址和`mmap`基地址，见`config.rs`
-3. 修改`open`系统调用为`open_at`，增加`fstat`系统调用。
-4. 修改文件描述符的表示，由原来的`File`类型转换为`Abstract + OSFile`类型，后者支持获取文件大小等操作。
-5. 实现`lazy allocation`机制，将实际分配`mmap`和`heap`的内存延迟到缺页中断发生时，见`trap/page_fault.rs`。
+1. 修改 `memoryset`内容，增加记录已分配的堆内存和 `mmap`内存的数据结构。
+2. 修改用户栈基地址和 `mmap`基地址，见 `config.rs`
+3. 修改 `open`系统调用为 `open_at`，增加 `fstat`系统调用。
+4. 修改文件描述符的表示，由原来的 `File`类型转换为 `Abstract + OSFile`类型，后者支持获取文件大小等操作。
+5. 实现 `lazy allocation`机制，将实际分配 `mmap`和 `heap`的内存延迟到缺页中断发生时，见 `trap/page_fault.rs`。
 
 ! todo: CopyOnWrite
 
-! todo: fork子进程时，复制堆内存和`mmap`内存
+! todo: fork子进程时，复制堆内存和 `mmap`内存
 
 ! todo: munmap时写回文件
 
 ! todo: mmap_anonymus
 
 ! todo: 完善fstat（目前只填入了file_size），完整支持需要等待文件系统实现
+
+## mmap系统调用参数全面分析
+
+prot字段表示mmap内存的保护权限。
+
+    PROT_EXEC  Pages may be executed.
+
+    PROT_READ  Pages may be read.
+
+    PROT_WRITE Pages may be written.
+
+    PROT_NONE  Pages may not be accessed.
+
+
+flags字段表示mmap内存的标识：
+
+    MAP_SHARED 允许共享映射
+
+    MAP_PRIVATE 私有映射
+
+    MAP_ANONYMOUS 匿名映射，映射的内存区域不和打开文件做关联，此时fd=-1
