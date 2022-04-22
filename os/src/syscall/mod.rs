@@ -23,7 +23,7 @@ const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_READLINKAT: usize = 78;
-const SYSCALL_NEW_FSTATAT: usize = 79;
+const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_FSYNC: usize = 82;
 const SYSCALL_UTIMENSAT: usize = 88;
@@ -89,6 +89,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_DUP3 => sys_dup3(args[0], args[1]),
         SYSCALL_IOCTL => sys_ioctl(),
+        SYSCALL_FCNTL => sys_fcntl(),
         SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_UNLINKAT=> sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
         SYSCALL_UMOUNT2=> sys_umount(args[0] as *const u8, args[1] as usize),
@@ -105,6 +106,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETDENTS64 => sys_getdents64(args[0] as isize, args[1] as *mut u8, args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
+        SYSCALL_WRITEV => sys_writev(args[0], args[1] as *mut crate::fs::IOVec, args[2]),
+        SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *mut u8, args[2] as *mut u8),
         SYSCALL_FSTAT => sys_fstat(args[0] as isize, args[1] as *mut u8),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as i32),

@@ -1,3 +1,4 @@
+#![allow(unused)]
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
@@ -7,7 +8,7 @@ use fat32_fs::{ATTRIBUTE_DIRECTORY, ATTRIBUTE_ARCHIVE};
 pub struct Kstat {
     st_dev: u64,   /* ID of device containing file */
     st_ino: u64,   /* VFile number */
-    st_mode: u32,  /* File type and mode */
+    pub st_mode: u32,  /* File type and mode */
     st_nlink: u32, /* Number of hard links */
     st_uid: u32,
     st_gid: u32,
@@ -23,7 +24,7 @@ pub struct Kstat {
 }
 
 impl Kstat {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self {
             st_dev: 0,   /* ID of device containing file */
             st_ino: 0,   /* VFile number */
@@ -76,14 +77,8 @@ impl FSDirent {
 pub enum DType
 {
     DT_UNKNOWN = 0,
-    // DT_FIFO = 1,
-    // DT_CHR = 2,
     DT_DIR = 4,
-    // DT_BLK = 6,
     DT_REG = 8,
-    // DT_LNK = 10,
-    // DT_SOCK = 12,
-    // DT_WHT = 14
 }
 
 impl DType {
@@ -97,3 +92,35 @@ impl DType {
         }
     }
 }
+
+#[repr(C)]
+pub struct IOVec {
+    pub iov_base: *mut u8,
+    pub iov_len: usize
+}
+
+pub const S_IFMT    :u32 = 0o170000;   //bit mask for the file type bit field
+pub const S_IFREG   :u32 = 0o100000;   //regular file
+pub const S_IFBLK   :u32 = 0o060000;   //block device
+pub const S_IFDIR   :u32 = 0o040000;   //directory
+pub const S_IFCHR   :u32 = 0o020000;   //character device
+pub const S_IFIFO   :u32 = 0o010000;   //FIFO
+
+pub const S_ISUID:u32 = 0o4000;   //set-user-ID bit (see execve(2))
+pub const S_ISGID:u32 = 0o2000;   //set-group-ID bit (see below)
+pub const S_ISVTX:u32 = 0o1000;   //sticky bit (see below)
+
+pub const S_IRWXU:u32 = 0o0700;   //owner has read, write, and execute permission
+pub const S_IRUSR:u32 = 0o0400;   //owner has read permission
+pub const S_IWUSR:u32 = 0o0200;   //owner has write permission
+pub const S_IXUSR:u32 = 0o0100;   //owner has execute permission
+
+pub const S_IRWXG:u32 = 0o0070;   //group has read, write, and execute permission
+pub const S_IRGRP:u32 = 0o0040;   //group has read permission
+pub const S_IWGRP:u32 = 0o0020;   //group has write permission
+pub const S_IXGRP:u32 = 0o0010;   //group has execute permission
+
+pub const S_IRWXO:u32 = 0o0007;   //others (not in group) have read, write,and execute permission
+pub const S_IROTH:u32 = 0o0004;   //others have read permission
+pub const S_IWOTH:u32 = 0o0002;   //others have write permission
+pub const S_IXOTH:u32 = 0o0001;   //others have execute permission

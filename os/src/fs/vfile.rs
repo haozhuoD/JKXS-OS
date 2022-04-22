@@ -46,7 +46,7 @@ impl OSFile {
 
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
         let inner = self.inner.lock();
-        let mut pathv: Vec<&str> = path.split('/').collect();
+        let pathv = path2vec(path);
         let (readable, writable) = flags.read_write();
         inner.vfile.find_vfile_path(pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
@@ -65,6 +65,15 @@ impl OSFile {
     pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
         let inner = self.inner.lock();
         inner.vfile.dirent_info(offset)
+    }
+
+    pub fn is_dir(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.vfile.is_dir()
+    }
+
+    pub fn offset(&self) -> usize {
+        self.inner.lock().offset
     }
 
     pub fn set_offset(&self, offset: usize) -> usize {
@@ -94,6 +103,9 @@ bitflags! {
         const WRONLY = 1 << 0;
         const RDWR = 1 << 1;
         const CREATE = 1 << 6;
+        const DIRECTORY_ = 1 << 16;
+        const LARGEFILE = 1 << 15;
+        const CLOEXEC = 1 << 19;
         const DIRECTORY = 1 << 21;
     }
 }

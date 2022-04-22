@@ -1,15 +1,18 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, Kstat, OSFile, OpenFlags,
+    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
+    OpenFlags, S_IFDIR, S_IRWXU, S_IFREG, S_IRWXG, S_IRWXO,
 };
 use crate::gdb_println;
-use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+use crate::mm::{
+    translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+};
 use crate::monitor::*;
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
+use core::mem::size_of;
 
 const AT_FDCWD: isize = -100;
 
@@ -200,7 +203,14 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
 }
 
 fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
-    let mut kstat = Kstat::empty();
+    let mut kstat = Kstat::new();
+    kstat.st_mode = {
+        if f.is_dir() {
+            S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
+        } else {
+            S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
+        }
+    };
     kstat.st_size = f.file_size() as i64;
     userbuf.write(kstat.as_bytes());
     0
@@ -239,6 +249,38 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
         buf,
         ret
     );
+    ret
+}
+
+pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let path = translated_str(token, path);
+
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
+    let mut userbuf = UserBuffer::new(buf_vec);
+
+    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+        process.inner_exclusive_access().cwd.clone()
+    } else {
+        String::from("/")
+    };
+
+    let ret = if let Some(osfile) = open_file(&cwd, &path, OpenFlags::RDONLY) {
+        fstat_inner(osfile, &mut userbuf)
+    } else {
+        -1
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_fstatat(dirfd: {}, path: {:#?}, buf: {:#x?}) = {}",
+        dirfd,
+        path,
+        buf,
+        ret
+    );
+
     ret
 }
 
@@ -351,7 +393,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
 }
 
 fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isize {
-    let mut offset = 0;
+    let mut offset = f.offset();
     let mut nread = 0;
     let mut dentry_buf = Vec::<u8>::new();
     loop {
@@ -377,7 +419,7 @@ fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isi
         offset += DIRENT_SZ;
     }
     userbuf.write(dentry_buf.as_slice());
-
+    f.set_offset(offset);
     nread as isize
 }
 
@@ -466,4 +508,48 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
 
 pub fn sys_ioctl() -> isize {
     0
+}
+
+pub fn sys_fcntl() -> isize {
+    0
+}
+
+pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+
+    let mut ret = 0isize;
+
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+
+    if let Some(file) = &inner.fd_table[fd] {
+        let f: Arc<dyn File + Send + Sync>;
+        match file {
+            FileClass::File(fi) => f = fi.clone(),
+            FileClass::Abs(fi) => f = fi.clone(),
+        }
+        if !f.writable() {
+            return -1;
+        }
+
+        for i in 0..iocnt {
+            let iovec = translated_ref(token, unsafe { iov.add(i) });
+            let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
+            ret += f.write(UserBuffer::new(buf)) as isize;
+        }
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_writev(fd: {}, iov = {:x?}, iocnt: {}) = {}",
+        fd,
+        iov,
+        iocnt,
+        ret
+    );
+
+    ret
 }

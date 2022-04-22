@@ -97,6 +97,7 @@ New value = (void *) 0x4bb9bcb08
 ## 问题定位
 
 有问题的寄存器是a0， 其值由读取*($sp)得来。查看栈内存，如下：
+
 ```
 (gdb) x/20x $sp
 0xf0001fe8:     0x79737562      0x00786f62      0xf0001fe8      0x00000000
@@ -117,7 +118,8 @@ New value = (void *) 0x4bb9bcb08
 现在我们的os用户栈初始化后应该与ultraos保持一致。
 
 ## 关于进程栈初始化 参考ultraos
-``` c
+
+```c
     // exec will push following arguments to user stack:
     // STACK TOP
     //      argc
@@ -144,7 +146,7 @@ New value = (void *) 0x4bb9bcb08
 
 ## busybox需要支持的系统调用
 
-发现busybox跑多核时会panic，因为`processor`的`index`被设为了一个奇怪的值，推测是执行`busybox`时`tp`寄存器被修改了。
+发现busybox跑多核时会panic，因为 `processor`的 `index`被设为了一个奇怪的值，推测是执行 `busybox`时 `tp`寄存器被修改了。
 
 另一个要注意的点：`trap.S`中，skip tp(x4), application does not use it这句话不再适用。
 
@@ -283,20 +285,23 @@ ppoll([{fd=0, events=POLLIN}], 1, NULL, NULL, 0) = 1 ([{fd=0, revents=POLLIN}])
 ```
 
 ## busybox新问题：
-运行`busybox sleep 3`时出现非法指令错误，问题正在排查。
+
+运行 `busybox sleep 3`时出现非法指令错误，问题正在排查。
 
 非法指令如下：
+
 ```
 a0b62:	f2000453          	fmv.d.x	fs0,zero
 ```
 
-检查得知这是一条将整型数转换为浮点数的指令。由于`rustsbi`未开启浮点指令，故该指令为非法。
+检查得知这是一条将整型数转换为浮点数的指令。由于 `rustsbi`未开启浮点指令，故该指令为非法。
 
 ## 浮点实现参考
 
 华科xv6-k210文档[https://gitlab.eduxiji.net/retrhelo/xv6-k210/-/blob/scene/doc/%E6%9E%84%E5%BB%BA%E8%B0%83%E8%AF%95-%E6%B5%AE%E7%82%B9%E6%93%8D%E4%BD%9C.md]
 
-具体实现方案：设置`sstatus`的`fs`位，这种方案可以不使用`opensbi`。
+具体实现方案：设置 `sstatus`的 `fs`位，这种方案可以不使用 `opensbi`。
+
 ```rust
 pub fn init() {
     unsafe {
