@@ -1,5 +1,7 @@
 mod sdcard;
 mod virtio_blk;
+mod spi;
+mod sleep;
 
 pub use sdcard::SDCardWrapper;
 pub use virtio_blk::VirtIOBlock;

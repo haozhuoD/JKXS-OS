@@ -6,17 +6,19 @@ use super::BlockDevice;
 
 use alloc::sync::Arc;
 use core::convert::TryInto;
-use k210_hal::prelude::*;
-use k210_pac::{Peripherals, SPI0};
-use k210_soc::{
-    fpioa::{self, io},
-    //dmac::{dma_channel, DMAC, DMACExt},
-    gpio,
-    gpiohs,
-    sleep::usleep,
-    spi::{aitm, frame_format, tmod, work_mode, SPIExt, SPIImpl, SPI},
-    sysctl,
-};
+use fu740_hal::prelude::*;
+use fu740_pac::{Peripherals, SPI0 , gpio};
+use super::spi::{SPI,SPIImpl, SPIExt};
+use super::sleep::usleep;
+// use fu740_soc::{
+// //     // fpioa::{self, io},  //hifive 无fpioa
+// //     //dmac::{dma_channel, DMAC, DMACExt},
+// //     gpio,
+// //     gpiohs,
+// //     sleep::usleep,
+//     spi::{aitm, frame_format, tmod, work_mode, SPIExt, SPIImpl, SPI},
+// //     sysctl,
+// };
 use lazy_static::*;
 use spin::Mutex;
 
@@ -179,33 +181,56 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     }
 
     fn CS_HIGH(&self) {
-        gpiohs::set_pin(self.cs_gpionum, true);
+        // todo 设置正确拉高位
+        // gpiohs::set_pin(self.cs_gpionum, true);
+        unsafe {
+            let ptr = fu740_pac::GPIO::ptr();
+            (*ptr)
+                .output_en
+                // inval | (1 << u32::from(bit))
+                .modify(|r, w| w.bits( r.bits() | (1<<self.cs_gpionum) ));
+            (*ptr)
+                .input_en 
+                // & !          // 是否一定需要从u8转到u32
+                .modify(|r, w| w.bits( r.bits() | (1<<self.cs_gpionum) ));
+        }
     }
 
     fn CS_LOW(&self) {
-        gpiohs::set_pin(self.cs_gpionum, false);
+        // todo 设置正确拉高位
+        // gpiohs::set_pin(self.cs_gpionum, false);
+        unsafe {
+            let ptr = fu740_pac::GPIO::ptr();
+            (*ptr)
+                .output_en
+                // inval | (1 << u32::from(bit))
+                .modify(|r, w| w.bits( r.bits() & ! (1<<u32::from(self.cs_gpionum)) ));
+            (*ptr)
+                .input_en 
+                // & !
+                .modify(|r, w| w.bits( r.bits() & ! (1<<u32::from(self.cs_gpionum)) ));
+        }
     }
-
+    //todo clock rate
     fn HIGH_SPEED_ENABLE(&self) {
-        self.spi.set_clk_rate(10000000);
+        // 暂时设置为k210中预定的频率
+        self.spi.set_clk_rate(195_000_000,10000000);
     }
-
+    //todo clock rate
     fn lowlevel_init(&self) {
-        gpiohs::set_direction(self.cs_gpionum, gpio::direction::OUTPUT);
-        self.spi.set_clk_rate(200000);
+        // gpiohs::set_direction(self.cs_gpionum, gpio::direction::OUTPUT);
+        // 暂时设置为k210中预定的频率
+        self.spi.set_clk_rate(195_000_000,200000);
     }
 
     fn write_data(&self, data: &[u8]) {
         self.spi.configure(
-            work_mode::MODE0,
-            frame_format::STANDARD,
-            8, /* data bits */
-            0, /* endian */
-            0, /*instruction length*/
-            0, /*address length*/
-            0, /*wait cycles*/
-            aitm::STANDARD,
-            tmod::TRANS,
+            195_000_000,
+            200000,
+            0, /* protocal */
+            false, /* endian */
+            1, /*csdef  cs_active_hight  */
+            self.spi_cs, /*csid*/
         );
         self.spi.send_data(self.spi_cs, data);
     }
@@ -230,15 +255,12 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
 
     fn read_data(&self, data: &mut [u8]) {
         self.spi.configure(
-            work_mode::MODE0,
-            frame_format::STANDARD,
-            8, /* data bits */
-            0, /* endian */
-            0, /*instruction length*/
-            0, /*address length*/
-            0, /*wait cycles*/
-            aitm::STANDARD,
-            tmod::RECV,
+            195_000_000,
+            200000,
+            0, /* protocal */
+            false, /* endian */
+            1, /*csdef  cs_active_hight  */
+            self.spi_cs, /*csid*/
         );
         self.spi.recv_data(self.spi_cs, data);
     }
@@ -701,20 +723,22 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     }
 }
 
+// todo 片选序号随意？！  和GPIO序号随意？！
 /** GPIOHS GPIO number to use for controlling the SD card CS pin */
 const SD_CS_GPIONUM: u8 = 7;
 /** CS value passed to SPI controller, this is a dummy value as SPI0_CS3 is not mapping to anything
  * in the FPIOA */
 const SD_CS: u32 = 3;
 
+// todo 如何实现如下功能 
 /** Connect pins to internal functions */
-fn io_init() {
-    fpioa::set_function(io::SPI0_SCLK, fpioa::function::SPI0_SCLK);
-    fpioa::set_function(io::SPI0_MOSI, fpioa::function::SPI0_D0);
-    fpioa::set_function(io::SPI0_MISO, fpioa::function::SPI0_D1);
-    fpioa::set_function(io::SPI0_CS0, fpioa::function::gpiohs(SD_CS_GPIONUM));
-    fpioa::set_io_pull(io::SPI0_CS0, fpioa::pull::DOWN); // GPIO output=pull down
-}
+// fn io_init() {
+//     fpioa::set_function(io::SPI0_SCLK, fpioa::function::SPI0_SCLK);
+//     fpioa::set_function(io::SPI0_MOSI, fpioa::function::SPI0_D0);
+//     fpioa::set_function(io::SPI0_MISO, fpioa::function::SPI0_D1);
+//     fpioa::set_function(io::SPI0_CS0, fpioa::function::gpiohs(SD_CS_GPIONUM));
+//     fpioa::set_io_pull(io::SPI0_CS0, fpioa::pull::DOWN); // GPIO output=pull down
+// }
 
 lazy_static! {
     static ref PERIPHERALS: Arc<Mutex<Peripherals>> =
@@ -725,14 +749,21 @@ fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
     // wait previous output
     usleep(100000);
     let peripherals = unsafe { Peripherals::steal() };
-    sysctl::pll_set_freq(sysctl::pll::PLL0, 800_000_000).unwrap();
-    sysctl::pll_set_freq(sysctl::pll::PLL1, 300_000_000).unwrap();
-    sysctl::pll_set_freq(sysctl::pll::PLL2, 45_158_400).unwrap();
-    let clocks = k210_hal::clock::Clocks::new();
-    peripherals.UARTHS.configure(115_200.bps(), &clocks);
-    io_init();
+    // sysctl::pll_set_freq(sysctl::pll::PLL0, 800_000_000).unwrap();
+    // sysctl::pll_set_freq(sysctl::pll::PLL1, 300_000_000).unwrap();
+    // sysctl::pll_set_freq(sysctl::pll::PLL2, 45_158_400).unwrap();
+
+    let clocks = peripherals.PRCI.setup().set_pclk(300_000_000);   //生成冻结的时钟
+    // 
+
+    let clocks = fu740_hal::clock::Clocks::new();
+    // 是否需要初始化UARTHS ? 
+    // peripherals.UARTHS.configure(115_200.bps(), &clocks);
+    // 无需初始化gpiohs -
+    // io_init();
 
     let spi = peripherals.SPI0.constrain();
+    // SD_CS, SD_CS_GPIONUM 此二值并未改变 = k210
     let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM);
     let info = sd.init().unwrap();
     let num_sectors = info.CardCapacity / 512;
