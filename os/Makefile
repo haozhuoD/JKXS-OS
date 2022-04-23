@@ -35,10 +35,10 @@ K210-BURNER	= ../tools/kflash.py
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
-build: env $(KERNEL_BIN) asm
+build: env $(KERNEL_BIN)
 
 asm:
-# @$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
+	@$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
