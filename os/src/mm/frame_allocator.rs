@@ -95,12 +95,12 @@ pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    gdb_println!(
-        MAPPING_ENABLE,
-        "[frame_allocator] manage pa[0x{:X} - 0x{:X}]",
-        PhysAddr::from(ekernel as usize).ceil().0,
-        PhysAddr::from(MEMORY_END).floor().0
-    );
+    // gdb_println!(
+    //     MAPPING_ENABLE,
+    //     "[frame_allocator] manage pa[0x{:X} - 0x{:X}]",
+    //     PhysAddr::from(ekernel as usize).ceil().0,
+    //     PhysAddr::from(MEMORY_END).floor().0
+    // );
     println!("wooooooooooooo!");
     FRAME_ALLOCATOR.lock().init(
         PhysAddr::from(ekernel as usize).ceil(),
