@@ -56,7 +56,7 @@ fs-img:
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build $(BUILD_MODE) --features "board_$(BOARD)"
+	@cargo build --offline $(BUILD_MODE) --features "board_$(BOARD)"
 	@rm src/linker.ld
 
 clean:
