@@ -56,6 +56,7 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 pub fn rust_main() -> ! {
     save_hartid();
     let hartid = get_hartid();
+    println!("[kernel] Riscv hartid {} init ", hartid);
     if hartid != 0 {
         while !AP_CAN_INIT.load(Ordering::Relaxed) {}
         others_main(hartid);
