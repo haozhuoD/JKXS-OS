@@ -3,10 +3,8 @@ TARGET := riscv64gc-unknown-none-elf
 MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
-DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 FS_IMG := ../fat32-fuse/fs.img
 SDCARD := /dev/sdb
-APPS := ../user/src/bin/*
 CPUS ?= 2
 
 ifeq ($(MODE), release)
@@ -16,14 +14,10 @@ else
 endif
 
 # BOARD
-BOOTMODE ?= 020
 BOARD ?= qemu
 SBI ?= rustsbi
-ifeq ($(BOOTMODE), 020)
-	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
-else
-	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD)-022.bin
-endif
+BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+
 K210_BOOTLOADER_SIZE := 131072
 
 # KERNEL ENTRY
@@ -41,23 +35,10 @@ K210-BURNER	= ../tools/kflash.py
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
-# Disassembly
-DISASM ?= -x
+build: $(KERNEL_BIN) asm
 
-build: env switch-check $(KERNEL_BIN) fs-img asm
-build-light: env switch-check $(KERNEL_BIN) 
-	
-# 反汇编并把文件保存到target/riscv64gc-unknown-none-elf/release/os.S
 asm:
-	@$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
-#	@$(OBJDUMP) -S $(KERNEL_ELF) > $(KERNEL_ELF).S
-
-switch-check:
-ifeq ($(BOARD), qemu)
-	(which last-qemu) || (rm -f last-k210 && touch last-qemu && make clean)
-else ifeq ($(BOARD), k210)
-	(which last-k210) || (rm -f last-qemu && touch last-k210 && make clean)
-endif
+# @$(OBJDUMP) -all $(KERNEL_ELF) > kernel.asm
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
@@ -65,19 +46,12 @@ env:
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
 
-sdcard: fs-img
-	@echo "Are you sure write to $(SDCARD) ? [y/N] " && read ans && [ $${ans:-N} = y ]
-	@sudo dd if=/dev/zero of=$(SDCARD) bs=1048576 count=32
-	@sudo dd if=$(FS_IMG) of=$(SDCARD)
-
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-fs-img: $(APPS)
+fs-img:
 	@cd ../user && make elf && cd ../os
 	@./makefs.sh
-
-$(APPS):
 
 kernel:
 	@echo Platform: $(BOARD)
@@ -88,18 +62,7 @@ kernel:
 clean:
 	@cargo clean
 
-disasm: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
-	
-
-disasm-vim: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
-	@vim $(DISASM_TMP)
-	@rm $(DISASM_TMP)
-
-run: run-inner
-
-run-inner: build
+run: build
 ifeq ($(BOARD),qemu)
 	@qemu-system-riscv64 \
 		-machine virt \
@@ -109,7 +72,6 @@ ifeq ($(BOARD),qemu)
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS)
-# -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
@@ -120,18 +82,6 @@ else
 	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 endif
 
-debug: build
-	@tmux new-session -d \
-		"qemu-system-riscv64 -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -drive file=$(FS_IMG),if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -s -S" && \
-		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
-		tmux -2 attach-session -d
-
-debug-light: 
-	@tmux new-session -d \
-		"qemu-system-riscv64 -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -drive file=$(FS_IMG),if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -s -S" && \
-		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
-		tmux -2 attach-session -d
-
 gdb:
 	@qemu-system-riscv64 \
 		-machine virt -nographic \
@@ -141,7 +91,6 @@ gdb:
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS) \
 		-s -S
-# -smp threads=2
 
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
@@ -158,7 +107,6 @@ ifeq ($(BOARD),qemu)
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS)
-# -smp threads=2
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
@@ -169,5 +117,11 @@ else
 	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 endif
 
+HANDIN_BIN := ../k210.bin
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner switch-check fs-img
+handin: build
+	@cp $(BOOTLOADER) $(BOOTLOADER).copy
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
+
+.PHONY: build env kernel clean run switch-check fs-img handin
