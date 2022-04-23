@@ -117,7 +117,7 @@ else
 	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 endif
 
-HANDIN_BIN := ../k210.bin
+HANDIN_BIN := ../os.bin
 
 handin: build
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
