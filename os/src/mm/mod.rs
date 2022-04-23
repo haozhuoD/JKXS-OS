@@ -20,9 +20,13 @@ pub use page_table::{
 use riscv::register::satp;
 
 pub fn init() {
+    println!("mm init 1");
     heap_allocator::init_heap();
+    println!("mm init 2");
     frame_allocator::init_frame_allocator();
+    println!("mm init 3");
     KERNEL_SPACE.lock().activate();
+    println!("mm init 4");
 }
 
 pub fn init_other() {
