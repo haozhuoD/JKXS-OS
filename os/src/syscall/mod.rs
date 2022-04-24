@@ -60,18 +60,7 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
-// Not standard POSIX sys_call
-const SYSCALL_THREAD_CREATE: usize = 1000;
-const SYSCALL_WAITTID: usize = 1002;
-// const SYSCALL_MUTEX_CREATE: usize = 1010;
-// const SYSCALL_MUTEX_LOCK: usize = 1011;
-// const SYSCALL_MUTEX_UNLOCK: usize = 1012;
-// const SYSCALL_SEMAPHORE_CREATE: usize = 1020;
-// const SYSCALL_SEMAPHORE_UP: usize = 1021;
-// const SYSCALL_SEMAPHORE_DOWN: usize = 1022;
-// const SYSCALL_CONDVAR_CREATE: usize = 1033;
-// const SYSCALL_CONDVAR_SIGNAL: usize = 1031;
-// const SYSCALL_CONDVAR_WAIT: usize = 1032;
+const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod fs;
 mod process;
@@ -133,20 +122,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         ),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32, args[2] as isize),
-        SYSCALL_THREAD_CREATE => sys_thread_create(args[0], args[1]),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETTID => sys_gettid(),
-        SYSCALL_WAITTID => sys_waittid(args[0]) as isize,
-        // SYSCALL_MUTEX_CREATE => sys_mutex_create(args[0] == 1),
-        // SYSCALL_MUTEX_LOCK => sys_mutex_lock(args[0]),
-        // SYSCALL_MUTEX_UNLOCK => sys_mutex_unlock(args[0]),
-        // SYSCALL_SEMAPHORE_CREATE => sys_semaphore_create(args[0]),
-        // SYSCALL_SEMAPHORE_UP => sys_semaphore_up(args[0]),
-        // SYSCALL_SEMAPHORE_DOWN => sys_semaphore_down(args[0]),
-        // SYSCALL_CONDVAR_CREATE => sys_condvar_create(args[0]),
-        // SYSCALL_CONDVAR_SIGNAL => sys_condvar_signal(args[0]),
-        // SYSCALL_CONDVAR_WAIT => sys_condvar_wait(args[0], args[1]),
+        SYSCALL_SHUTDOWN => sys_shutdown(),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

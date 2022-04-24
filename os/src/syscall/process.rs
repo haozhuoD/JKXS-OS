@@ -4,9 +4,11 @@ use core::slice::from_raw_parts;
 
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
+use crate::loader::get_usershell_binary;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
 };
+use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
@@ -16,6 +18,10 @@ use crate::{gdb_println, monitor::*};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+
+pub fn sys_shutdown() -> ! {
+    shutdown();
+}
 
 pub fn sys_exit(exit_code: i32) -> ! {
     gdb_println!(SYSCALL_ENABLE, "sys_exit(exit_code: {} ) = ?", exit_code);
@@ -93,6 +99,16 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     }
 
     let cwd = current_process().inner_exclusive_access().cwd.clone();
+
+    if cwd == "/" && path == "user_shell" {
+        let process = current_process();
+        process.exec(get_usershell_binary(), args_vec);
+        unsafe {
+            asm!("sfence.vma");
+            asm!("fence.i");
+        }
+        return 0;
+    }
 
     if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();

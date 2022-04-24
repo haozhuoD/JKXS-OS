@@ -9,7 +9,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::{fs::{open_file, OpenFlags}, loader::get_initproc_binary};
 use alloc::sync::Arc;
 use lazy_static::*;
 use manager::fetch_task;
@@ -117,9 +117,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
 
 lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {
-        let vfile = open_file("/", "initproc", OpenFlags::RDONLY).unwrap();
-        let v = vfile.read_all();
-        ProcessControlBlock::new(v.as_slice()) // add_task here
+        ProcessControlBlock::new(get_initproc_binary()) // add_task here
     };
 }
 

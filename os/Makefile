@@ -49,11 +49,13 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-fs-img:
-	@cd ../user && make elf && cd ../os
+user-apps:
+	@make -C ../user elf
+
+fs-img: user-apps
 	@./makefs.sh
 
-kernel:
+kernel: user-apps
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo build --offline $(BUILD_MODE) --features "board_$(BOARD)"
@@ -124,4 +126,4 @@ handin: build
 	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
 
-.PHONY: build env kernel clean run switch-check fs-img handin
+.PHONY: build env kernel clean run user-apps fs-img handin

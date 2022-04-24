@@ -32,12 +32,14 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
+mod loader;
 
 use crate::multicore::{get_hartid, save_hartid};
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("userbin.S"));
 
 fn clear_bss() {
     extern "C" {
