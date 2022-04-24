@@ -15,7 +15,7 @@ pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;
 pub const USER_STACK_BASE: usize = 0xf000_0000;
 
 /// mmap基址
-pub const MMAP_BASE: usize = 0x8000_0000;
+pub const MMAP_BASE: usize = 0x6000_0000;
 
 pub use crate::board::{CLOCK_FREQ, MMIO};
 
