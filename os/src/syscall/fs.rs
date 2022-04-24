@@ -211,6 +211,7 @@ fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
             S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
         }
     };
+    kstat.st_ino = f.inode_id() as u64;
     kstat.st_size = f.file_size() as i64;
     userbuf.write(kstat.as_bytes());
     0

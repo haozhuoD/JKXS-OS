@@ -7,7 +7,7 @@ use fat32_fs::{ATTRIBUTE_DIRECTORY, ATTRIBUTE_ARCHIVE};
 #[repr(C)]
 pub struct Kstat {
     st_dev: u64,   /* ID of device containing file */
-    st_ino: u64,   /* VFile number */
+    pub st_ino: u64,   /* VFile number */
     pub st_mode: u32,  /* File type and mode */
     st_nlink: u32, /* Number of hard links */
     st_uid: u32,
@@ -29,7 +29,7 @@ impl Kstat {
             st_dev: 0,   /* ID of device containing file */
             st_ino: 0,   /* VFile number */
             st_mode: 0,  /* File type and mode */
-            st_nlink: 0, /* Number of hard links */
+            st_nlink: 1, /* Number of hard links */
             st_uid: 0,
             st_gid: 0,
             st_blksize: 0,

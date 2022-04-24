@@ -72,6 +72,11 @@ impl OSFile {
         inner.vfile.is_dir()
     }
 
+    pub fn inode_id(&self) -> u32 {
+        let inner = self.inner.lock();
+        inner.vfile.first_cluster()
+    }
+
     pub fn offset(&self) -> usize {
         self.inner.lock().offset
     }

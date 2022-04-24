@@ -168,10 +168,10 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     assert_eq!(Arc::strong_count(&child), 1);
                     let found_pid = child.getpid();
                     // ++++ temporarily access child PCB exclusively
-                    // let exit_code = child.inner_exclusive_access().exit_code;
+                    let exit_code = child.inner_exclusive_access().exit_code;
                     // ++++ release child PCB
                     if wstatus as usize != 0 {
-                        *translated_refmut(inner.memory_set.token(), wstatus) = 3 << 8;
+                        *translated_refmut(inner.memory_set.token(), wstatus) = (exit_code & 0xff) << 8;
                     }
                     gdb_println!(
                         SYSCALL_ENABLE,
