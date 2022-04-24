@@ -76,6 +76,10 @@ pub fn trap_handler() -> ! {
                     stval,
                     current_trap_cx().sepc,
                 );
+                let cx = current_trap_cx();
+                for (i, v) in cx.x.iter().enumerate() {
+                    println!("[kernel] x[{}] = {:#x?}", i, v);
+                }
                 current_add_signal(SignalFlags::SIGSEGV);
             }
             unsafe {
