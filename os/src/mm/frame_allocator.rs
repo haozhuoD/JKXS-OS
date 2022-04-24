@@ -49,10 +49,9 @@ pub struct StackFrameAllocator {
 
 impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
-        println!("stackframe init!");
         self.current = l.0;
         self.end = r.0;
-        println!("last {} Physical Frames.", self.end - self.current);
+        println!("Remain {} free physical frames", self.end - self.current);
     }
 }
 impl FrameAllocator for StackFrameAllocator {
@@ -101,7 +100,6 @@ pub fn init_frame_allocator() {
     //     PhysAddr::from(ekernel as usize).ceil().0,
     //     PhysAddr::from(MEMORY_END).floor().0
     // );
-    println!("wooooooooooooo!");
     FRAME_ALLOCATOR.lock().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
