@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use alloc::collections::BTreeMap;
 
 use crate::{
@@ -55,6 +57,11 @@ impl MmapArea {
 
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
         page_table.map(vpn, ppn, pte_flags);
+
+        unsafe {
+            asm!("sfence.vma");
+            asm!("sfence.i");
+        }
 
         let token = page_table.token();
 
