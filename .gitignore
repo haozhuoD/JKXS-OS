@@ -20,4 +20,4 @@ fat32-fuse/target/*
 simple_fat32/Cargo.lock
 simple_fat32/target/*
 tools/
-k210.bin
+os.bin

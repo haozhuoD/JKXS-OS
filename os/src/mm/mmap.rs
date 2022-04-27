@@ -60,7 +60,7 @@ impl MmapArea {
 
         unsafe {
             asm!("sfence.vma");
-            asm!("sfence.i");
+            asm!("fence.i");
         }
 
         let token = page_table.token();
