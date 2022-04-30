@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use alloc::collections::BTreeMap;
 
 use crate::{
@@ -57,6 +59,10 @@ impl MmapArea {
         page_table.map(vpn, ppn, pte_flags);
 
         let token = page_table.token();
+
+        if self.fd as isize == -1 {
+            return 0;
+        }
 
         if let Some(file) = &fd_table[self.fd] {
             match file {

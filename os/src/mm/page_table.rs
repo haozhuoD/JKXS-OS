@@ -215,6 +215,9 @@ impl UserBuffer {
     /// 将buff中的数据写入UserBuf中
     pub fn write(&mut self, buf: &[u8]) -> usize {
         let len = self.len().min(buf.len());
+        if len == 0 {
+            return 0;
+        }
         let mut current = 0;
         for sub_buf in self.buffers.iter_mut() {
             let sblen = (*sub_buf).len();

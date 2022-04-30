@@ -8,6 +8,7 @@ use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
+use crate::multicore::get_hartid;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
@@ -36,6 +37,7 @@ pub struct ProcessControlBlockInner {
     pub signals: SignalFlags,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
+    pub cwd: String,
     // pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     // pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     // pub condvar_list: Vec<Option<Arc<Condvar>>>,
@@ -107,6 +109,7 @@ impl ProcessControlBlock {
                 signals: SignalFlags::empty(),
                 tasks: Vec::new(),
                 task_res_allocator: RecycleAllocator::new(),
+                cwd: String::from("/"),
                 // mutex_list: Vec::new(),
                 // semaphore_list: Vec::new(),
                 // condvar_list: Vec::new(),
@@ -133,6 +136,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             kstack_top,
             trap_handler as usize,
+            get_hartid(),
         );
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
@@ -148,7 +152,8 @@ impl ProcessControlBlock {
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) = MemorySet::from_elf(elf_data);
+        let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
+            MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
@@ -174,7 +179,9 @@ impl ProcessControlBlock {
         env.push(String::from("USER=root"));
         env.push(String::from("MOTD_SHOWN=pam"));
         env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from("INVOCATION_ID=e9500a871cf044d9886a157f53826684"));
+        env.push(String::from(
+            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        ));
         env.push(String::from("TERM=vt220"));
         env.push(String::from("SHLVL=2"));
         env.push(String::from("JOURNAL_STREAM=8:9265"));
@@ -218,7 +225,7 @@ impl ProcessControlBlock {
         }
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
-        
+
         ////////////// platform String ///////////////////
         let platform = "RISC-V64";
         user_sp -= platform.len() + 1;
@@ -233,43 +240,66 @@ impl ProcessControlBlock {
         ////////////// rand bytes ///////////////////
         user_sp -= 16;
         p = user_sp;
-        auxv.push(AuxHeader{aux_type: AT_RANDOM, value: user_sp});
+        auxv.push(AuxHeader {
+            aux_type: AT_RANDOM,
+            value: user_sp,
+        });
         for i in 0..0xf {
             *translated_refmut(new_token, p as *mut u8) = i as u8;
             p += 1;
         }
-        
+
         ////////////// padding //////////////////////
         user_sp -= user_sp % 16;
-        
+
         ////////////// auxv[] //////////////////////
-        auxv.push(AuxHeader{aux_type: AT_EXECFN, value: argv[0]});// file name
-        auxv.push(AuxHeader{aux_type: AT_NULL, value:0});// end
+        auxv.push(AuxHeader {
+            aux_type: AT_EXECFN,
+            value: argv[0],
+        }); // file name
+        auxv.push(AuxHeader {
+            aux_type: AT_NULL,
+            value: 0,
+        }); // end
         user_sp -= auxv.len() * core::mem::size_of::<AuxHeader>();
         let auxv_base = user_sp;
         // println!("[auxv]: base 0x{:X}", auxv_base);
         for i in 0..auxv.len() {
             // println!("[auxv]: {:?}", auxv[i]);
             let addr = user_sp + core::mem::size_of::<AuxHeader>() * i;
-            *translated_refmut(new_token, addr as *mut usize) = auxv[i].aux_type ;
-            *translated_refmut(new_token, (addr + core::mem::size_of::<usize>()) as *mut usize) = auxv[i].value ;
+            *translated_refmut(new_token, addr as *mut usize) = auxv[i].aux_type;
+            *translated_refmut(
+                new_token,
+                (addr + core::mem::size_of::<usize>()) as *mut usize,
+            ) = auxv[i].value;
         }
-
 
         ////////////// *envp [] //////////////////////
         user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
         let envp_base = user_sp;
-        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize) = 0;
+        *translated_refmut(
+            new_token,
+            (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize,
+        ) = 0;
         for i in 0..env.len() {
-            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = envp[i] ;
+            *translated_refmut(
+                new_token,
+                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
+            ) = envp[i];
         }
-        
+
         ////////////// *argv [] //////////////////////
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
         let argv_base = user_sp;
-        *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * (args.len())) as *mut usize) = 0;
+        *translated_refmut(
+            new_token,
+            (user_sp + core::mem::size_of::<usize>() * (args.len())) as *mut usize,
+        ) = 0;
         for i in 0..args.len() {
-            *translated_refmut(new_token, (user_sp + core::mem::size_of::<usize>() * i) as *mut usize) = argv[i] ;
+            *translated_refmut(
+                new_token,
+                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
+            ) = argv[i];
         }
 
         ////////////// argc //////////////////////
@@ -283,6 +313,7 @@ impl ProcessControlBlock {
             KERNEL_SPACE.lock().token(),
             task.kstack.get_top(),
             trap_handler as usize,
+            get_hartid(),
         );
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;
@@ -292,10 +323,11 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn fork(self: &Arc<Self>) -> Arc<Self> {
+    pub fn fork(self: &Arc<Self>, _flags: u32, stack: usize) -> Arc<Self> {
         let mut parent = self.inner_exclusive_access();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
+        // 复制trapframe等内存区域均在这里
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
         // alloc a pid
         let pid = pid_alloc();
@@ -322,6 +354,7 @@ impl ProcessControlBlock {
                 signals: SignalFlags::empty(),
                 tasks: Vec::new(),
                 task_res_allocator: RecycleAllocator::new(),
+                cwd: parent.cwd.clone(),
                 // mutex_list: Vec::new(),
                 // semaphore_list: Vec::new(),
                 // condvar_list: Vec::new(),
@@ -332,6 +365,7 @@ impl ProcessControlBlock {
         });
         // add child
         parent.children.push(Arc::clone(&child));
+
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&child),
@@ -354,6 +388,11 @@ impl ProcessControlBlock {
         let task_inner = task.inner_exclusive_access();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
+        // sys_fork return value ...
+        if stack != 0 {
+            trap_cx.set_sp(stack);
+        }
+        trap_cx.x[10] = 0;
         drop(task_inner);
         insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler
@@ -376,8 +415,8 @@ impl ProcessControlBlock {
         let mut inner = self.inner_exclusive_access();
         assert_eq!(start, inner.mmap_area_top);
 
-        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
-        let end_vpn = VirtPageNum::from(VirtAddr::from(start + len));
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(start + len).floor();
         let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
 
         inner.memory_set.push_mmap_area(MmapArea::new(
@@ -396,7 +435,7 @@ impl ProcessControlBlock {
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
         assert!(is_aligned(start));
         let mut inner = self.inner_exclusive_access();
-        let start_vpn = VirtPageNum::from(VirtAddr::from(start));
+        let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
     }
 

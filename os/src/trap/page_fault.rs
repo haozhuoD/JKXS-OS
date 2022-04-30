@@ -1,11 +1,11 @@
 use crate::{
     config::MMAP_BASE,
-    mm::{VirtAddr, VirtPageNum},
+    mm::VirtAddr,
     task::current_process,
 };
 
 fn lazy_alloc_mmap_page(vaddr: usize) -> isize {
-    let vpn = VirtPageNum::from(VirtAddr::from(vaddr));
+    let vpn = VirtAddr::from(vaddr).floor();
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     let fd_table = inner.fd_table.clone();

@@ -66,58 +66,75 @@ pub fn run_tasks() {
         // 但是若如此做，则内核栈会被其他核“趁虚而入”
         // 将suspend_current_and_run_next中的add_task延后到调度完成后
         if let Some(last_task) = processor.take_current() {
-            // add_task(last_task);
-            if let Some(task) = fetch_task() {
-                let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-                // access coming task TCB exclusively
-                let mut task_inner = task.inner_exclusive_access();
-                let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-                task_inner.task_status = TaskStatus::Running;
-                drop(task_inner);
-                // release coming task TCB manually
-                // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-                processor.current = Some(task);
+        //     // add_task(last_task);
+        //     if let Some(task) = fetch_task() {
+        //         let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+        //         // access coming task TCB exclusively
+        //         let mut task_inner = task.inner_exclusive_access();
+        //         let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
+        //         task_inner.task_status = TaskStatus::Running;
+        //         drop(task_inner);
+        //         // release coming task TCB manually
+        //         // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
+        //         processor.current = Some(task);
                 
-                // release processor manually
-                drop(processor);
-                add_task(last_task);
-                unsafe {
-                    __switch(idle_task_cx_ptr, next_task_cx_ptr);
-                }
-            }else {
-                let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-                let mut task_inner = last_task.inner_exclusive_access();
-                let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-                task_inner.task_status = TaskStatus::Running;
-                drop(task_inner);
-                // release coming task TCB manually
-                // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-                processor.current = Some(last_task);
+        //         // release processor manually
+        //         drop(processor);
+        //         add_task(last_task);
+        //         unsafe {
+        //             __switch(idle_task_cx_ptr, next_task_cx_ptr);
+        //         }
+        //     }else {
+        //         let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+        //         let mut task_inner = last_task.inner_exclusive_access();
+        //         let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
+        //         task_inner.task_status = TaskStatus::Running;
+        //         drop(task_inner);
+        //         // release coming task TCB manually
+        //         // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
+        //         processor.current = Some(last_task);
                 
-                // release processor manually
-                drop(processor);
-                unsafe {
-                    __switch(idle_task_cx_ptr, next_task_cx_ptr);
-                }
-            }
-            //first in
-        }else {
-            if let Some(task) = fetch_task() {
-                let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-                // access coming task TCB exclusively
-                let mut task_inner = task.inner_exclusive_access();
-                let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-                task_inner.task_status = TaskStatus::Running;
-                drop(task_inner);
-                // release coming task TCB manually
-                // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-                processor.current = Some(task);
+        //         // release processor manually
+        //         drop(processor);
+        //         unsafe {
+        //             __switch(idle_task_cx_ptr, next_task_cx_ptr);
+        //         }
+        //     }
+        //     //first in
+        // }else {
+        //     if let Some(task) = fetch_task() {
+        //         let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+        //         // access coming task TCB exclusively
+        //         let mut task_inner = task.inner_exclusive_access();
+        //         let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
+        //         task_inner.task_status = TaskStatus::Running;
+        //         drop(task_inner);
+        //         // release coming task TCB manually
+        //         // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
+        //         processor.current = Some(task);
                 
-                // release processor manually
-                drop(processor);
-                unsafe {
-                    __switch(idle_task_cx_ptr, next_task_cx_ptr);
-                }
+        //         // release processor manually
+        //         drop(processor);
+        //         unsafe {
+        //             __switch(idle_task_cx_ptr, next_task_cx_ptr);
+        //         }
+            add_task(last_task);
+        }
+        if let Some(task) = fetch_task() {
+            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+            // access coming task TCB exclusively
+            let mut task_inner = task.inner_exclusive_access();
+            let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
+            task_inner.task_status = TaskStatus::Running;
+            drop(task_inner);
+            // release coming task TCB manually
+            // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
+            processor.current = Some(task);
+
+            // release processor manually
+            drop(processor);
+            unsafe {
+                __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         }
 

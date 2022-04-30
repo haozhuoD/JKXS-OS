@@ -1,3 +1,4 @@
+use crate::sbi::shutdown;
 use crate::task::current_kstack_top;
 use core::arch::asm;
 use core::panic::PanicInfo;
@@ -17,8 +18,7 @@ fn panic(info: &PanicInfo) -> ! {
     unsafe {
         backtrace();
     }
-    loop {}
-    // shutdown()
+    shutdown()
 }
 
 unsafe fn backtrace() {

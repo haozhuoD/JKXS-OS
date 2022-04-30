@@ -20,7 +20,8 @@ impl File for Stdin {
         let mut c: usize;
         loop {
             c = console_getchar();
-            if c == 0 {
+            // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
+            if c == 0 || c > 255 {
                 suspend_current_and_run_next();
                 continue;
             } else {

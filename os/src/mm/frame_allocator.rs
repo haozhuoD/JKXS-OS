@@ -51,7 +51,7 @@ impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
-        println!("last {} Physical Frames.", self.end - self.current);
+        println!("Remain {} free physical frames", self.end - self.current);
     }
 }
 impl FrameAllocator for StackFrameAllocator {
@@ -86,20 +86,20 @@ impl FrameAllocator for StackFrameAllocator {
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: Arc<Mutex<FrameAllocatorImpl>> =
-        Arc::new(Mutex::new(FrameAllocatorImpl::new()));
+    pub static ref FRAME_ALLOCATOR: Mutex<FrameAllocatorImpl> =
+        Mutex::new(FrameAllocatorImpl::new());
 }
 
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    gdb_println!(
-        MAPPING_ENABLE,
-        "[frame_allocator] manage pa[0x{:X} - 0x{:X}]",
-        PhysAddr::from(ekernel as usize).ceil().0,
-        PhysAddr::from(MEMORY_END).floor().0
-    );
+    // gdb_println!(
+    //     MAPPING_ENABLE,
+    //     "[frame_allocator] manage pa[0x{:X} - 0x{:X}]",
+    //     PhysAddr::from(ekernel as usize).ceil().0,
+    //     PhysAddr::from(MEMORY_END).floor().0
+    // );
     FRAME_ALLOCATOR.lock().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),

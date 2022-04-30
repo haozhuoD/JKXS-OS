@@ -2,7 +2,6 @@
 .vscode/*
 os/target/*
 os/.idea/*
-os/src/link_app.S
 os/src/linker.ld
 os/last-*
 os/Cargo.lock
@@ -11,9 +10,14 @@ user/build
 user/target/*
 user/.idea/*
 user/Cargo.lock
-easy-fs/Cargo.lock
-easy-fs/target/*
-easy-fs-fuse/Cargo.lock
-easy-fs-fuse/target/*
+fat32_fs/target/*
+fat32_fs/Cargo.lock
+user/Cargo.lock
+fat32-fuse/fs
+fat32-fuse/fs.img
+fat32-fuse/fat32.img
+fat32-fuse/target/*
+simple_fat32/Cargo.lock
+simple_fat32/target/*
 tools/
-pushall.sh
+os.bin

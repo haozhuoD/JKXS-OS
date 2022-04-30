@@ -1,24 +1,41 @@
+use core::arch::asm;
 use core::mem::size_of;
-use core::ptr::slice_from_raw_parts;
 use core::slice::from_raw_parts;
 
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
+use crate::loader::get_usershell_binary;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
 };
+use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::{get_time_us, USEC_PER_SEC};
+use crate::timer::{get_time_us, USEC_PER_SEC, get_time_ns, NSEC_PER_SEC};
 use crate::{gdb_println, monitor::*};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+pub fn sys_shutdown() -> ! {
+    shutdown();
+}
+
 pub fn sys_exit(exit_code: i32) -> ! {
-    exit_current_and_run_next(exit_code);
+    gdb_println!(SYSCALL_ENABLE, "sys_exit(exit_code: {} ) = ?", exit_code);
+    exit_current_and_run_next(exit_code, false);
+    panic!("Unreachable in sys_exit!");
+}
+
+pub fn sys_exit_group(exit_code: i32) -> ! {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_exit_group(exit_code: {} ) = ?",
+        exit_code
+    );
+    exit_current_and_run_next(exit_code, true);
     panic!("Unreachable in sys_exit!");
 }
 
@@ -32,24 +49,37 @@ pub fn sys_get_time(ts: *mut u64, _tz: usize) -> isize {
     let curtime = get_time_us();
     *translated_refmut(token, ts) = (curtime / USEC_PER_SEC) as u64;
     *translated_refmut(token, unsafe { ts.add(1) }) = (curtime % USEC_PER_SEC) as u64;
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_get_time(ts: {:#x?}, tz = {:x?} ) = 0",
+        ts,
+        _tz
+    );
     0
 }
 
 pub fn sys_getpid() -> isize {
-    current_task().unwrap().process.upgrade().unwrap().getpid() as isize
+    let ret = current_task().unwrap().process.upgrade().unwrap().getpid() as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_getpid() = {}", ret);
+    ret
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_fork(flags: u32, stack: usize) -> isize {
     let current_process = current_process();
-    let new_process = current_process.fork();
+    let new_process = current_process.fork(flags, stack);
     let new_pid = new_process.getpid();
-    // modify trap context of new_task, because it returns immediately after switching
-    let new_process_inner = new_process.inner_exclusive_access();
-    let task = new_process_inner.tasks[0].as_ref().unwrap();
-    let trap_cx = task.inner_exclusive_access().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.x[10] = 0;
+    // // modify trap context of new_task, because it returns immediately after switching
+    // let new_process_inner = new_process.inner_exclusive_access();
+    // let task = new_process_inner.tasks[0].as_ref().unwrap();
+    // let trap_cx = task.inner_exclusive_access().get_trap_cx();
+    // // we do not have to move to next instruction since we have done it before
+    // // for child process, fork returns 0
+    // trap_cx.x[10] = 0;
+    gdb_println!(SYSCALL_ENABLE, "sys_fork() = {}", new_pid as isize);
+    unsafe {
+        asm!("sfence.vma");
+        asm!("fence.i");
+    }
     new_pid as isize
 }
 
@@ -67,8 +97,21 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             args = args.add(1);
         }
     }
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
+
+    let cwd = current_process().inner_exclusive_access().cwd.clone();
+
+    if cwd == "/" && path == "user_shell" {
+        let process = current_process();
+        process.exec(get_usershell_binary(), args_vec);
+        unsafe {
+            asm!("sfence.vma");
+            asm!("fence.i");
+        }
+        return 0;
+    }
+
+    if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_vfile.read_all();
         let process = current_process();
         let argc = args_vec.len();
         gdb_println!(
@@ -79,6 +122,10 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             argc
         );
         process.exec(all_data.as_slice(), args_vec);
+        unsafe {
+            asm!("sfence.vma");
+            asm!("fence.i");
+        }
         // return argc because cx.x[10] will be covered with it later
         argc as isize
     } else {
@@ -121,11 +168,19 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     assert_eq!(Arc::strong_count(&child), 1);
                     let found_pid = child.getpid();
                     // ++++ temporarily access child PCB exclusively
-                    // let exit_code = child.inner_exclusive_access().exit_code;
+                    let exit_code = child.inner_exclusive_access().exit_code;
                     // ++++ release child PCB
                     if wstatus as usize != 0 {
-                        *translated_refmut(inner.memory_set.token(), wstatus) = 3 << 8;
+                        *translated_refmut(inner.memory_set.token(), wstatus) = (exit_code & 0xff) << 8;
                     }
+                    gdb_println!(
+                        SYSCALL_ENABLE,
+                        "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
+                        pid,
+                        wstatus,
+                        options,
+                        found_pid as isize
+                    );
                     return found_pid as isize;
                 } else {
                     exited = false;
@@ -136,6 +191,14 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
         // not found yet
         assert!(!found || !exited);
         if !found || options == WNOHANG {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
+                pid,
+                wstatus,
+                options,
+                -1
+            );
             return -1;
         }
         suspend_current_and_run_next();
@@ -143,7 +206,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
 }
 
 pub fn sys_kill(pid: usize, signal: u32) -> isize {
-    if let Some(process) = pid2process(pid) {
+    let ret = if let Some(process) = pid2process(pid) {
         if let Some(flag) = SignalFlags::from_bits(signal) {
             process.inner_exclusive_access().signals |= flag;
             0
@@ -152,14 +215,22 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
         }
     } else {
         -1
-    }
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_kill(pid: {}, signal: {:#x?}) = {}",
+        pid,
+        signal,
+        ret
+    );
+    ret
 }
 
 pub fn sys_brk(addr: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     // println!("syscall brk addr = {:x?}, base = {:x?}, top = {:x?}", addr, inner.user_heap_base, inner.user_heap_top);
-    if addr == 0 {
+    let ret = if addr == 0 {
         inner.user_heap_top as isize
     } else if addr >= inner.user_heap_base {
         if addr < inner.user_heap_top {
@@ -170,7 +241,9 @@ pub fn sys_brk(addr: usize) -> isize {
         addr as isize
     } else {
         -1
-    }
+    };
+    gdb_println!(SYSCALL_ENABLE, "sys_brk(addr: {:#x?}) = {:#x?}", addr, ret);
+    ret
 }
 
 pub fn sys_mmap(
@@ -181,14 +254,15 @@ pub fn sys_mmap(
     fd: isize,
     offset: usize,
 ) -> isize {
-    if start != 0 {
-        unimplemented!();
-    }
+    // if start != 0 {
+    //     unimplemented!();
+    // }
+    // 如果start != 0，也当start = 0处理
     let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
     let aligned_len = aligned_up(len);
 
     let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {}", start, aligned_len, prot, flags, fd, offset, ret);
+    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {:#x?}", start, aligned_len, prot, flags, fd, offset, ret);
     ret
 }
 
@@ -213,7 +287,15 @@ pub fn sys_getppid() -> isize {
         .clone()
         .unwrap()
         .upgrade();
-    parent.unwrap().getpid() as isize
+    let ret = parent.unwrap().getpid() as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_getppid() = {}", ret);
+    ret
+}
+
+pub fn sys_getuid() -> isize {
+    // only support root user
+    gdb_println!(SYSCALL_ENABLE, "sys_getuid() = {}", 0);
+    0
 }
 
 pub fn sys_times(time: *mut usize) -> isize {
@@ -223,11 +305,25 @@ pub fn sys_times(time: *mut usize) -> isize {
     *translated_refmut(token, unsafe { time.add(1) }) = sec;
     *translated_refmut(token, unsafe { time.add(2) }) = sec;
     *translated_refmut(token, unsafe { time.add(3) }) = sec;
+    gdb_println!(SYSCALL_ENABLE, "sys_times(time: {:#x?}) = {}", time, 0);
     0
 }
 
-#[repr(C)]
-pub struct uname {
+pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
+    let token = current_user_token();
+    *translated_refmut(token, ptr) = current_process().pid.0;
+    let ret = current_process().pid.0 as isize;
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_set_tid_address(ptr: {:#x?}) = {}",
+        ptr,
+        ret
+    );
+    ret
+}
+
+#[repr(packed)]
+pub struct Uname {
     sysname: [u8; 65],
     nodename: [u8; 65],
     release: [u8; 65],
@@ -236,15 +332,15 @@ pub struct uname {
     domainname: [u8; 65],
 }
 
-impl uname {
+impl Uname {
     pub fn new() -> Self {
         Self {
-            sysname: uname::fill_field("oscomp-2022"),
-            nodename: uname::fill_field("oscomp-2022"),
-            release: uname::fill_field("???"),
-            version: uname::fill_field("1.0"),
-            machine: uname::fill_field("riscv-64"),
-            domainname: uname::fill_field(""),
+            sysname: Uname::fill_field("oscomp-2022"),
+            nodename: Uname::fill_field("oscomp-2022"),
+            release: Uname::fill_field("???"),
+            version: Uname::fill_field("1.0"),
+            machine: Uname::fill_field("riscv-64"),
+            domainname: Uname::fill_field(""),
         }
     }
 
@@ -263,9 +359,28 @@ impl uname {
 
 pub fn sys_uname(buf: *mut u8) -> isize {
     let token = current_user_token();
-    let mut buf_vec = translated_byte_buffer(token, buf, size_of::<uname>());
-    let uname = uname::new();
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<Uname>());
+    let uname = Uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
     userbuf.write(uname.as_bytes());
+    gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
+    0
+}
+
+pub fn sys_clock_get_time(clk_id: usize, tp: *mut u64) -> isize{
+    // struct timespec {
+    //     time_t   tv_sec;        /* seconds */
+    //     long     tv_nsec;       /* nanoseconds */
+    // };
+    let token = current_user_token();
+    let curtime = get_time_ns();
+    *translated_refmut(token, tp) = (curtime / NSEC_PER_SEC) as u64;
+    *translated_refmut(token, unsafe { tp.add(1) }) = (curtime % NSEC_PER_SEC) as u64;
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_clock_get_time(clk_id: {}, tp = {:x?} ) = 0",
+        clk_id,
+        tp
+    );
     0
 }

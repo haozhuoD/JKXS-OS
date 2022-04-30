@@ -2,10 +2,12 @@ mod context;
 mod page_fault;
 
 use crate::config::TRAMPOLINE;
+use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
-    check_signals_of_current, current_add_signal, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, exit_current_and_run_next, suspend_current_and_run_next, SignalFlags,
+    check_signals_of_current, current_add_signal, current_trap_cx,
+    current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
+    suspend_current_and_run_next, SignalFlags,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -74,7 +76,15 @@ pub fn trap_handler() -> ! {
                     stval,
                     current_trap_cx().sepc,
                 );
+                let cx = current_trap_cx();
+                for (i, v) in cx.x.iter().enumerate() {
+                    println!("[kernel] x[{}] = {:#x?}", i, v);
+                }
                 current_add_signal(SignalFlags::SIGSEGV);
+            }
+            unsafe {
+                asm!("sfence.vma");
+                asm!("fence.i");
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
@@ -95,7 +105,7 @@ pub fn trap_handler() -> ! {
     // check signals
     if let Some((errno, msg)) = check_signals_of_current() {
         println!("[kernel] {}", msg);
-        exit_current_and_run_next(errno);
+        exit_current_and_run_next(errno, false);
     }
     trap_return();
 }
@@ -110,6 +120,10 @@ pub fn trap_return() -> ! {
         fn __restore();
     }
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
+
+    // 设置core_id
+    current_trap_cx().core_id = get_hartid();
+
     unsafe {
         asm!(
             "fence.i",
