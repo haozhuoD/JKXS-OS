@@ -121,9 +121,14 @@ endif
 
 HANDIN_BIN := ../os.bin
 
-handin: build
+handin-k210: build
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
 	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
+
+burn-k210:
+	@sudo chmod 777 $(K210-SERIALPORT)
+	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(HANDIN_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 
 .PHONY: build env kernel clean run user-apps fs-img handin

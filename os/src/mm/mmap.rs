@@ -58,11 +58,6 @@ impl MmapArea {
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
         page_table.map(vpn, ppn, pte_flags);
 
-        unsafe {
-            asm!("sfence.vma");
-            asm!("fence.i");
-        }
-
         let token = page_table.token();
 
         if self.fd as isize == -1 {
