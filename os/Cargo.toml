@@ -16,8 +16,8 @@ virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers" }
 # k210-pac = { git = "https://github.com/wyfcyx/k210-pac" }
 # k210-hal = { git = "https://github.com/wyfcyx/k210-hal" }
 # k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
-fu740-pac = { path = "../dependency/fu740-pac" }
-fu740-hal = { path = "../dependency/fu740-hal" }
+fu740-pac = { path = "../external_libs/fu740-pac" }
+fu740-hal = { path = "../external_libs/fu740-hal" }
 # fu740-soc = { path = "../dependency/fu740-soc" }
 fat32_fs = { path = "../fat32_fs" }
 spin = "0.7.1"
