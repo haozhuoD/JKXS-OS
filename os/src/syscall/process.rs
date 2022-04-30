@@ -262,7 +262,6 @@ pub fn sys_mmap(
     let aligned_len = aligned_up(len);
 
     let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-    println!("[debug] sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {:#x?}", start, aligned_len, prot, flags, fd, offset, ret);
     gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {:#x?}", start, aligned_len, prot, flags, fd, offset, ret);
     ret
 }
