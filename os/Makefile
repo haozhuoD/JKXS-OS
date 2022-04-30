@@ -29,18 +29,18 @@ BOARD ?= qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 
-K210_BOOTLOADER_SIZE := 131072
+fu740_BOOTLOADER_SIZE := 1310720
 
-# KERNEL ENTRY
+# KERNEL ENTRY 0x80200000
 ifeq ($(BOARD), qemu)
 	KERNEL_ENTRY_PA := 0x80200000
-else ifeq ($(BOARD), k210)
-	KERNEL_ENTRY_PA := 0x80020000
+else ifeq ($(BOARD), fu740)
+	KERNEL_ENTRY_PA := 0x80200000
 endif
 
-# Run K210
-K210-SERIALPORT	= /dev/ttyUSB0
-K210-BURNER	= ../tools/kflash.py
+# Run fu740
+fu740-SERIALPORT	= /dev/ttyUSB0
+fu740-BURNER	= ../tools/kflash.py
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
@@ -90,13 +90,13 @@ ifeq ($(BOARD),qemu)
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS)
 else
-	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
+	(which $(fu740-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(fu740_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
-	@sudo chmod 777 $(K210-SERIALPORT)
-	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(KERNEL_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
+	@sudo chmod 777 $(fu740-SERIALPORT)
+	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(KERNEL_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
 endif
 
 gdb:
@@ -125,25 +125,25 @@ ifeq ($(BOARD),qemu)
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS)
 else
-	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
+	(which $(fu740-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(fu740_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
-	@sudo chmod 777 $(K210-SERIALPORT)
-	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(KERNEL_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
+	@sudo chmod 777 $(fu740-SERIALPORT)
+	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(KERNEL_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
 endif
 
 HANDIN_BIN := ../os.bin
 
-handin-k210: build
+handin-fu740: build
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(fu740_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
 
-burn-k210:
-	@sudo chmod 777 $(K210-SERIALPORT)
-	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(HANDIN_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
+burn-fu740:
+	@sudo chmod 777 $(fu740-SERIALPORT)
+	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(HANDIN_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
 
 .PHONY: build env kernel clean run user-apps fs-img handin

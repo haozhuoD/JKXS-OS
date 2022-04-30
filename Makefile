@@ -1,2 +1,2 @@
 all:
-	make -C os handin-k210 BOARD=k210
+	make -C os handin-fu740 BOARD=fu740
