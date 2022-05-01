@@ -137,13 +137,11 @@ endif
 HANDIN_BIN := ../os.bin
 
 handin-fu740: build
-	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(fu740_BOOTLOADER_SIZE) seek=1
-	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
+	@cp $(KERNEL_BIN) $(HANDIN_BIN)
 
-burn-fu740:
-	@sudo chmod 777 $(fu740-SERIALPORT)
-	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(HANDIN_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
+# burn-fu740:
+# 	@sudo chmod 777 $(fu740-SERIALPORT)
+# 	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(HANDIN_BIN)
+# 	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
 
 .PHONY: build env kernel clean run user-apps fs-img handin
