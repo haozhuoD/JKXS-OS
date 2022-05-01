@@ -13,21 +13,14 @@ else
 	BUILD_MODE := 
 endif
 
-# BOARD
 
-# BOOTMODE ?= 020
-# BOARD ?= qemu
-# SBI ?= rustsbi  # opensbi rustsbi
-# ifeq ($(SBI), rustsbi)
-# 	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
-# else 
-# 	BOOTLOADER := ../bootloader/fw_jump.bin
-# # else
-# # 	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD)-022.bin
-# endif
 BOARD ?= qemu
 SBI ?= rustsbi
-BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+ifeq ($(SBI), rustsbi)
+	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+else 
+	BOOTLOADER := ../bootloader/fw_jump.bin
+endif
 
 fu740_BOOTLOADER_SIZE := 1310720
 
@@ -81,7 +74,7 @@ clean:
 
 run: build
 ifeq ($(BOARD),qemu)
-	@qemu-system-riscv64 \
+	qemu-system-riscv64 \
 		-machine virt \
 		-nographic \
 		-bios $(BOOTLOADER) \
