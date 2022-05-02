@@ -43,3 +43,7 @@ pub fn shutdown() -> ! {
     sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");
 }
+
+pub fn sbi_send_ipi(mask: usize) {
+    sbi_call(SBI_SEND_IPI, mask, 0, 0);
+}

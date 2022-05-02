@@ -38,6 +38,7 @@ mod loader;
 use crate::multicore::{get_hartid, save_hartid};
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::sbi::sbi_send_ipi;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -60,10 +61,18 @@ pub fn rust_main() -> ! {
     save_hartid();
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
-    if hartid != 0 {
-        while !AP_CAN_INIT.load(Ordering::Relaxed) {}
-        others_main(hartid);
-    }
+    // if hartid != 0 {
+    //     // for i in 0..=3 {
+    //     //     if i!=hartid {
+    //     //         let mask:usize = 1 << i;
+    //     //         sbi_send_ipi(&mask as *const usize as usize); 
+    //     //     }
+    //     // }
+    //     let mask:usize = 1 ;
+    //     sbi_send_ipi(&mask as *const usize as usize); 
+    //     while !AP_CAN_INIT.load(Ordering::Relaxed) {}
+    //     others_main(hartid);
+    // }
     clear_bss();
     mm::init();
     mm::remap_test();
@@ -74,8 +83,11 @@ pub fn rust_main() -> ! {
     fs::list_apps();
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
-
     AP_CAN_INIT.store(true, Ordering::Relaxed);
+    for i in 1..=3 {
+        let mask:usize = 1 << i;
+        sbi_send_ipi(&mask as *const usize as usize); 
+    }
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
