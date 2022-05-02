@@ -3,23 +3,23 @@ pub const CLOCK_FREQ: usize = 403000000 / 62; //???
 pub const MMIO: &[(usize, usize)] = &[
     // we don't need clint in S priv when running
     // we only need claim/complete for target0 after initializing
-    // (0x0000_1000, 0x0000_1FFF), // Rom */
+    (0x0000_1000, 0x0000_1FFF), // Rom */
     (0x0000_4000, 0x0000_4FFF), // test status */
     (0x0000_6000, 0x0000_6FFF), // Chip Select */
-    // (0x0001_0000, 0x0001_7FFF), // Rom */
+    (0x0001_0000, 0x0001_7FFF), // Rom */
     (0x0100_0000, 0x0100_1FFF), // S7 DTIM (8 KiB) */
-    // (0x0170_0000, 0x0170_0FFF), // S7 Hart 0 Bus Error Unit */
-    // (0x0170_1000, 0x0170_1FFF), // U74 Hart 1 Bus Error Unit */
-    // (0x0170_2000, 0x0170_2FFF), // U74 Hart 2 Bus Error Unit */
-    // (0x0170_3000, 0x0170_3FFF), // U74 Hart 3 Bus Error Unit */
-    // (0x0170_4000, 0x0170_4FFF), // U74 Hart 4 Bus Error Unit */
+    (0x0170_0000, 0x0170_0FFF), // S7 Hart 0 Bus Error Unit */
+    (0x0170_1000, 0x0170_1FFF), // U74 Hart 1 Bus Error Unit */
+    (0x0170_2000, 0x0170_2FFF), // U74 Hart 2 Bus Error Unit */
+    (0x0170_3000, 0x0170_3FFF), // U74 Hart 3 Bus Error Unit */
+    (0x0170_4000, 0x0170_4FFF), // U74 Hart 4 Bus Error Unit */
     (0x0200_0000, 0x0200_FFFF), // CLINT */
     (0x0201_0000, 0x0201_0FFF), // L2 Cache Controller */
     (0x0202_0000, 0x0202_0FFF), // MSI */
     (0x0300_0000, 0x030F_FFFF), // DMA */
     (0x0800_0000, 0x081F_FFFF), // L2 Cache Controller */
-    // (0x0900_0000, 0x091F_FFFF), // Rom */
-    // (0x0A00_0000, 0x0bFF_FFFF), // Rom */
+    (0x0900_0000, 0x091F_FFFF), // Rom */
+    (0x0A00_0000, 0x0bFF_FFFF), // Rom */
     (0x0C00_0000, 0x0FFF_FFFF), // PLIC */
     (0x1000_0000, 0x1000_0FFF), // PRCI */
     (0x1001_0000, 0x1001_0FFF), // UART0 */
