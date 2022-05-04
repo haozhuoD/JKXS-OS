@@ -38,7 +38,7 @@ mod loader;
 use crate::multicore::{get_hartid, save_hartid};
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::sbi::sbi_send_ipi;
+use crate::sbi::sbi_hart_start;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -55,12 +55,23 @@ fn clear_bss() {
 }
 
 static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+// static mut BOOTHART:isize = -1;
 
 #[no_mangle]
 pub fn rust_main() -> ! {
     save_hartid();
     let hartid = get_hartid();
+    // unsafe {
+    //     if BOOTHART==-1 {
+    //         BOOTHART = hartid as isize;
+    //     }
+    // }
     println!("[kernel] Riscv hartid {} init ", hartid);
+    // println!("[kernel] Riscv hartid {} init ", hartid);
+    if AP_CAN_INIT.load(Ordering::Relaxed) {
+    // if hartid != unsafe{BOOTHART} as usize  {
+        others_main(hartid);
+    }
     // if hartid != 0 {
     //     // for i in 0..=3 {
     //     //     if i!=hartid {
@@ -84,9 +95,17 @@ pub fn rust_main() -> ! {
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
-    for i in 1..=3 {
-        let mask:usize = 1 << i;
-        sbi_send_ipi(&mask as *const usize as usize); 
+    extern "C" {
+        fn skernel();
+    }
+    for i in 0..=3 {
+        // println!("i: {}   hartid: {}" ,i,hartid);
+        if i!=hartid {
+            // println!("sbi_hart_start   hartid: {}" ,i);
+            sbi_hart_start(i, skernel as usize, 0);
+        }
+        // let mask:usize = 1 << i;
+        // sbi_send_ipi(&mask as *const usize as usize); 
     }
     task::run_tasks();
     panic!("Unreachable in rust_main!");

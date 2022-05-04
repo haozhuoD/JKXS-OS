@@ -14,19 +14,19 @@ pub const MAPPING_ENABLE: usize = MEMORY_GDB_START + 1; // (char)0x807ff001
 macro_rules! gdb_print {
     ($place:literal, $fmt: literal $(, $($arg: tt)+)?) => {
         unsafe{
-            let enable:*mut u8 =  $place;
-            if ($place == 1 )||(*enable > 0 && QEMU == 1){
-                print!($fmt $(, $($arg)+)?);
-            }
+            // let enable:*mut u8 =  $place;
+            // if ($place == 1 )||(*enable > 0 && QEMU == 1){
+            //     print!($fmt $(, $($arg)+)?);
+            // }
         }
     };
 
     ($place:expr, $fmt: literal $(, $($arg: tt)+)?) => {
         unsafe{
-            let enable:*mut u8 =  $place as *mut u8;
-            if ($place == 1 )||(*enable > 0 && QEMU == 1){
-                print!($fmt $(, $($arg)+)?);
-            }
+            // let enable:*mut u8 =  $place as *mut u8;
+            // if ($place == 1 )||(*enable > 0 && QEMU == 1){
+            //     print!($fmt $(, $($arg)+)?);
+            // }
         }
     };
 }
@@ -35,19 +35,19 @@ macro_rules! gdb_print {
 macro_rules! gdb_println {
     ($place:literal, $fmt: literal $(, $($arg: tt)+)?) => {
         unsafe{
-            let enable:*mut u8 =  $place;
-            if ($place == 1 )||(*enable > 0 && QEMU == 1){
-                println!($fmt $(, $($arg)+)?);
-            }
+            // let enable:*mut u8 =  $place;
+            // if ($place == 1 )||(*enable > 0 && QEMU == 1){
+            //     println!($fmt $(, $($arg)+)?);
+            // }
         }
     };
 
     ($place:expr, $fmt: literal $(, $($arg: tt)+)?) => {
         unsafe{
-            let enable:*mut u8 =  $place as *mut u8;
-            if ($place == 1 )||(*enable > 0 && QEMU == 1){
-                println!($fmt $(, $($arg)+)?);
-            }
+            // let enable:*mut u8 =  $place as *mut u8;
+            // if ($place == 1 )||(*enable > 0 && QEMU == 1){
+            //     println!($fmt $(, $($arg)+)?);
+            // }
         }
     };
 }
