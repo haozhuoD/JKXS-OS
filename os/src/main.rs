@@ -72,7 +72,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    // fs::list_apps();
+    fs::list_apps();
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);

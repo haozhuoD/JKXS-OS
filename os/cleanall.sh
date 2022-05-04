@@ -1,0 +1,1 @@
+make clean && make -C ../user clean && rm -rf fat32-fuse
