@@ -61,29 +61,10 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 pub fn rust_main() -> ! {
     save_hartid();
     let hartid = get_hartid();
-    // unsafe {
-    //     if BOOTHART==-1 {
-    //         BOOTHART = hartid as isize;
-    //     }
-    // }
     println!("[kernel] Riscv hartid {} init ", hartid);
-    // println!("[kernel] Riscv hartid {} init ", hartid);
     if AP_CAN_INIT.load(Ordering::Relaxed) {
-    // if hartid != unsafe{BOOTHART} as usize  {
         others_main(hartid);
     }
-    // if hartid != 0 {
-    //     // for i in 0..=3 {
-    //     //     if i!=hartid {
-    //     //         let mask:usize = 1 << i;
-    //     //         sbi_send_ipi(&mask as *const usize as usize); 
-    //     //     }
-    //     // }
-    //     let mask:usize = 1 ;
-    //     sbi_send_ipi(&mask as *const usize as usize); 
-    //     while !AP_CAN_INIT.load(Ordering::Relaxed) {}
-    //     others_main(hartid);
-    // }
     clear_bss();
     mm::init();
     mm::remap_test();
@@ -91,7 +72,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    fs::list_apps();
+    // fs::list_apps();
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
