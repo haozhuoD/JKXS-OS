@@ -36,9 +36,9 @@ do
     sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
 done
 
-# for programname in $(ls ../user/busybox_lua_testsuites)
-# do 
-#     sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
-# done
+for programname in $(ls ../user/busybox_lua_testsuites)
+do 
+    sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
+done
 
 sudo umount ${FAT32_DIR}/fs
