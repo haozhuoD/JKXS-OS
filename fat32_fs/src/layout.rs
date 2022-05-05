@@ -39,19 +39,19 @@ type DataBlock = [u8; BLOCK_SZ];
 #[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct FatBS {
-	bootjmp:                [u8; 3],
-	oem_name:               [u8; 8],
+	_bootjmp:                [u8; 3],
+	_oem_name:               [u8; 8],
 	pub bytes_per_sector:       u16,
 	pub sectors_per_cluster:    u8,
 	reserved_sector_count:  u16,
 	pub table_count:            u8,
-	root_entry_count:       u16,
-	total_sectors_16:       u16,
-	media_type:             u8,
-	table_size_16:          u16,
-	sectors_per_track:      u16,
-	head_side_count:        u16,
-	hidden_sector_count:    u32,
+	_root_entry_count:       u16,
+	_total_sectors_16:       u16,
+	_media_type:             u8,
+	_table_size_16:          u16,
+	_sectors_per_track:      u16,
+	_head_side_count:        u16,
+	_hidden_sector_count:    u32,
 	total_sectors_32:       u32,
 }
 
@@ -69,9 +69,9 @@ impl FatBS {
 #[derive(Clone, Copy)]
 pub struct FatExtBS {
 	table_size_32:      u32,
-	extended_flags:     u16,
-	fat_version:        u16,
-	root_cluster:       u32,
+	_extended_flags:     u16,
+	_fat_version:        u16,
+	_root_cluster:       u32,
 	fat_info:           u16,
     // backup_BS_sector:   u16,
 	// reserved_0:         [u8; 12],
@@ -97,11 +97,11 @@ impl FatExtBS {
 #[derive(Clone, Copy, Debug)]
 pub struct FSInfoInner {
 	lead_signature: 	u32,
-	reserved_0: 		[u8; 480],
+	_reserved_0: 		[u8; 480],
 	another_signature: 	u32,
 	free_cluster_count: u32,
 	last_alloc_cluster: u32,
-	reserved_1: 		[u8; 12],
+	_reserved_1: 		[u8; 12],
 	trail_signature: 	u32,
 }
 
@@ -168,8 +168,8 @@ pub struct ShortDirEntry {
 	name: 				[u8; SHORT_NAME_LEN],
 	extension: 			[u8; SHORT_EXT_LEN],
 	attribute: 			u8,
-	reserved_0: 		u8,
-	creation_tenths: 	u8,
+	_reserved_0: 		u8,
+	_creation_tenths: 	u8,
 	creation_time: 		u16,
 	creation_date: 		u16,
 	last_accessed_date:	u16,
@@ -186,8 +186,8 @@ impl ShortDirEntry {
 			name: 				[0; SHORT_NAME_LEN],
 			extension: 			[0; SHORT_EXT_LEN],
 			attribute: 			0,
-			reserved_0: 		0,
-			creation_tenths: 	0,
+			_reserved_0: 		0,
+			_creation_tenths: 	0,
 			creation_time: 		0,
 			creation_date: 		0,
 			last_accessed_date:	0,
@@ -205,24 +205,24 @@ impl ShortDirEntry {
 		let name_len = name.len();
 		if name_len <= SHORT_NAME_LEN {
 			// to_ascii_uppercase()不会对.产生影响
-			&mut name_bytes[..name_len].copy_from_slice(name.to_ascii_uppercase().as_bytes());
+			let _ = &mut name_bytes[..name_len].copy_from_slice(name.to_ascii_uppercase().as_bytes());
 		} else {
 			// &mut name_bytes[..6].copy_from_slice(name[..6].as_bytes());
 			// name_bytes[6] = b'~';
 			// name_bytes[7] = b'1';
-			&mut name_bytes.copy_from_slice(format!("{}~1", name[..6].to_ascii_uppercase().to_string()).as_bytes());
+			let _ = &mut name_bytes.copy_from_slice(format!("{}~1", name[..6].to_ascii_uppercase().to_string()).as_bytes());
 		}
 
 		// 没有对拓展名做限制，长度超过3会panic
 		let mut ext_bytes = [0x20u8; SHORT_EXT_LEN];
-		&mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+		let _ = &mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
 
 		Self{
 			name: name_bytes,
 			extension: ext_bytes,
 			attribute,
-			reserved_0: 0,		
-			creation_tenths: 0, 	
+			_reserved_0: 0,		
+			_creation_tenths: 0, 	
 			creation_time: 0, 		
 			creation_date: 0x529c,		
 			last_accessed_date:	0,
@@ -334,8 +334,8 @@ impl ShortDirEntry {
 
 	pub fn checksum(&self) -> u8 {
 		let mut name_buff = [0u8; 11];
-		&mut name_buff[0..8].copy_from_slice(&self.name[..]);
-		&mut name_buff[8..11].copy_from_slice(&self.extension[..]);
+		let _ = &mut name_buff[0..8].copy_from_slice(&self.name[..]);
+		let _ = &mut name_buff[8..11].copy_from_slice(&self.extension[..]);
 		let mut checksum: u32 = 0;
 		for i in 0..11 {
 			if checksum & 1 == 0 {
@@ -589,24 +589,24 @@ pub struct LongDirEntry {
 	order: 		u8,
 	name1: 		[u8; 10],
 	attribute: 	u8,
-	reserved_0: u8,
+	_reserved_0: u8,
 	checksum: 	u8,
 	name2: 		[u8; 12],
-	reserved_1: [u8; 2],
+	_reserved_1: [u8; 2],
 	name3: 		[u8; 4],
 }
 
 impl LongDirEntry {
 	pub fn empty() -> Self {
 		Self {
-			order: 		0,
-			name1: 		[0; 10],
-			attribute: 	0,
-			reserved_0: 0,
-			checksum: 	0,
-			name2: 		[0; 12],
-			reserved_1: [0; 2],
-			name3: 		[0; 4],
+			order: 			0,
+			name1: 			[0; 10],
+			attribute: 		0,
+			_reserved_0: 	0,
+			checksum: 		0,
+			name2: 			[0; 12],
+			_reserved_1: 	[0; 2],
+			name3: 			[0; 4],
 		}
 	}
 
@@ -641,18 +641,18 @@ impl LongDirEntry {
 		let mut name1: [u8; 10] = [0; 10];
         let mut name2: [u8; 12] = [0; 12];
         let mut name3: [u8; 4] = [0; 4];
-		&mut name1[..].copy_from_slice(&name[..10]);
-		&mut name2[..].copy_from_slice(&name[10..22]);
-		&mut name3[..].copy_from_slice(&name[22..26]);
+		let _ = &mut name1[..].copy_from_slice(&name[..10]);
+		let _ = &mut name2[..].copy_from_slice(&name[10..22]);
+		let _ = &mut name3[..].copy_from_slice(&name[22..26]);
 
 		*self = Self {
 			order,
 			name1,
 			attribute: ATTRIBUTE_LFN,
-			reserved_0: 0,
+			_reserved_0: 0,
 			checksum,
 			name2,
-			reserved_1: [0u8, 2],
+			_reserved_1: [0u8, 2],
 			name3,
 		}
 	}
