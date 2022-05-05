@@ -16,7 +16,7 @@ pub const BAD_CLUSTER: u32 = 0x0FFFFFF7;
 pub struct FAT {
     first_fat1_sector:  u32,
     first_fat2_sector:  u32,
-    fat_size:           u32,  // 扇区数
+    _fat_size:           u32,  // 扇区数
     max_cluster:        u32,  // FAT表所允许的最大簇数
 }
 
@@ -25,7 +25,7 @@ impl FAT {
         Self {
             first_fat1_sector,
             first_fat2_sector,
-            fat_size,
+            _fat_size: fat_size,
             max_cluster: fat_size * FAT_ENTRY_PER_SEC,
         }
     }
