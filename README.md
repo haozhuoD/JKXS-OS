@@ -11,3 +11,4 @@
 
 [开发文档](./docs/dev.md)
 
+[sdcard-qemu仿真测试仓库](https://gitee.com/dhz_ggg/sdcard_qemu)
