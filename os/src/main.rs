@@ -59,6 +59,7 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 
 #[no_mangle]
 pub fn rust_main() -> ! {
+    println!("[kernel] hello this is  rust_main");
     save_hartid();
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
