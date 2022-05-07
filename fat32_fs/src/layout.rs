@@ -211,11 +211,13 @@ impl ShortDirEntry {
 			// name_bytes[6] = b'~';
 			// name_bytes[7] = b'1';
 			let _ = &mut name_bytes.copy_from_slice(format!("{}~1", name[..6].to_ascii_uppercase().to_string()).as_bytes());
+
 		}
 
 		// 没有对拓展名做限制，长度超过3会panic
 		let mut ext_bytes = [0x20u8; SHORT_EXT_LEN];
 		let _ = &mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+
 
 		Self{
 			name: name_bytes,
