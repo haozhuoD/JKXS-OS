@@ -1,5 +1,3 @@
-use crate::println;
-
 use super::{
     BlockDevice,
     fat32_manager::*,
@@ -10,7 +8,6 @@ use super::{
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use spin::RwLock;
 
 #[derive(Clone)]
 pub struct VFile {
@@ -458,7 +455,7 @@ impl VFile {
                     order = order ^ 0x40;
                 }
                 let mut name = long_ent.get_name_format();
-                for i in 1..order as usize {
+                for _i in 1..order as usize {
                     offset += DIRENT_SZ;
                     read_sz = self.read_short_dirent(|curr_ent| {
                         curr_ent.read_at(
