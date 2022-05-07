@@ -15,7 +15,8 @@ endif
 
 
 BOARD ?= qemu
-SBI ?= rustsbi
+# 默认使用opensbi-1.0
+SBI ?= opensbi
 ifeq ($(SBI), rustsbi)
 	BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 else 
