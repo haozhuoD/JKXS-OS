@@ -985,8 +985,8 @@ const SD_CS: u32 = 0;
 // }
 
 lazy_static! {
-    static ref PERIPHERALS: Arc<Mutex<Peripherals>> =
-        unsafe { Arc::new(Mutex::new(Peripherals::take().unwrap())) };
+    static ref PERIPHERALS: Mutex<Peripherals> =
+        unsafe { Mutex::new(Peripherals::take().unwrap()) };
 }
 
 fn init_sdcard() -> SDCard<SPIImpl> { //<SPI>

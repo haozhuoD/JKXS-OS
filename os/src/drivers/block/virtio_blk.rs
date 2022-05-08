@@ -15,7 +15,7 @@ const VIRTIO0: usize = 0x10001000;
 pub struct VirtIOBlock(Arc<Mutex<VirtIOBlk<'static>>>);
 
 lazy_static! {
-    static ref QUEUE_FRAMES: Arc<Mutex<Vec<FrameTracker>>> = Arc::new(Mutex::new(Vec::new()));
+    static ref QUEUE_FRAMES: Mutex<Vec<FrameTracker>> = Mutex::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {

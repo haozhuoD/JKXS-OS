@@ -26,8 +26,8 @@ impl TaskManager {
 
 lazy_static! {
     pub static ref TASK_MANAGER: Mutex<TaskManager> = Mutex::new(TaskManager::new());
-    pub static ref PID2PCB: Arc<Mutex<BTreeMap<usize, Arc<ProcessControlBlock>>>> =
-        Arc::new(Mutex::new(BTreeMap::new()));
+    pub static ref PID2PCB: Mutex<BTreeMap<usize, Arc<ProcessControlBlock>>> =
+        Mutex::new(BTreeMap::new());
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {

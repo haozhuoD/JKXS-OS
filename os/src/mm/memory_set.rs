@@ -34,8 +34,8 @@ extern "C" {
 pub static mut SATP: usize = 0;
 
 lazy_static! {
-    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
-        Arc::new(Mutex::new(MemorySet::new_kernel()));
+    pub static ref KERNEL_SPACE: Mutex<MemorySet> =
+        Mutex::new(MemorySet::new_kernel());
 }
 
 pub fn kernel_token() -> usize {
