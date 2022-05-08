@@ -4,7 +4,7 @@ use super::{__switch, add_task};
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 
-use crate::config::MAX_CPU_NUM;
+use crate::board::MAX_CPU_NUM;
 use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -49,12 +49,23 @@ impl ProcessorInner {
     }
 }
 
+#[cfg(feature = "board_fu740")]
 lazy_static! {
     pub static ref PROCESSORS: [Processor; MAX_CPU_NUM] = [
         Processor::new(),
         Processor::new(),
         Processor::new(),
+        Processor::new(),
         Processor::new()
+    ];
+}
+#[cfg(not(any(feature = "board_fu740")))]
+lazy_static! {
+    pub static ref PROCESSORS: [Processor; MAX_CPU_NUM] = [
+        Processor::new(),
+        Processor::new(),
+        Processor::new(),
+        Processor::new(),
     ];
 }
 

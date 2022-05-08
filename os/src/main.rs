@@ -35,10 +35,9 @@ mod timer;
 mod trap;
 mod loader;
 
-use crate::multicore::{get_hartid, save_hartid};
+use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::sbi::sbi_hart_start;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -77,18 +76,8 @@ pub fn rust_main() -> ! {
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
-    extern "C" {
-        fn skernel();
-    }
-    for i in 0..=3 {
-        // println!("i: {}   hartid: {}" ,i,hartid);
-        // if i!=hartid {
-        //     // println!("sbi_hart_start   hartid: {}" ,i);
-        //     sbi_hart_start(i, skernel as usize, 0);
-        // }
-        // let mask:usize = 1 << i;
-        // sbi_send_ipi(&mask as *const usize as usize); 
-    }
+    wakeup_other_cores(hartid);
+
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
