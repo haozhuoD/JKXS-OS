@@ -1,15 +1,15 @@
     .section .text.entry
     .globl _start
 _start:
-    ; mv t3, a0
-    ; mv t4, a1
-    ; mv t5, a7
-    ; add a7, zero, 1
-    ; add a0, zero, 65
-    ; ecall
-    ; mv a0, t3
-    ; mv a1, t4
-    ; mv a7, t5
+    mv t3, a0
+    mv t4, a1
+    mv t5, a7
+    add a7, zero, 1
+    add a0, zero, 65
+    ecall
+    mv a0, t3
+    mv a1, t4
+    mv a7, t5
     # a0 = hartid
     # 1. set sp
     # sp = bootstack + (hartid + 1) * 0x8000(stacksize)
