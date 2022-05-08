@@ -4,22 +4,19 @@ mod spi;
 mod sleep;
 
 pub use sdcard::SDCardWrapper;
+use spin::Lazy;
 pub use virtio_blk::VirtIOBlock;
 
 use crate::board::BlockDeviceImpl;
 use alloc::sync::Arc;
 use fat32_fs::BlockDevice;
-use lazy_static::*;
 
 // pub trait BlockDevice : Send + Sync {
 //     fn read_block(&self, block_id: usize, buf: &mut [u8]);
 //     fn write_block(&self, block_id: usize, buf: &[u8]);
 //   }
 
-lazy_static! {
-    pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
-    // pub static ref BLOCK_DEVICE: Arc<sdcard::SDCardWrapper> = Arc::new(sdcard::SDCardWrapper::new());
-}
+pub static BLOCK_DEVICE: Lazy<Arc<dyn BlockDevice>> = Lazy::new(|| Arc::new(BlockDeviceImpl::new()));
 
 // pub fn init_sdcard() {
 //     // println!("init sdcard start!");

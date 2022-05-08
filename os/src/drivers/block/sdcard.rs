@@ -20,8 +20,7 @@ use super::sleep::usleep;
 //     spi::{aitm, frame_format, tmod, work_mode, SPIExt, SPIImpl, SPI},
 // //     sysctl,
 // };
-use lazy_static::*;
-use spin::{Mutex, RwLock};
+use spin::{Mutex, RwLock, Lazy};
 
 /// endian true? false?
 /// protocal 2?  0?
@@ -984,10 +983,8 @@ const SD_CS: u32 = 0;
 //     fpioa::set_io_pull(io::SPI0_CS0, fpioa::pull::DOWN); // GPIO output=pull down
 // }
 
-lazy_static! {
-    static ref PERIPHERALS: RwLock<Peripherals> =
-        unsafe { RwLock::new(Peripherals::take().unwrap()) };
-}
+static PERIPHERALS: Lazy<RwLock<Peripherals>> =
+        Lazy::new(|| RwLock::new(Peripherals::take().unwrap()));
 
 fn init_sdcard() -> SDCard<SPIImpl> { //<SPI>
     // wait previous output

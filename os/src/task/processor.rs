@@ -8,7 +8,7 @@ use crate::board::MAX_CPU_NUM;
 use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
-use lazy_static::*;
+use spin::Lazy;
 
 pub struct Processor {
     inner: RefCell<ProcessorInner>,
@@ -50,24 +50,21 @@ impl ProcessorInner {
 }
 
 #[cfg(feature = "board_fu740")]
-lazy_static! {
-    pub static ref PROCESSORS: [Processor; MAX_CPU_NUM] = [
+    pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| [
         Processor::new(),
         Processor::new(),
         Processor::new(),
         Processor::new(),
         Processor::new()
-    ];
-}
+    ]);
+
 #[cfg(not(any(feature = "board_fu740")))]
-lazy_static! {
-    pub static ref PROCESSORS: [Processor; MAX_CPU_NUM] = [
+    pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| [
         Processor::new(),
         Processor::new(),
         Processor::new(),
         Processor::new(),
-    ];
-}
+    ]);
 
 pub fn run_tasks() {
     loop {

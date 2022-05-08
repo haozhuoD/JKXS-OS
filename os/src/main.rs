@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(once_cell)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(btree_drain_filter)]

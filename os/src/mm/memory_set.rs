@@ -5,18 +5,15 @@ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::gdb_println;
-use crate::monitor::*;
 use crate::task::{
     AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
 };
 use alloc::collections::BTreeMap;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
-use lazy_static::*;
 use riscv::register::satp;
-use spin::{Mutex, RwLock};
+use spin::{RwLock, Lazy};
 
 extern "C" {
     fn stext();
@@ -33,10 +30,7 @@ extern "C" {
 
 pub static mut SATP: usize = 0;
 
-lazy_static! {
-    pub static ref KERNEL_SPACE: RwLock<MemorySet> =
-        RwLock::new(MemorySet::new_kernel());
-}
+pub static KERNEL_SPACE: Lazy<RwLock<MemorySet>> = Lazy::new(|| RwLock::new(MemorySet::new_kernel()));
 
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.read().token()

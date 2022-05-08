@@ -1,7 +1,7 @@
+use spin::Lazy;
 use super::{BlockDevice, BLOCK_SZ};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use lazy_static::*;
 use spin::RwLock;
 
 pub struct BlockCache {
@@ -29,7 +29,8 @@ impl BlockCache {
     }
 
     pub fn get_ref<T>(&self, offset: usize) -> &T
-        where   T: Sized,
+    where
+        T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
         assert!(offset + type_size <= BLOCK_SZ);
@@ -38,7 +39,8 @@ impl BlockCache {
     }
 
     pub fn get_mut<T>(&mut self, offset: usize) -> &mut T
-        where   T: Sized,
+    where
+        T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
         assert!(offset + type_size <= BLOCK_SZ);
@@ -98,10 +100,7 @@ impl BlockCacheManager {
         self.start_sector
     }
 
-    pub fn read_block_cache(
-        &self,
-        block_id: usize,
-    ) -> Option<Arc<RwLock<BlockCache>>> {
+    pub fn read_block_cache(&self, block_id: usize) -> Option<Arc<RwLock<BlockCache>>> {
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
             // println!("[read_block_cache] find");
             Some(Arc::clone(&pair.1))
@@ -150,17 +149,14 @@ impl BlockCacheManager {
     }
 }
 
-lazy_static! {
-    pub static ref DATA_BLOCK_CACHE_MANAGER: RwLock<BlockCacheManager> =
-        RwLock::new(BlockCacheManager::new());
-}
+pub static DATA_BLOCK_CACHE_MANAGER: Lazy<RwLock<BlockCacheManager>> =
+    Lazy::new(|| RwLock::new(BlockCacheManager::new()));
 
-lazy_static! {
-    pub static ref INFO_BLOCK_CACHE_MANAGER: RwLock<BlockCacheManager> =
-        RwLock::new(BlockCacheManager::new());
-}
+pub static INFO_BLOCK_CACHE_MANAGER: Lazy<RwLock<BlockCacheManager>> =
+    Lazy::new(|| RwLock::new(BlockCacheManager::new()));
 
-#[derive(PartialEq,Copy,Clone,Debug)]
+
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum CacheMode {
     READ,
     WRITE,
@@ -169,28 +165,35 @@ pub enum CacheMode {
 pub fn get_data_block_cache(
     block_id: usize,
     block_device: Arc<dyn BlockDevice>,
-    rw_mode: CacheMode
+    rw_mode: CacheMode,
 ) -> Arc<RwLock<BlockCache>> {
     let phy_blk_id = DATA_BLOCK_CACHE_MANAGER.read().get_start_sector() + block_id;
     if rw_mode == CacheMode::READ {
         let rlock = DATA_BLOCK_CACHE_MANAGER.read();
-        match rlock.read_block_cache(phy_blk_id){
+        match rlock.read_block_cache(phy_blk_id) {
             Some(blk) => blk,
             None => {
                 drop(rlock);
-                DATA_BLOCK_CACHE_MANAGER.write().get_block_cache(phy_blk_id, block_device);
-                DATA_BLOCK_CACHE_MANAGER.read().read_block_cache(phy_blk_id).unwrap()
+                DATA_BLOCK_CACHE_MANAGER
+                    .write()
+                    .get_block_cache(phy_blk_id, block_device);
+                DATA_BLOCK_CACHE_MANAGER
+                    .read()
+                    .read_block_cache(phy_blk_id)
+                    .unwrap()
             }
         }
     } else {
-        DATA_BLOCK_CACHE_MANAGER.write().get_block_cache(phy_blk_id, block_device)
+        DATA_BLOCK_CACHE_MANAGER
+            .write()
+            .get_block_cache(phy_blk_id, block_device)
     }
 }
 
 pub fn get_info_block_cache(
     block_id: usize,
     block_device: Arc<dyn BlockDevice>,
-    rw_mode: CacheMode
+    rw_mode: CacheMode,
 ) -> Arc<RwLock<BlockCache>> {
     let phy_blk_id = INFO_BLOCK_CACHE_MANAGER.read().get_start_sector() + block_id;
     // println!("[get_info_block_cache]  block_id:{}  phy_blk_id:{}",block_id,phy_blk_id);
@@ -202,19 +205,30 @@ pub fn get_info_block_cache(
             None => {
                 // println!("try to load block");
                 drop(rlock);
-                INFO_BLOCK_CACHE_MANAGER.write().get_block_cache(phy_blk_id, block_device);
-                INFO_BLOCK_CACHE_MANAGER.read().read_block_cache(phy_blk_id).unwrap()
+                INFO_BLOCK_CACHE_MANAGER
+                    .write()
+                    .get_block_cache(phy_blk_id, block_device);
+                INFO_BLOCK_CACHE_MANAGER
+                    .read()
+                    .read_block_cache(phy_blk_id)
+                    .unwrap()
             }
         }
     } else {
         // println!("   mode:WRITE");
-        INFO_BLOCK_CACHE_MANAGER.write().get_block_cache(phy_blk_id, block_device)
+        INFO_BLOCK_CACHE_MANAGER
+            .write()
+            .get_block_cache(phy_blk_id, block_device)
     }
 }
 
-pub fn set_start_sector(start_sector: usize){
-    INFO_BLOCK_CACHE_MANAGER.write().set_start_sector(start_sector);
-    DATA_BLOCK_CACHE_MANAGER.write().set_start_sector(start_sector);
+pub fn set_start_sector(start_sector: usize) {
+    INFO_BLOCK_CACHE_MANAGER
+        .write()
+        .set_start_sector(start_sector);
+    DATA_BLOCK_CACHE_MANAGER
+        .write()
+        .set_start_sector(start_sector);
 }
 
 pub fn write_to_dev() {
