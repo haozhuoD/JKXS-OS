@@ -65,12 +65,12 @@ const SYSCALL_SHUTDOWN: usize = 0xffff;
 mod fs;
 mod process;
 mod sync;
-mod thread;
 
 use fs::*;
 use process::*;
 use sync::*;
-use thread::*;
+
+use crate::{gdb_println, monitor::{SYSCALL_ENABLE, QEMU}};
 
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     match syscall_id {
@@ -124,8 +124,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WAIT4 => sys_waitpid(args[0] as isize, args[1] as *mut i32, args[2] as isize),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
-        SYSCALL_GETTID => sys_gettid(),
         SYSCALL_SHUTDOWN => sys_shutdown(),
-        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        _ => {
+            gdb_println!(SYSCALL_ENABLE, "Unsupported syscall_id: {}, args = {:#x?}", syscall_id, args);
+            0
+        }
     }
 }

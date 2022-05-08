@@ -471,10 +471,20 @@ pub fn sys_mount(
     flags: usize,
     data: *const u8,
 ) -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_mount(...) = {}",
+        0
+    );
     0
 }
 
 pub fn sys_umount(p_special: *const u8, flags: usize) -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_umount(...) = {}",
+        0
+    );
     0
 }
 
@@ -495,6 +505,11 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
         if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
             if let Some(osfile) = osfile.find(path.as_str(), OpenFlags::empty()) {
                 osfile.remove();
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
+                    dirfd, path, 0
+                );
                 return 0;
             }
         }
@@ -502,16 +517,29 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
     }
     if let Some(osfile) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
         osfile.remove();
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
+            dirfd, path, 0
+        );
         return 0;
     }
     return -1;
 }
 
 pub fn sys_ioctl() -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_ioctl(...) = 0"
+    );
     0
 }
 
 pub fn sys_fcntl() -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_fcntl(...) = 0"
+    );
     0
 }
 
