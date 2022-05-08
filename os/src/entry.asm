@@ -7,12 +7,12 @@ _start:
     ; add a7, zero, 1
     ; add a0, zero, 65
     ; ecall
+    ; mv a0, t3
+    ; mv a1, t4
+    ; mv a7, t5
     # a0 = hartid
     # 1. set sp
     # sp = bootstack + (hartid + 1) * 0x8000(stacksize)
-    mv a0, t3
-    mv a1, t4
-    mv a7, t5
     la  t1, boot_stack
     add     t0, a0, 1
     slli    t0, t0, 15 # hart_id* stacksize
