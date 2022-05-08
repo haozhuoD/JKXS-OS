@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 
 extern "C" {
     fn stext();
@@ -34,12 +34,12 @@ extern "C" {
 pub static mut SATP: usize = 0;
 
 lazy_static! {
-    pub static ref KERNEL_SPACE: Mutex<MemorySet> =
-        Mutex::new(MemorySet::new_kernel());
+    pub static ref KERNEL_SPACE: RwLock<MemorySet> =
+        RwLock::new(MemorySet::new_kernel());
 }
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.lock().token()
+    KERNEL_SPACE.read().token()
 }
 
 pub struct MemorySet {
@@ -543,7 +543,7 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.lock();
+    let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();

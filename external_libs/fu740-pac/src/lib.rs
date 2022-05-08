@@ -500,6 +500,9 @@ pub struct Peripherals {
     #[doc = "PRCI"]
     pub PRCI: PRCI,
 }
+
+unsafe impl Sync for Peripherals {}
+
 impl Peripherals {
     #[doc = r"Returns all the peripherals *once*"]
     #[inline]

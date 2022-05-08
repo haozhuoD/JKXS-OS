@@ -9,7 +9,7 @@ use alloc::{
     vec::Vec,
 };
 use lazy_static::*;
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 
 pub struct RecycleAllocator {
     current: usize,
@@ -43,21 +43,21 @@ impl RecycleAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR: Mutex<RecycleAllocator> =
-        Mutex::new(RecycleAllocator::new());
-    static ref KSTACK_ALLOCATOR: Mutex<RecycleAllocator> =
-        Mutex::new(RecycleAllocator::new());
+    static ref PID_ALLOCATOR: RwLock<RecycleAllocator> =
+        RwLock::new(RecycleAllocator::new());
+    static ref KSTACK_ALLOCATOR: RwLock<RecycleAllocator> =
+        RwLock::new(RecycleAllocator::new());
 }
 
 pub struct PidHandle(pub usize);
 
 pub fn pid_alloc() -> PidHandle {
-    PidHandle(PID_ALLOCATOR.lock().alloc())
+    PidHandle(PID_ALLOCATOR.write().alloc())
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        PID_ALLOCATOR.lock().dealloc(self.0);
+        PID_ALLOCATOR.write().dealloc(self.0);
     }
 }
 
@@ -71,7 +71,7 @@ pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
 pub struct KernelStack(pub usize);
 
 pub fn kstack_alloc() -> KernelStack {
-    let kstack_id = KSTACK_ALLOCATOR.lock().alloc();
+    let kstack_id = KSTACK_ALLOCATOR.write().alloc();
     let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
     gdb_println!(
         MAPPING_ENABLE,
@@ -80,7 +80,7 @@ pub fn kstack_alloc() -> KernelStack {
         kstack_bottom,
         kstack_top
     );
-    KERNEL_SPACE.lock().insert_framed_area(
+    KERNEL_SPACE.write().insert_framed_area(
         kstack_bottom.into(),
         kstack_top.into(),
         MapPermission::R | MapPermission::W,
@@ -93,7 +93,7 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .lock()
+            .write()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }

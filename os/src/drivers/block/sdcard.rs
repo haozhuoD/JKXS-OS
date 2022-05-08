@@ -21,7 +21,7 @@ use super::sleep::usleep;
 // //     sysctl,
 // };
 use lazy_static::*;
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 
 /// endian true? false?
 /// protocal 2?  0?
@@ -985,8 +985,8 @@ const SD_CS: u32 = 0;
 // }
 
 lazy_static! {
-    static ref PERIPHERALS: Mutex<Peripherals> =
-        unsafe { Mutex::new(Peripherals::take().unwrap()) };
+    static ref PERIPHERALS: RwLock<Peripherals> =
+        unsafe { RwLock::new(Peripherals::take().unwrap()) };
 }
 
 fn init_sdcard() -> SDCard<SPIImpl> { //<SPI>

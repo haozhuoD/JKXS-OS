@@ -133,7 +133,7 @@ impl ProcessControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             ustack_top,
-            KERNEL_SPACE.lock().token(),
+            KERNEL_SPACE.read().token(),
             kstack_top,
             trap_handler as usize,
             get_hartid(),
@@ -310,7 +310,7 @@ impl ProcessControlBlock {
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.lock().token(),
+            KERNEL_SPACE.read().token(),
             task.kstack.get_top(),
             trap_handler as usize,
             get_hartid(),

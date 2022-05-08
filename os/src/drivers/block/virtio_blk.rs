@@ -6,7 +6,7 @@ use crate::mm::{
 
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 use virtio_drivers::{VirtIOBlk, VirtIOHeader};
 
 #[allow(unused)]
@@ -15,7 +15,7 @@ const VIRTIO0: usize = 0x10001000;
 pub struct VirtIOBlock(Arc<Mutex<VirtIOBlk<'static>>>);
 
 lazy_static! {
-    static ref QUEUE_FRAMES: Mutex<Vec<FrameTracker>> = Mutex::new(Vec::new());
+    static ref QUEUE_FRAMES: RwLock<Vec<FrameTracker>> = RwLock::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {
@@ -53,7 +53,7 @@ pub extern "C" fn virtio_dma_alloc(pages: usize) -> PhysAddr {
             ppn_base = frame.ppn;
         }
         assert_eq!(frame.ppn.0, ppn_base.0 + i);
-        QUEUE_FRAMES.lock().push(frame);
+        QUEUE_FRAMES.write().push(frame);
     }
     ppn_base.into()
 }
