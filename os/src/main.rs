@@ -36,6 +36,7 @@ mod trap;
 mod loader;
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
+use crate::sbi::console_putchar;
 use core::arch::{global_asm, asm};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -58,30 +59,10 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 
 #[no_mangle]
 pub fn rust_main() -> ! {
-    unsafe {
-    asm!("    mv t3, a0
-        mv t4, a1
-        mv t5, a7
-        li a7, 1
-        li a0, 65
-        ecall
-        mv a0, t3
-        mv a1, t4
-        mv a7, t5");
-    }
+    console_putchar('a' as usize);
     // println!("[kernel] hello this is rust_main "); 这句话加了之后会覆盖a0，必须先save_hartid
     save_hartid();
-    unsafe {
-    asm!("    mv t3, a0
-        mv t4, a1
-        mv t5, a7
-        li a7, 1
-        li a0, 66
-        ecall
-        mv a0, t3
-        mv a1, t4
-        mv a7, t5");
-    }
+    console_putchar('b' as usize);
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
     if AP_CAN_INIT.load(Ordering::Relaxed) {
@@ -98,7 +79,7 @@ pub fn rust_main() -> ! {
     task::add_initproc();
     println!("[kernel] Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
-    wakeup_other_cores(hartid);
+    // wakeup_other_cores(hartid);
 
     task::run_tasks();
     panic!("Unreachable in rust_main!");
