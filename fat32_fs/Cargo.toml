@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-spin = { path = "../external_libs/spin-0.9.3" }
-lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
+spin = "0.9.2"
+lazy_static = { path = "../external_libs/lazy_static-1.4.0", features = ["spin_no_std"] }
