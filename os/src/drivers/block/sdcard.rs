@@ -228,21 +228,21 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     //todo clock rate
     fn HIGH_SPEED_ENABLE(&self) {
         // 暂时设置为k210中预定的频率
-        self.spi.set_clk_rate(195_000_000,10000000);
+        self.spi.set_clk_rate(195_000_000,100000);
     }
     //todo clock rate
     fn lowlevel_init(&self) {
         // gpiohs::set_direction(self.cs_gpionum, gpio::direction::OUTPUT);
         // 暂时设置为k210中预定的频率
         self.spi.init();
-        self.spi.set_clk_rate(195_000_000,200000);
+        self.spi.set_clk_rate(195_000_000,10000);
     }
 
     fn write_data(&self, data: &[u8]) {
         self.spi.configure(
             // 195_000_000,
             // 200000,
-            2, /* protocal */ // 2? 0
+            1, /* protocal */ // 2? 0
             true, /* endian  false true*/ 
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
@@ -272,7 +272,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.configure(
             // 195_000_000,
             // 200000,
-            2, /* protocal */  // 2?
+            1, /* protocal */  // 2?
             true, /* endian */
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
@@ -549,6 +549,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
           self.send_cmd(cmd, arg, crc);
           let resp = self.get_response();
           self.end_cmd();
+          println!("[kernel] resp = {}", resp);
           if resp == expect {
             return Ok(());
           }
@@ -570,7 +571,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
 
         // need ???
         self.spi.configure(
-            2, /* protocal */  // 2?
+            1, /* protocal */  // 2?
             true, /* endian */
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
