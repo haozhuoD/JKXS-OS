@@ -584,7 +584,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         /* SD initialized and set to SPI mode properly */
 
         /* Send software reset */
-        println!("[sd-init] send cmd ");
+        println!("[sd-init] send cmd 0");
         // self.send_cmd(CMD::CMD0, 0, 0x95);
         // let mut result = self.get_response();
         // self.end_cmd();
@@ -593,7 +593,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         // }
 
         // let mut result = 0;
-        let mut try_times = 200;
+        let mut try_times = 20;
         if let Err(()) = self.retry_cmd(CMD::CMD0, 0, 0x95, 0x01, try_times) {
             return Err(InitError::CMDFailed(CMD::CMD0, 0));
         }
