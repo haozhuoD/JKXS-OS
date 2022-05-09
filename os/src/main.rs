@@ -66,9 +66,9 @@ pub fn rust_main() -> ! {
     console_putchar('b' as usize);
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
-    if AP_CAN_INIT.load(Ordering::Relaxed) {
-        others_main(hartid);
-    }
+    // if AP_CAN_INIT.load(Ordering::Relaxed) {
+    //     others_main(hartid);
+    // }
     clear_bss();
     console_putchar('c' as usize);
     mm::init();
