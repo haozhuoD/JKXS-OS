@@ -174,7 +174,7 @@ impl MemorySet {
         );
         println!("mapping memory-mapped registers Identical");
         for pair in MMIO {
-            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).1);
+            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).0 + (*pair).1);
             memory_set.push(
                 MapArea::new(
                     (*pair).0.into(),
