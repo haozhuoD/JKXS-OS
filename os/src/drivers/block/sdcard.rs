@@ -242,7 +242,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.configure(
             // 195_000_000,
             // 200000,
-            2, /* protocal */ // 2? 0
+            1, /* protocal */ // 2? 0
             true, /* endian  false true*/ 
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
@@ -272,7 +272,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.configure(
             // 195_000_000,
             // 200000,
-            2, /* protocal */  // 2?
+            1, /* protocal */  // 2?
             true, /* endian */
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
@@ -571,7 +571,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
 
         // need ???
         self.spi.configure(
-            2, /* protocal */  // 2?
+            1, /* protocal */  // 2?
             true, /* endian */
             1, /*csdef  cs_active_hight  */
             self.spi_cs, /*csid*/
