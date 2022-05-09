@@ -1,10 +1,10 @@
 //! SPI peripherals handling
 // use core::cmp;
 // use core::convert::TryInto;
-use core::ops::Deref;
+
 
 use fu740_pac as pac;
-use pac::{SPI0,spi0,SPI1,SPI2}; //,SPI1
+use pac::{SPI2}; //,SPI1
 // use fu740_hal as hal;
 // use hal::clock::{Clocks,ClockSetup};
 

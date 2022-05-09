@@ -36,9 +36,9 @@ mod timer;
 mod trap;
 mod loader;
 
-use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
+use crate::multicore::{get_hartid, save_hartid};
 use crate::sbi::console_putchar;
-use core::arch::{global_asm, asm};
+use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 global_asm!(include_str!("entry.asm"));
