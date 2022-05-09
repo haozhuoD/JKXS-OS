@@ -228,14 +228,16 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     //todo clock rate
     fn HIGH_SPEED_ENABLE(&self) {
         // 暂时设置为k210中预定的频率
-        self.spi.set_clk_rate(195_000_000,100000);
+        // self.spi.set_clk_rate(195_000_000,100000);
+        self.spi.set_clk_rate(60);
     }
     //todo clock rate
     fn lowlevel_init(&self) {
         // gpiohs::set_direction(self.cs_gpionum, gpio::direction::OUTPUT);
         // 暂时设置为k210中预定的频率
         self.spi.init();
-        self.spi.set_clk_rate(195_000_000,10000);
+        // self.spi.set_clk_rate(195_000_000,10000);
+        self.spi.set_clk_rate(3000);
     }
 
     fn write_data(&self, data: &[u8]) {
@@ -1037,23 +1039,23 @@ impl SDCardWrapper {
 #[cfg(feature = "local_fu740")]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        println!("read block {}", block_id+10274);
-        self.0.lock().read_sector(buf, block_id as u32).unwrap();
+        // println!("read block {}", block_id+10274);
+        self.0.lock().read_sector(buf, block_id as u32 +10274).unwrap();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        println!("write block {}", block_id+10274);
-        self.0.lock().write_sector(buf, block_id as u32).unwrap();
+        // println!("write block {}", block_id+10274);
+        self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
     }
 }
 
 #[cfg(not(any(feature = "local_fu740")))]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        println!("read block {}", block_id);
+        // println!("read block {}", block_id);
         self.0.lock().read_sector(buf, block_id as u32).unwrap();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        println!("write block {}", block_id);
+        // println!("write block {}", block_id);
         self.0.lock().write_sector(buf, block_id as u32).unwrap();
     }
 }
