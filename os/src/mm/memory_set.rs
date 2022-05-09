@@ -343,9 +343,13 @@ impl MemorySet {
         println!("meomry set activating...");
         let satp = self.page_table.token();
         unsafe {
+            println!("x1...");
             SATP = satp; //其他核初始化
+            println!("x2...");
             satp::write(satp);
+            println!("x3...");
             asm!("sfence.vma");
+            println!("x4...");
         }
     }
     // pub fn activate_other(&self) {
