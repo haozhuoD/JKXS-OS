@@ -340,7 +340,7 @@ impl MemorySet {
         memory_set
     }
     pub fn activate(&self) {
-        println!("meomry set activating...")
+        println!("meomry set activating...");
         let satp = self.page_table.token();
         unsafe {
             SATP = satp; //其他核初始化
