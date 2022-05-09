@@ -549,6 +549,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
           self.send_cmd(cmd, arg, crc);
           let resp = self.get_response();
           self.end_cmd();
+          println!("[kernel] resp = {}", resp);
           if resp == expect {
             return Ok(());
           }
