@@ -194,7 +194,7 @@ impl SPI for SPIImpl {
     /// 未测试  spi_clk = pclock
     /// 目前输入： pclk 和 想要的速度hz
     /// Set SPI clock rate 根据输入频率设置波特率设置,返回时钟频率/spi波特率  
-    fn set_clk_rate(&self, spi_clk: u32, speed_hz: u32) -> u32 {
+    fn set_clk_rate(&self, _spi_clk: u32, _speed_hz: u32) -> u32 {
         // 先获取时钟 pclk:hfpclk_pll 假定已经通过ClockSetup设置好时钟
         // 按k210： 基于输入时钟频率和串行外设时钟频率计算出波特率
         // todo 需要一个初始化好的时钟(在sdcard驱动中初始化一个) X // let clocks = ClockSetup.freeze();
@@ -202,9 +202,11 @@ impl SPI for SPIImpl {
         //      从pric中获取 hfpclk-pll  -> 如何计算其频率呢？     直接使用一个指向pac::prci的指针再解引用调用set_clock()
         // let spi_baudr = pclk.0 / spi_clk;
         // linux                       按手册说明输入频率为pclk 
-        let mut div = (spi_clk+speed_hz-1)/2;
-        div = div & 0xfff;
+        // let mut div = spi_clk / speed_hz / 2 - 1;
+        // div = div & 0xfff;
 
+        let div = 3000;
+    
         // Clamp baudrate divider to valid range
         //panic!("{} / {} = {}", clock_freq, spi_clk, spi_baudr);
         // let spi_baudr = cmp::min(cmp::max(spi_baudr, 2), 65534);
