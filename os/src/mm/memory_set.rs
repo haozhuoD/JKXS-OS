@@ -340,11 +340,16 @@ impl MemorySet {
         memory_set
     }
     pub fn activate(&self) {
+        println!("meomry set activating...");
         let satp = self.page_table.token();
         unsafe {
+            println!("x1...");
             SATP = satp; //其他核初始化
+            println!("x2...");
             satp::write(satp);
+            println!("x3...");
             asm!("sfence.vma");
+            println!("x4...");
         }
     }
     // pub fn activate_other(&self) {
@@ -538,24 +543,33 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
+    println!("[kernel] remap test start...");
     let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    println!("[kernel] mid_text = {:#x?}, mid_rodata = {:#x?}, mid_data = {:#x?}", mid_text, mid_rodata, mid_data);
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 1 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_rodata.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 2 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_data.floor())
         .unwrap()
         .executable(),);
+
+    println!("[kernel] remap test 3 passed");
+
     println!("remap_test passed!");
 }
