@@ -183,7 +183,7 @@ impl SPI for SPIImpl {
 
         unsafe {
             self.spi.fmt.modify(|_,w| w.proto().bits(protocol));
-            self.spi.fmt.modify(|_,w| w.endian().bit(endianness));
+            self.spi.fmt.modify(|_,w| w.endian().bit(!endianness));
             self.spi.fmt.modify(|_,w| w.dir().clear_bit());
 
             self.spi.csdef.modify(|_,w| w.bits(cs_active_high));
