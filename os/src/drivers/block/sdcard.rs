@@ -1033,9 +1033,22 @@ impl SDCardWrapper {
     pub fn init(&self) { }
 }
 
+#[cfg(feature = "local_fu740")]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        println!("read block {}", block_id/512);
+        println!("read block {}", block_id+10274);
+        self.0.lock().read_sector(buf, block_id as u32).unwrap();
+    }
+    fn write_block(&self, block_id: usize, buf: &[u8]) {
+        println!("write block {}", block_id+10274);
+        self.0.lock().write_sector(buf, block_id as u32).unwrap();
+    }
+}
+
+#[cfg(not(any(feature = "local_fu740")))]
+impl BlockDevice for SDCardWrapper {
+    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+        println!("read block {}", block_id);
         self.0.lock().read_sector(buf, block_id as u32).unwrap();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
@@ -1043,3 +1056,4 @@ impl BlockDevice for SDCardWrapper {
         self.0.lock().write_sector(buf, block_id as u32).unwrap();
     }
 }
+
