@@ -850,6 +850,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
      *         - `Ok(())`: Sequence succeed
      */
     pub fn write_sector(&self, data_buf: &[u8], sector: u32) -> Result<(), ()> {
+        println!(" write_sector : {:?} ",sector);
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         let sector: u32 = match self.is_hc {
             true => { sector },
@@ -863,6 +864,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             frame[1] = SD_START_DATA_SINGLE_BLOCK_WRITE;
             self.send_cmd(CMD::CMD24, sector, 0);
         } else {
+            println!(" mut sector start : {:?} , sizeof {:?} ",sector,data_buf.len());
             frame[1] = SD_START_DATA_MULTIPLE_BLOCK_WRITE;
             // self.send_cmd(
             //     CMD::ACMD23,
@@ -901,8 +903,8 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.write_data(&[0xff, 0xff]);
             /* Read data response */
             if self.get_dataresponse() != 0x00 {
-                // self.end_cmd();
-                // return Err(());
+                self.end_cmd();
+                return Err(());
             }
         }
 
@@ -1018,8 +1020,10 @@ fn init_sdcard() -> SDCard<SPIImpl> { //<SPI>
     // 无需初始化gpiohs -
     // io_init();
 
-    // todo change
+    // don't need to change!!
     let spi = peripherals.SPI2 ;//.constrain();
+    // SPI0 不行， sifive官方文档hifive-unmatched-schematics-v3 SDcard部分出错
+    // let spi = peripherals.SPI0 ;//.constrain();
     // SD_CS, SD_CS_GPIONUM 此二值并未改变 = k210
     // spi.init();
     let mut sd = SDCard::new(SPIImpl{ spi: spi }, SD_CS, IS_HC);

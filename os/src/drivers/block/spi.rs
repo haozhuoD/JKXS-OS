@@ -4,7 +4,7 @@
 
 
 use fu740_pac as pac;
-use pac::{SPI2}; //,SPI1
+use pac::{SPI2}; //,SPI1,SPI0
 // use fu740_hal as hal;
 // use hal::clock::{Clocks,ClockSetup};
 
