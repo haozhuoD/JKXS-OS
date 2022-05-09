@@ -340,6 +340,7 @@ impl MemorySet {
         memory_set
     }
     pub fn activate(&self) {
+        println!("meomry set activating...")
         let satp = self.page_table.token();
         unsafe {
             SATP = satp; //其他核初始化
@@ -538,7 +539,7 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    println!("[ernel] remap test start...");
+    println!("[kernel] remap test start...");
     let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
