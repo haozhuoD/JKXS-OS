@@ -662,6 +662,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             }
 
             if (frame[0] & 0x40) != 0 {
+                println!(" hello this is HC-SDcard !");
                 self.is_hc = true;
             }
         }
@@ -729,8 +730,8 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     pub fn read_sector(&self, data_buf: &mut [u8], sector: u32) -> Result<(), ()> {
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         let sector: u32 = match self.is_hc {
-            true => { sector << 9 },
-            _ =>    { sector }
+            true => { sector },
+            _ =>    { sector << 9 }
         };
 
         let mut cur_sector = sector;
@@ -842,8 +843,8 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     pub fn write_sector(&self, data_buf: &[u8], sector: u32) -> Result<(), ()> {
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         let sector: u32 = match self.is_hc {
-            true => { sector << 9 },
-            _ =>    { sector }
+            true => { sector },
+            _ =>    { sector << 9 }
         };
         
         ///////
