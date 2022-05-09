@@ -745,11 +745,14 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.send_cmd(CMD::CMD17, sector, 0);
             false
         } else {
+            println!("hi I'm CMD18 ");
             self.send_cmd(CMD::CMD18, sector, 0);
             true
         };
         /* Check if the SD acknowledged the read block command: R1 response (0x00: no errors) */
-        if self.get_response() != 0x00 {
+        let response = self.get_response();
+        if response != 0x00 {
+            println!("[Err]read sector:{:?}  response:{:?} ", sector, response);
             self.end_cmd();
             return Err(());
         }
@@ -757,7 +760,10 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         //let mut dma_chunk = [0u32; SEC_LEN];
         let mut tmp_chunk = [0u8; SEC_LEN];
         for chunk in data_buf.chunks_mut(SEC_LEN) {
-            if self.get_response() != SD_START_DATA_SINGLE_BLOCK_READ {
+            let response = self.get_response();
+            if response != SD_START_DATA_SINGLE_BLOCK_READ {
+                println!("[Err] loop read sector:{:?}  response:{:?} ", sector, response);
+                // let response = self.get_response();
                 error = true;
                 break;
             }

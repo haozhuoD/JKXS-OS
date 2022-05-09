@@ -81,7 +81,7 @@ fn preliminary_test() -> ! {
     preliminary_apps.push("sleep\0");
     preliminary_apps.push("brk\0");
     preliminary_apps.push("clone\0");
-    preliminary_apps.push("close\0");
+    // preliminary_apps.push("close\0");
     preliminary_apps.push("dup2\0");
     preliminary_apps.push("dup\0");
     preliminary_apps.push("execve\0");
@@ -108,6 +108,9 @@ fn preliminary_test() -> ! {
     preliminary_apps.push("yield\0");
     preliminary_apps.push("unlink\0");
     preliminary_apps.push("chdir\0");
+    preliminary_apps.push("close\0");
+
+    
 
     for app_name in preliminary_apps {
         let pid = fork();
