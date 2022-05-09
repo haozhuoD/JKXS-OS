@@ -174,7 +174,7 @@ impl MemorySet {
         );
         println!("mapping memory-mapped registers Identical");
         for pair in MMIO {
-            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).1);
+            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).0 + (*pair).1);
             memory_set.push(
                 MapArea::new(
                     (*pair).0.into(),
@@ -538,24 +538,33 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
+    println!("[ernel] remap test start...");
     let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    println!("[kernel] mid_text = {:#x?}, mid_rodata = {:#x?}, mid_data = {:#x?}", mid_text, mid_rodata, mid_data);
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 1 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_rodata.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 2 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_data.floor())
         .unwrap()
         .executable(),);
+
+    println!("[kernel] remap test 3 passed");
+
     println!("remap_test passed!");
 }
