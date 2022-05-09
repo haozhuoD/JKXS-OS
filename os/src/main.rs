@@ -82,7 +82,7 @@ pub fn rust_main() -> ! {
     fs::list_apps();
     console_putchar('f' as usize);
     task::add_initproc();
-    println!("[kernel] Riscv hartid {} run ", hartid);
+    println!("[kernel] (Boot Core) Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
     // wakeup_other_cores(hartid);
 
@@ -91,7 +91,8 @@ pub fn rust_main() -> ! {
 }
 
 fn others_main(hartid: usize) -> ! {
-    println!("[kernel] Riscv hartid {} run ", hartid);
+    console_putchar('e' as usize);
+    println!("[kernel] (Other Cores) Riscv hartid {} run ", hartid);
     mm::init_other();
     fpu::init();
     trap::init();
