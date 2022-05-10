@@ -106,12 +106,15 @@ impl FAT32Manager {
         let fat_size = ebr.fat_size();
         let first_fat2_sector = first_fat1_sector + fat_size;
         let fat = FAT::new(first_fat1_sector, first_fat2_sector, fat_size);
+        println!("first_fat1_sector: {}", first_fat1_sector);
+        println!("first_fat2_sector: {}", first_fat2_sector);
 
         // Inner内容
         let sectors_per_cluster = bpb.sectors_per_cluster as u32;
         let bytes_per_sector = bpb.bytes_per_sector as u32;
         let bytes_per_cluster = sectors_per_cluster * bytes_per_sector;
         let root_sector = first_fat1_sector +  bpb.table_count as u32 * fat_size;
+        println!("root_sector: {}", root_sector);
         
         // 根目录
         let mut root_dirent = ShortDirEntry::new(

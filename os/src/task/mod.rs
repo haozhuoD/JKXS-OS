@@ -9,11 +9,13 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::{fs::{open_file, OpenFlags}, loader::get_initproc_binary};
+use crate::{
+    loader::get_initproc_binary,
+};
 use alloc::sync::Arc;
-use lazy_static::*;
 use manager::fetch_task;
 use process::ProcessControlBlock;
+use spin::Lazy;
 use switch::__switch;
 
 pub use aux::*;
@@ -115,11 +117,8 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
     schedule(&mut _unused as *mut _);
 }
 
-lazy_static! {
-    pub static ref INITPROC: Arc<ProcessControlBlock> = {
-        ProcessControlBlock::new(get_initproc_binary()) // add_task here
-    };
-}
+pub static INITPROC: Lazy<Arc<ProcessControlBlock>> =
+    Lazy::new(|| ProcessControlBlock::new(get_initproc_binary())); // add_task here
 
 pub fn add_initproc() {
     let _initproc = INITPROC.clone();

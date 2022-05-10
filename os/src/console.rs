@@ -1,6 +1,5 @@
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
-use spin::Mutex;
 
 struct Stdout;
 
@@ -12,7 +11,7 @@ impl ConsoleInner {
     }
 }
 
-static CONSOLE: Mutex<ConsoleInner> = Mutex::new(ConsoleInner {});
+static CONSOLE: ConsoleInner = ConsoleInner {};
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -24,7 +23,7 @@ impl Write for Stdout {
 }
 
 pub fn print(args: fmt::Arguments) {
-    CONSOLE.lock().puts(args);
+    CONSOLE.puts(args);
 }
 
 #[macro_export]

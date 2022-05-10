@@ -6,7 +6,7 @@ use crate::gdb_println;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
 };
-use crate::monitor::*;
+
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -37,7 +37,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
         if fd == 2 {
-            let str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
+            let _str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_write(fd: {}, buf: \"{}\", len: {}) = {}",
@@ -95,7 +95,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     }
 }
 
-pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, mode: u32) -> isize {
+pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
     let path = translated_str(token, path);
@@ -310,7 +310,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
     ret
 }
 
-pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: u32) -> isize {
+pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
     let path = translated_str(token, path);
@@ -465,11 +465,11 @@ pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
 }
 
 pub fn sys_mount(
-    p_special: *const u8,
-    p_dir: *const u8,
-    p_fstype: *const u8,
-    flags: usize,
-    data: *const u8,
+    _p_special: *const u8,
+    _p_dir: *const u8,
+    _p_fstype: *const u8,
+    _flags: usize,
+    _data: *const u8,
 ) -> isize {
     gdb_println!(
         SYSCALL_ENABLE,

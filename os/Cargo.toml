@@ -8,8 +8,7 @@ edition = "2018"
 [dependencies]
 riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
 # riscv = { path = "../dependency/riscv", features = ["inline-asm"] }
-lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-buddy_system_allocator = "0.6"
+buddy_system_allocator = "0.8"
 bitflags = "1.3.2"
 xmas-elf = "0.7.0"
 virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers" }
@@ -20,8 +19,9 @@ fu740-pac = { path = "../external_libs/fu740-pac" }
 fu740-hal = { path = "../external_libs/fu740-hal" }
 # fu740-soc = { path = "../dependency/fu740-soc" }
 fat32_fs = { path = "../fat32_fs" }
-spin = "0.7.1"
+spin = "0.9.2"
 
 [features]
 board_qemu = []
 board_fu740 = []
+local_fu740 = ["board_fu740"]

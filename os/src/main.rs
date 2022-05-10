@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(once_cell)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(btree_drain_filter)]
@@ -36,9 +37,9 @@ mod trap;
 mod loader;
 
 use crate::multicore::{get_hartid, save_hartid};
+use crate::sbi::console_putchar;
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::sbi::sbi_hart_start;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -59,41 +60,39 @@ static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 
 #[no_mangle]
 pub fn rust_main() -> ! {
+    console_putchar('a' as usize);
+    // println!("[kernel] hello this is rust_main "); 这句话加了之后会覆盖a0，必须先save_hartid
     save_hartid();
+    console_putchar('b' as usize);
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
-    if AP_CAN_INIT.load(Ordering::Relaxed) {
-        others_main(hartid);
-    }
+    // if AP_CAN_INIT.load(Ordering::Relaxed) {
+    //     others_main(hartid);
+    // }
     clear_bss();
+    console_putchar('c' as usize);
     mm::init();
     mm::remap_test();
+    console_putchar('d' as usize);
     fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
+    console_putchar('e' as usize);
     fs::list_apps();
+    console_putchar('f' as usize);
     task::add_initproc();
-    println!("[kernel] Riscv hartid {} run ", hartid);
+    println!("[kernel] (Boot Core) Riscv hartid {} run ", hartid);
     AP_CAN_INIT.store(true, Ordering::Relaxed);
-    extern "C" {
-        fn skernel();
-    }
-    for i in 0..=3 {
-        // println!("i: {}   hartid: {}" ,i,hartid);
-        if i!=hartid {
-            // println!("sbi_hart_start   hartid: {}" ,i);
-            sbi_hart_start(i, skernel as usize, 0);
-        }
-        // let mask:usize = 1 << i;
-        // sbi_send_ipi(&mask as *const usize as usize); 
-    }
+    // wakeup_other_cores(hartid);
+
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
 
 fn others_main(hartid: usize) -> ! {
-    println!("[kernel] Riscv hartid {} run ", hartid);
+    console_putchar('e' as usize);
+    println!("[kernel] (Other Cores) Riscv hartid {} run ", hartid);
     mm::init_other();
     fpu::init();
     trap::init();

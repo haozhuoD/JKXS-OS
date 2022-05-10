@@ -23,9 +23,9 @@ fn sbi_call(eid: usize, fid: usize, args: [usize; 3]) -> (usize,usize) {
     unsafe {
         asm!(
             "ecall",
-            inlateout("x10") args[0] => ret1,
-            inlateout("x11") args[1] => ret2,
-            in("x12") args[2],
+            inlateout("x10") args[0] => ret1, //a0
+            inlateout("x11") args[1] => ret2,   //a1
+            in("x12") args[2],  //a1
             in("x16") fid, //a6
             in("x17") eid, //a7
         );

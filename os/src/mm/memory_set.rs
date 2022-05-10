@@ -5,18 +5,15 @@ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::gdb_println;
-use crate::monitor::*;
 use crate::task::{
     AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
 };
 use alloc::collections::BTreeMap;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
-use lazy_static::*;
 use riscv::register::satp;
-use spin::Mutex;
+use spin::{RwLock, Lazy};
 
 extern "C" {
     fn stext();
@@ -33,13 +30,10 @@ extern "C" {
 
 pub static mut SATP: usize = 0;
 
-lazy_static! {
-    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
-        Arc::new(Mutex::new(MemorySet::new_kernel()));
-}
+pub static KERNEL_SPACE: Lazy<RwLock<MemorySet>> = Lazy::new(|| RwLock::new(MemorySet::new_kernel()));
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.lock().token()
+    KERNEL_SPACE.read().token()
 }
 
 pub struct MemorySet {
@@ -180,7 +174,7 @@ impl MemorySet {
         );
         println!("mapping memory-mapped registers Identical");
         for pair in MMIO {
-            // println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).1);
+            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).0 + (*pair).1);
             memory_set.push(
                 MapArea::new(
                     (*pair).0.into(),
@@ -193,6 +187,7 @@ impl MemorySet {
                 0,
             );
         }
+        println!("[kernel] mapping done");
         memory_set
     }
     /// Include sections in elf and trampoline,
@@ -345,11 +340,16 @@ impl MemorySet {
         memory_set
     }
     pub fn activate(&self) {
+        println!("meomry set activating...");
         let satp = self.page_table.token();
         unsafe {
+            println!("x1...");
             SATP = satp; //其他核初始化
+            println!("x2...");
             satp::write(satp);
+            println!("x3...");
             asm!("sfence.vma");
+            println!("x4...");
         }
     }
     // pub fn activate_other(&self) {
@@ -543,24 +543,33 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.lock();
+    println!("[kernel] remap test start...");
+    let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    println!("[kernel] mid_text = {:#x?}, mid_rodata = {:#x?}, mid_data = {:#x?}", mid_text, mid_rodata, mid_data);
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 1 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_rodata.floor())
         .unwrap()
         .writable(),);
+    println!("[kernel] remap test 2 passed");
+
     assert!(!kernel_space
         .page_table
         .translate(mid_data.floor())
         .unwrap()
         .executable(),);
+
+    println!("[kernel] remap test 3 passed");
+
     println!("remap_test passed!");
 }

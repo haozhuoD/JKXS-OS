@@ -3,9 +3,9 @@ use crate::config::MEMORY_END;
 use crate::gdb_println;
 use crate::monitor::*;
 use alloc::vec::Vec;
+use spin::Lazy;
+use spin::RwLock;
 use core::fmt::{self, Debug, Formatter};
-use lazy_static::*;
-use spin::Mutex;
 
 pub struct FrameTracker {
     pub ppn: PhysPageNum,
@@ -84,10 +84,8 @@ impl FrameAllocator for StackFrameAllocator {
 
 type FrameAllocatorImpl = StackFrameAllocator;
 
-lazy_static! {
-    pub static ref FRAME_ALLOCATOR: Mutex<FrameAllocatorImpl> =
-        Mutex::new(FrameAllocatorImpl::new());
-}
+pub static FRAME_ALLOCATOR: Lazy<RwLock<FrameAllocatorImpl>> =
+    Lazy::new(|| RwLock::new(FrameAllocatorImpl::new()));
 
 pub fn init_frame_allocator() {
     extern "C" {
@@ -99,18 +97,18 @@ pub fn init_frame_allocator() {
     //     PhysAddr::from(ekernel as usize).ceil().0,
     //     PhysAddr::from(MEMORY_END).floor().0
     // );
-    FRAME_ALLOCATOR.lock().init(
+    FRAME_ALLOCATOR.write().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
     );
 }
 
 pub fn frame_alloc() -> Option<FrameTracker> {
-    FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
+    FRAME_ALLOCATOR.write().alloc().map(FrameTracker::new)
 }
 
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    FRAME_ALLOCATOR.lock().dealloc(ppn);
+    FRAME_ALLOCATOR.write().dealloc(ppn);
 }
 
 #[allow(unused)]

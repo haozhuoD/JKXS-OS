@@ -1,5 +1,3 @@
-use core::arch::asm;
-
 use alloc::collections::BTreeMap;
 
 use crate::{

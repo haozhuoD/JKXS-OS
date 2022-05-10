@@ -6,7 +6,6 @@ use crate::sbi::set_timer;
 // use crate::task::{add_task, TaskControlBlock};
 // use alloc::collections::BinaryHeap;
 // use alloc::sync::Arc;
-// use lazy_static::*;
 use riscv::register::time;
 
 // pub const MSEC_PER_SEC: usize = 1000;

@@ -205,17 +205,19 @@ impl ShortDirEntry {
 		let name_len = name.len();
 		if name_len <= SHORT_NAME_LEN {
 			// to_ascii_uppercase()不会对.产生影响
-			let _ =&mut name_bytes[..name_len].copy_from_slice(name.to_ascii_uppercase().as_bytes());
+			let _ = &mut name_bytes[..name_len].copy_from_slice(name.to_ascii_uppercase().as_bytes());
 		} else {
 			// &mut name_bytes[..6].copy_from_slice(name[..6].as_bytes());
 			// name_bytes[6] = b'~';
 			// name_bytes[7] = b'1';
-			let _ =&mut name_bytes.copy_from_slice(format!("{}~1", name[..6].to_ascii_uppercase().to_string()).as_bytes());
+			let _ = &mut name_bytes.copy_from_slice(format!("{}~1", name[..6].to_ascii_uppercase().to_string()).as_bytes());
+
 		}
 
 		// 没有对拓展名做限制，长度超过3会panic
 		let mut ext_bytes = [0x20u8; SHORT_EXT_LEN];
-		let _ =&mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+		let _ = &mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+
 
 		Self{
 			name: name_bytes,
@@ -586,14 +588,14 @@ impl ShortDirEntry {
 #[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct LongDirEntry {
-	order: 			u8,
-	name1: 			[u8; 10],
-	attribute: 		u8,
-	_reserved_0: 	u8,
-	checksum: 		u8,
-	name2: 			[u8; 12],
-	_reserved_1: 	[u8; 2],
-	name3: 			[u8; 4],
+	order: 		u8,
+	name1: 		[u8; 10],
+	attribute: 	u8,
+	_reserved_0: u8,
+	checksum: 	u8,
+	name2: 		[u8; 12],
+	_reserved_1: [u8; 2],
+	name3: 		[u8; 4],
 }
 
 impl LongDirEntry {

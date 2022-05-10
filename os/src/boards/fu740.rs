@@ -53,3 +53,5 @@ pub const MMIO: &[(usize, usize)] = &[
 ];
 
 pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
+
+pub const MAX_CPU_NUM: usize = 5;

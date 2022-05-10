@@ -14,7 +14,7 @@ use crate::task::{
     suspend_current_and_run_next, SignalFlags,
 };
 use crate::timer::{get_time_us, USEC_PER_SEC, get_time_ns, NSEC_PER_SEC};
-use crate::{gdb_println, monitor::*};
+use crate::gdb_println;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -247,7 +247,7 @@ pub fn sys_brk(addr: usize) -> isize {
 }
 
 pub fn sys_mmap(
-    start: usize,
+    _start: usize,
     len: usize,
     prot: usize,
     flags: usize,
@@ -367,7 +367,7 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     0
 }
 
-pub fn sys_clock_get_time(clk_id: usize, tp: *mut u64) -> isize{
+pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize{
     // struct timespec {
     //     time_t   tv_sec;        /* seconds */
     //     long     tv_nsec;       /* nanoseconds */

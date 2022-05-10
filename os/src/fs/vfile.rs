@@ -6,8 +6,7 @@ use alloc::{sync::Arc, string::String};
 use alloc::vec::Vec;
 use bitflags::*;
 use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
-use lazy_static::*;
-use spin::Mutex;
+use spin::{Mutex, Lazy};
 
 pub struct OSFile {
     readable: bool,
@@ -87,12 +86,10 @@ impl OSFile {
     }
 }
 
-lazy_static! {
-    pub static ref ROOT_VFILE: Arc<VFile> = {
-        let fat32_fs = FAT32Manager::open(BLOCK_DEVICE.clone());
-        Arc::new(fat32_fs.get_root_vfile(&fat32_fs))
-    };
-}
+pub static ROOT_VFILE: Lazy<Arc<VFile>> = Lazy::new(|| {
+    let fat32_fs = FAT32Manager::open(BLOCK_DEVICE.clone());
+    Arc::new(fat32_fs.get_root_vfile(&fat32_fs))
+});
 
 pub fn list_apps() {
     println!("/**** APPS ****");
