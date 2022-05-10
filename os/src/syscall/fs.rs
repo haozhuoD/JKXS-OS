@@ -7,6 +7,7 @@ use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
 };
 
+use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -42,7 +43,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
                 SYSCALL_ENABLE,
                 "sys_write(fd: {}, buf: \"{}\", len: {}) = {}",
                 fd,
-                str,
+                _str,
                 len,
                 ret
             );
@@ -127,7 +128,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         dirfd,
         path,
         flags,
-        mode,
+        _mode,
         ret
     );
     ret
@@ -338,7 +339,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
         "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
         dirfd,
         path,
-        mode,
+        _mode,
         ret
     );
     ret

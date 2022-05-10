@@ -5,6 +5,7 @@ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
 use crate::gdb_println;
+use crate::monitor::{QEMU, MAPPING_ENABLE};
 use crate::task::{
     AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,

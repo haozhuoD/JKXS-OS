@@ -3,6 +3,7 @@ use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE,
 use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
 
 use crate::gdb_println;
+use crate::monitor::{QEMU, MAPPING_ENABLE};
 use alloc::{
     sync::{Arc, Weak},
     vec::Vec,

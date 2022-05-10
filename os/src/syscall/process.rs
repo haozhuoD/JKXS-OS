@@ -8,6 +8,7 @@ use crate::loader::get_usershell_binary;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
 };
+use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
@@ -379,7 +380,7 @@ pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize{
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_clock_get_time(clk_id: {}, tp = {:x?} ) = 0",
-        clk_id,
+        _clk_id,
         tp
     );
     0
