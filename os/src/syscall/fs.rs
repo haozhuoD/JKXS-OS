@@ -480,7 +480,7 @@ pub fn sys_mount(
     0
 }
 
-pub fn sys_umount(p_special: *const u8, flags: usize) -> isize {
+pub fn sys_umount(_p_special: *const u8, _flags: usize) -> isize {
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_umount(...) = {}",
