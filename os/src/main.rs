@@ -36,10 +36,11 @@ mod timer;
 mod trap;
 mod loader;
 
-use crate::multicore::{get_hartid, save_hartid};
+use spin::{RwLock, Lazy};
+
+use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use crate::sbi::console_putchar;
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -55,20 +56,16 @@ fn clear_bss() {
     }
 }
 
-static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
-// static mut BOOTHART:isize = -1;
+static BOOT_CORE_READY: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
 
 #[no_mangle]
 pub fn rust_main() -> ! {
-    console_putchar('a' as usize);
-    // println!("[kernel] hello this is rust_main "); 这句话加了之后会覆盖a0，必须先save_hartid
-    save_hartid();
-    console_putchar('b' as usize);
+    save_hartid(); // 这句话之前不能加任何函数调用，否则a0的值会被覆盖
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
-    // if AP_CAN_INIT.load(Ordering::Relaxed) {
-    //     others_main(hartid);
-    // }
+    if *(BOOT_CORE_READY.read()) { // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
+        others_main(hartid);
+    }
     clear_bss();
     console_putchar('c' as usize);
     mm::init();
@@ -83,8 +80,9 @@ pub fn rust_main() -> ! {
     console_putchar('f' as usize);
     task::add_initproc();
     println!("[kernel] (Boot Core) Riscv hartid {} run ", hartid);
-    AP_CAN_INIT.store(true, Ordering::Relaxed);
-    // wakeup_other_cores(hartid);
+
+    *(BOOT_CORE_READY.write()) = true;
+    wakeup_other_cores(hartid);
 
     task::run_tasks();
     panic!("Unreachable in rust_main!");
