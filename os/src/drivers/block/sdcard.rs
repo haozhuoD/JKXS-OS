@@ -376,7 +376,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         response[0] = self.get_response();
         /* Mask unused bits */
         response[0] &= 0x1F;
-        println!("[get_dataresponse] : {:?}", response[0]);
+        // println!("[get_dataresponse] : {:?}", response[0]);
         if response[0] != 0x05 {
             println!("[get_dataresponse] Data no accepted !!! ");
             return 0xFF;
