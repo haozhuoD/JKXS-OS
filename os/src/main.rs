@@ -39,7 +39,6 @@ mod loader;
 use spin::{RwLock, Lazy};
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
-use crate::sbi::console_putchar;
 use core::arch::global_asm;
 
 global_asm!(include_str!("entry.asm"));
@@ -85,7 +84,6 @@ pub fn rust_main() -> ! {
 }
 
 fn others_main(hartid: usize) -> ! {
-    console_putchar('e' as usize);
     mm::init_other();
     fpu::init();
     trap::init();
