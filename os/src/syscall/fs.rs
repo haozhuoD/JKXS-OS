@@ -8,7 +8,7 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
-use crate::syscall::errorno::{ENXIO, ENOENT};
+use crate::syscall::errorno::ENOENT;
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -425,7 +425,7 @@ fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isi
         offset += DIRENT_SZ;
     }
     userbuf.write(dentry_buf.as_slice());
-    f.set_offset(offset);
+    f.seek(offset);
     nread as isize
 }
 

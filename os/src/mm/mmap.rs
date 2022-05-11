@@ -66,7 +66,7 @@ impl MmapArea {
             match file {
                 FileClass::File(f) => {
                     let vaddr = VirtAddr::from(vpn).0;
-                    f.set_offset(self.offset + vaddr - VirtAddr::from(self.start_vpn).0);
+                    f.seek(self.offset + vaddr - VirtAddr::from(self.start_vpn).0);
                     if !f.readable() {
                         return -1;
                     }

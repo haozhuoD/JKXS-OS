@@ -62,20 +62,28 @@ const SYSCALL_RENAMEAT2: usize = 276;
 
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
+mod errorno;
 mod fs;
 mod process;
 mod sync;
-mod errorno;
 
 use fs::*;
 use process::*;
 use sync::*;
 
-use crate::{gdb_println, monitor::{SYSCALL_ENABLE, QEMU}};
+use crate::{
+    gdb_println,
+    monitor::{QEMU, SYSCALL_ENABLE},
+};
 
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     if syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE {
-        gdb_println!(SYSCALL_ENABLE, "\x1b[034msyscall({}), args = {:x?}\x1b[0m", syscall_id, args);
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "\x1b[034msyscall({}), args = {:x?}\x1b[0m",
+            syscall_id,
+            args
+        );
     }
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0] as *mut u8, args[1]),
@@ -84,9 +92,15 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_IOCTL => sys_ioctl(),
         SYSCALL_FCNTL => sys_fcntl(),
         SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as u32),
-        SYSCALL_UNLINKAT=> sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
-        SYSCALL_UMOUNT2=> sys_umount(args[0] as *const u8, args[1] as usize),
-        SYSCALL_MOUNT=> sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as usize, args[4] as *const u8),
+        SYSCALL_UNLINKAT => sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
+        SYSCALL_UMOUNT2 => sys_umount(args[0] as *const u8, args[1] as usize),
+        SYSCALL_MOUNT => sys_mount(
+            args[0] as *const u8,
+            args[1] as *const u8,
+            args[2] as *const u8,
+            args[3] as usize,
+            args[4] as *const u8,
+        ),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_OPENAT => sys_open_at(
             args[0] as isize,
@@ -130,7 +144,12 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         _ => {
-            gdb_println!(SYSCALL_ENABLE, "Unsupported syscall_id: {}, args = {:#x?}", syscall_id, args);
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "Unsupported syscall_id: {}, args = {:#x?}",
+                syscall_id,
+                args
+            );
             0
         }
     }

@@ -80,7 +80,7 @@ impl OSFile {
         self.inner.lock().offset
     }
 
-    pub fn set_offset(&self, offset: usize) -> usize {
+    pub fn seek(&self, offset: usize) -> usize {
         self.inner.lock().offset = offset;
         offset
     }
