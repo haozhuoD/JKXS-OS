@@ -3,12 +3,12 @@ use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE,
 use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
 
 use crate::gdb_println;
-use crate::monitor::{QEMU, MAPPING_ENABLE};
+use crate::monitor::{MAPPING_ENABLE, QEMU};
 use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use spin::{RwLock, Lazy};
+use spin::{Lazy, RwLock};
 
 pub struct RecycleAllocator {
     current: usize,
@@ -40,7 +40,6 @@ impl RecycleAllocator {
         self.recycled.push(id);
     }
 }
-
 
 static PID_ALLOCATOR: Lazy<RwLock<RecycleAllocator>> =
     Lazy::new(|| RwLock::new(RecycleAllocator::new()));

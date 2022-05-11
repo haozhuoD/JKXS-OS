@@ -1,8 +1,4 @@
-use crate::{
-    config::MMAP_BASE,
-    mm::VirtAddr,
-    task::current_process,
-};
+use crate::{config::MMAP_BASE, mm::VirtAddr, task::current_process};
 
 fn lazy_alloc_mmap_page(vaddr: usize) -> isize {
     let vpn = VirtAddr::from(vaddr).floor();

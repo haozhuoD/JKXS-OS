@@ -9,9 +9,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::{
-    loader::get_initproc_binary,
-};
+use crate::loader::get_initproc_binary;
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;

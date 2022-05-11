@@ -1,6 +1,6 @@
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
-use spin::{RwLock, Lazy};
+use spin::{Lazy, RwLock};
 
 struct Stdout;
 

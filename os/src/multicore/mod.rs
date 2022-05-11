@@ -34,7 +34,7 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
     }
     for i in hart_min..=hart_max {
         if i != boot_hartid {
-            println!("sbi_hart_start   hartid: {}" ,i);
+            println!("sbi_hart_start   hartid: {}", i);
             sbi_hart_start(i, skernel as usize, 0);
         }
     }

@@ -5,7 +5,7 @@ use crate::mm::{
 };
 
 use alloc::{sync::Arc, vec::Vec};
-use spin::{Mutex, RwLock, Lazy};
+use spin::{Lazy, Mutex, RwLock};
 use virtio_drivers::{VirtIOBlk, VirtIOHeader};
 
 #[allow(unused)]
@@ -13,9 +13,7 @@ const VIRTIO0: usize = 0x10001000;
 
 pub struct VirtIOBlock(Arc<Mutex<VirtIOBlk<'static>>>);
 
-
 static QUEUE_FRAMES: Lazy<RwLock<Vec<FrameTracker>>> = Lazy::new(|| RwLock::new(Vec::new()));
-
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {

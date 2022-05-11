@@ -2,7 +2,7 @@ use super::{ProcessControlBlock, TaskControlBlock};
 
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
-use spin::{RwLock, Lazy};
+use spin::{Lazy, RwLock};
 
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,

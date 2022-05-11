@@ -1,11 +1,10 @@
 use super::{PhysAddr, PhysPageNum};
 use crate::config::MEMORY_END;
 
-
 use alloc::vec::Vec;
+use core::fmt::{self, Debug, Formatter};
 use spin::Lazy;
 use spin::RwLock;
-use core::fmt::{self, Debug, Formatter};
 
 pub struct FrameTracker {
     pub ppn: PhysPageNum,

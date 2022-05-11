@@ -4,6 +4,7 @@ use core::slice::from_raw_parts;
 
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
+use crate::gdb_println;
 use crate::loader::get_usershell_binary;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
@@ -14,8 +15,7 @@ use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
     suspend_current_and_run_next, SignalFlags,
 };
-use crate::timer::{get_time_us, USEC_PER_SEC, get_time_ns, NSEC_PER_SEC};
-use crate::gdb_println;
+use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -150,8 +150,8 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
 
             // find a child process
             if !inner
-                .children 
-                .iter() 
+                .children
+                .iter()
                 .any(|p| pid == -1 || pid as usize == p.getpid())
             {
                 found = false;
@@ -174,7 +174,8 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     let exit_code = child.inner_exclusive_access().exit_code;
                     // ++++ release child PCB
                     if wstatus as usize != 0 {
-                        *translated_refmut(inner.memory_set.token(), wstatus) = (exit_code & 0xff) << 8;
+                        *translated_refmut(inner.memory_set.token(), wstatus) =
+                            (exit_code & 0xff) << 8;
                     }
                     gdb_println!(
                         SYSCALL_ENABLE,
@@ -370,7 +371,7 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     0
 }
 
-pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize{
+pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize {
     // struct timespec {
     //     time_t   tv_sec;        /* seconds */
     //     long     tv_nsec;       /* nanoseconds */

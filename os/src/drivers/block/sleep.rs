@@ -1,8 +1,8 @@
 // use fu740_hal::clock;
 // use fu740_hal::prelude::*;
-use fu740_pac::{Peripherals};
-use riscv::register::time;
 use fu740_hal::clock::PrciExt;
+use fu740_pac::Peripherals;
+use riscv::register::time;
 
 pub fn time_sleep(n: usize) {
     let start = time::read();

@@ -33,4 +33,3 @@ pub fn aligned_down(addr: usize) -> usize {
 pub fn is_aligned(addr: usize) -> bool {
     addr % PAGE_SIZE == 0
 }
-

@@ -1,7 +1,7 @@
 mod finfo;
-mod vfile;
 mod pipe;
 mod stdio;
+mod vfile;
 
 use crate::mm::UserBuffer;
 use alloc::sync::Arc;
@@ -21,6 +21,6 @@ pub trait File: Send + Sync {
 }
 
 pub use finfo::*;
-pub use vfile::{list_apps, open_file, OSFile, OpenFlags, path2vec};
 pub use pipe::{make_pipe, Pipe};
 pub use stdio::{Stdin, Stdout};
+pub use vfile::{list_apps, open_file, path2vec, OSFile, OpenFlags};

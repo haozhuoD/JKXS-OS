@@ -2,11 +2,11 @@ use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
-use alloc::{sync::Arc, string::String};
 use alloc::vec::Vec;
+use alloc::{string::String, sync::Arc};
 use bitflags::*;
 use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
-use spin::{Mutex, Lazy};
+use spin::{Lazy, Mutex};
 
 pub struct OSFile {
     readable: bool,
@@ -47,7 +47,9 @@ impl OSFile {
         let inner = self.inner.lock();
         let pathv = path2vec(path);
         let (readable, writable) = flags.read_write();
-        inner.vfile.find_vfile_path(pathv)
+        inner
+            .vfile
+            .find_vfile_path(pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 

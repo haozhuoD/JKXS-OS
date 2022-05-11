@@ -17,7 +17,6 @@ mod board;
 #[path = "boards/qemu.rs"]
 mod board;
 
-
 #[macro_use]
 mod console;
 mod config;
@@ -25,6 +24,7 @@ mod drivers;
 mod fpu;
 mod fs;
 mod lang_items;
+mod loader;
 mod mm;
 mod monitor;
 mod multicore;
@@ -34,9 +34,8 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
-mod loader;
 
-use spin::{RwLock, Lazy};
+use spin::{Lazy, RwLock};
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
@@ -62,7 +61,8 @@ pub fn rust_main() -> ! {
     save_hartid(); // 这句话之前不能加任何函数调用，否则a0的值会被覆盖
     let hartid = get_hartid();
     println!("[kernel] Riscv hartid {} init ", hartid);
-    if *(BOOT_CORE_READY.read()) { // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
+    if *(BOOT_CORE_READY.read()) {
+        // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
         others_main(hartid);
     }
     clear_bss();

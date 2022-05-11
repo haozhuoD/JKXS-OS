@@ -5,9 +5,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
-use crate::mm::{
-    translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE,
-};
+use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE};
 use crate::multicore::get_hartid;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};

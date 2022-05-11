@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, S_IFDIR, S_IRWXU, S_IFREG, S_IRWXG, S_IRWXO,
+    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -13,8 +13,8 @@ use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use fat32_fs::DIRENT_SZ;
 use core::mem::size_of;
+use fat32_fs::DIRENT_SZ;
 
 use super::errorno::EPERM;
 
@@ -112,11 +112,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     };
 
     let ret = {
-        if let Some(vfile) = open_file(
-            cwd.as_str(),
-            path.as_str(),
-            flags,
-        ) {
+        if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
             let mut inner = process.inner_exclusive_access();
             let fd = inner.alloc_fd();
             inner.fd_table[fd] = Some(FileClass::File(vfile));
@@ -476,20 +472,12 @@ pub fn sys_mount(
     _flags: usize,
     _data: *const u8,
 ) -> isize {
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_mount(...) = {}",
-        0
-    );
+    gdb_println!(SYSCALL_ENABLE, "sys_mount(...) = {}", 0);
     0
 }
 
 pub fn sys_umount(_p_special: *const u8, _flags: usize) -> isize {
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_umount(...) = {}",
-        0
-    );
+    gdb_println!(SYSCALL_ENABLE, "sys_umount(...) = {}", 0);
     0
 }
 
@@ -513,7 +501,9 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
-                    dirfd, path, 0
+                    dirfd,
+                    path,
+                    0
                 );
                 return 0;
             }
@@ -525,7 +515,9 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
-            dirfd, path, 0
+            dirfd,
+            path,
+            0
         );
         return 0;
     }
@@ -533,18 +525,12 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
 }
 
 pub fn sys_ioctl() -> isize {
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_ioctl(...) = 0"
-    );
+    gdb_println!(SYSCALL_ENABLE, "sys_ioctl(...) = 0");
     0
 }
 
 pub fn sys_fcntl() -> isize {
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_fcntl(...) = 0"
-    );
+    gdb_println!(SYSCALL_ENABLE, "sys_fcntl(...) = 0");
     0
 }
 
