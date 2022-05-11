@@ -29,7 +29,6 @@ mod mm;
 mod monitor;
 mod multicore;
 mod sbi;
-mod sync;
 mod syscall;
 mod task;
 mod timer;
