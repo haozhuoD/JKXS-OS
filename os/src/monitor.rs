@@ -7,7 +7,7 @@ pub const QEMU: usize = 1; // 1: open in qemu mode, 0: close in real world
 // pub const MAPPING_ENABLE: usize = MEMORY_GDB_START + 1; // (char)0x807ff001
 
 // always open channel
-pub const SYSCALL_ENABLE: usize = 0; //always open
+pub const SYSCALL_ENABLE: usize = 1; //always open
 pub const MAPPING_ENABLE: usize = 0;
 
 #[macro_export]

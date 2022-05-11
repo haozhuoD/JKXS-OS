@@ -20,6 +20,8 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use super::errorno::EPERM;
+
 pub fn sys_shutdown() -> ! {
     shutdown();
 }
@@ -130,7 +132,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         // return argc because cx.x[10] will be covered with it later
         argc as isize
     } else {
-        -1
+        -EPERM
     }
 }
 
@@ -198,9 +200,9 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                 pid,
                 wstatus,
                 options,
-                -1
+                -EPERM
             );
-            return -1;
+            return -EPERM;
         }
         suspend_current_and_run_next();
     }
@@ -212,10 +214,10 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
             process.inner_exclusive_access().signals |= flag;
             0
         } else {
-            -1
+            -EPERM
         }
     } else {
-        -1
+        -EPERM
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -241,7 +243,7 @@ pub fn sys_brk(addr: usize) -> isize {
         inner.user_heap_top = addr as usize;
         addr as isize
     } else {
-        -1
+        -EPERM
     };
     gdb_println!(SYSCALL_ENABLE, "sys_brk(addr: {:#x?}) = {:#x?}", addr, ret);
     ret

@@ -65,6 +65,7 @@ const SYSCALL_SHUTDOWN: usize = 0xffff;
 mod fs;
 mod process;
 mod sync;
+mod errorno;
 
 use fs::*;
 use process::*;
@@ -73,6 +74,9 @@ use sync::*;
 use crate::{gdb_println, monitor::{SYSCALL_ENABLE, QEMU}};
 
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
+    if syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE {
+        gdb_println!(SYSCALL_ENABLE, "\x1b[034msyscall({}), args = {:x?}\x1b[0m", syscall_id, args);
+    }
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0] as *mut u8, args[1]),
         SYSCALL_DUP => sys_dup(args[0]),

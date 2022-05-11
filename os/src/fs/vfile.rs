@@ -105,6 +105,7 @@ bitflags! {
         const WRONLY = 1 << 0;
         const RDWR = 1 << 1;
         const CREATE = 1 << 6;
+        const EXCL = 1 << 7;
         const DIRECTORY_ = 1 << 16;
         const LARGEFILE = 1 << 15;
         const CLOEXEC = 1 << 19;

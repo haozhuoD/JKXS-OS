@@ -8,12 +8,15 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
+use crate::syscall::errorno::{ENXIO, ENOENT};
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::DIRENT_SZ;
 use core::mem::size_of;
+
+use super::errorno::EPERM;
 
 const AT_FDCWD: isize = -100;
 
@@ -22,7 +25,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let process = current_process();
     let inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
-        return -1;
+        return -EPERM;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -31,7 +34,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.writable() {
-            return -1;
+            return -EPERM;
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
@@ -58,7 +61,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         ret as isize
     } else {
-        -1
+        -EPERM
     }
 }
 
@@ -67,7 +70,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let process = current_process();
     let inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
-        return -1;
+        return -EPERM;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -76,7 +79,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.readable() {
-            return -1;
+            return -EPERM;
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
@@ -92,7 +95,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         ret as isize
     } else {
-        -1
+        -EPERM
     }
 }
 
@@ -100,6 +103,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     let process = current_process();
     let token = current_user_token();
     let path = translated_str(token, path);
+    let flags = OpenFlags::from_bits(flags).unwrap();
 
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
         process.inner_exclusive_access().cwd.clone()
@@ -111,14 +115,14 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         if let Some(vfile) = open_file(
             cwd.as_str(),
             path.as_str(),
-            OpenFlags::from_bits(flags).unwrap(),
+            flags,
         ) {
             let mut inner = process.inner_exclusive_access();
             let fd = inner.alloc_fd();
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
-            -1
+            -EPERM
         }
     };
 
@@ -138,12 +142,12 @@ pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
-        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -1);
-        return -1;
+        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
+        return -EPERM;
     }
     if inner.fd_table[fd].is_none() {
-        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -1);
-        return -1;
+        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
+        return -EPERM;
     }
     inner.fd_table[fd].take();
     gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, 0);
@@ -169,10 +173,10 @@ pub fn sys_dup(fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
-        return -1;
+        return -EPERM;
     }
     if inner.fd_table[fd].is_none() {
-        return -1;
+        return -EPERM;
     }
     let new_fd = inner.alloc_fd();
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
@@ -184,10 +188,10 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     if old_fd >= inner.fd_table.len() {
-        return -1;
+        return -EPERM;
     }
     if inner.fd_table[old_fd].is_none() {
-        return -1;
+        return -EPERM;
     }
     while new_fd >= inner.fd_table.len() {
         inner.fd_table.push(None);
@@ -233,15 +237,15 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
             &mut userbuf,
         )
     } else if fd < 0 || fd >= inner.fd_table.len() as isize {
-        -1
+        -EPERM
     } else {
         if let Some(file) = inner.fd_table[fd as usize].clone() {
             match file {
                 FileClass::File(f) => fstat_inner(f, &mut userbuf),
-                _ => -1,
+                _ => -EPERM,
             }
         } else {
-            -1
+            -EPERM
         }
     };
     gdb_println!(
@@ -271,7 +275,7 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     let ret = if let Some(osfile) = open_file(&cwd, &path, OpenFlags::RDONLY) {
         fstat_inner(osfile, &mut userbuf)
     } else {
-        -1
+        -ENOENT
     };
 
     gdb_println!(
@@ -330,7 +334,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
         ) {
             0
         } else {
-            -1
+            -EPERM
         }
     };
 
@@ -386,7 +390,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
             }
             0
         } else {
-            -1
+            -EPERM
         }
     };
 
@@ -441,15 +445,15 @@ pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
             len,
         )
     } else if fd < 0 || fd >= inner.fd_table.len() as isize {
-        -1
+        -EPERM
     } else {
         if let Some(file) = inner.fd_table[fd as usize].clone() {
             match file {
                 FileClass::File(f) => getdents64_inner(f, &mut userbuf, len),
-                _ => -1,
+                _ => -EPERM,
             }
         } else {
-            -1
+            -EPERM
         }
     };
 
@@ -501,7 +505,7 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
     } else if dirfd != AT_FDCWD as i32 {
         let dirfd = dirfd as usize;
         if dirfd >= inner.fd_table.len() {
-            return -1;
+            return -EPERM;
         }
         if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
             if let Some(osfile) = osfile.find(path.as_str(), OpenFlags::empty()) {
@@ -514,7 +518,7 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
                 return 0;
             }
         }
-        return -1;
+        return -EPERM;
     }
     if let Some(osfile) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
         osfile.remove();
@@ -525,7 +529,7 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
         );
         return 0;
     }
-    return -1;
+    return -ENOENT;
 }
 
 pub fn sys_ioctl() -> isize {
@@ -552,7 +556,7 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     let mut ret = 0isize;
 
     if fd >= inner.fd_table.len() {
-        return -1;
+        return -EPERM;
     }
 
     if let Some(file) = &inner.fd_table[fd] {
@@ -562,7 +566,7 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.writable() {
-            return -1;
+            return -EPERM;
         }
 
         for i in 0..iocnt {
