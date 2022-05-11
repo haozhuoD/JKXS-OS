@@ -573,3 +573,7 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
 
     ret
 }
+
+pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) {
+    todo!();
+}
