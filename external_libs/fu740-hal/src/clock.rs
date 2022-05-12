@@ -198,7 +198,7 @@ impl ClockSetup {
                 .modify(|_, w| w.source().pll_mux());
         }
 
-        // Switch peripheral clock to HFXCLK
+        // Switch peripheral clock to HFXCLK hfpclkpll
         self.prci.hfpclkpllsel.modify(|_, w| w.source().hfclk());
 
         // Apply PLL configuration

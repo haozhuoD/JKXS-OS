@@ -227,7 +227,9 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     fn HIGH_SPEED_ENABLE(&self) {
         // 暂时设置为k210中预定的频率
         // self.spi.set_clk_rate(195_000_000,100000);
-        self.spi.set_clk_rate(60);
+        // self.prci.hfpclkpllsel.modify(|_, w| w.source().hfpclkpll());
+        // self.spi.set_clk_rate(60);
+        self.spi.set_clk_rate(2);
     }
     //todo clock rate
     fn lowlevel_init(&self) {
@@ -931,7 +933,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             /* Read data response */
             let dataresponse = self.get_dataresponse();
             if dataresponse != 0x05 {
-                println!("[write_sector] dataresponse : {:?}", dataresponse);
+                println!("[write_sector] erro dataresponse : {:?}", dataresponse);
                 self.end_cmd();
                 self.end_cmd();
                 return Err(());
@@ -1015,15 +1017,15 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         // Ok(())
     }
 }
-
-// todo 片选序号随意？！  和GPIO序号随意？！
+ 
+// todo 片选序号随意？！  和GPIO序号随意？！   单个SPI端口就可以（hifive完全集成到SPI控制寄存器里了
 /** GPIOHS GPIO number to use for controlling the SD card CS pin */
 // const SD_CS_GPIONUM: u8 = 7;
 /** CS value passed to SPI controller, this is a dummy value as SPI0_CS3 is not mapping to anything
  * in the FPIOA */
 const SD_CS: u32 = 0;
 
-// todo 如何实现如下功能
+// todo 如何实现如下功能   无需实现
 /** Connect pins to internal functions */
 // fn io_init() {
 //     fpioa::set_function(io::SPI0_SCLK, fpioa::function::SPI0_SCLK);
@@ -1070,7 +1072,9 @@ fn init_sdcard() -> SDCard<SPIImpl> {
     let num_sectors = info.CardCapacity / 512;
     assert!(num_sectors > 0);
 
-    println!("[sdcard] init sdcard finish +++!");
+    // choose hfpclkpll
+    let clocks = peripherals.PRCI.hfpclkpllsel.modify(|_, w| w.source().hfpclkpll());;
+    println!("[sdcard] init sdcard finish !");
     sd
 }
 

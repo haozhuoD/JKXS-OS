@@ -35,7 +35,7 @@ mod task;
 mod timer;
 mod trap;
 
-use spin::{Lazy, RwLock};
+use spin::{Lazy, RwLock, Mutex};
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
@@ -55,6 +55,7 @@ fn clear_bss() {
 }
 
 static BOOT_CORE_READY: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
+static BOOT_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 
 #[no_mangle]
 pub fn rust_main() -> ! {
@@ -79,6 +80,8 @@ pub fn rust_main() -> ! {
     *(BOOT_CORE_READY.write()) = true;
     wakeup_other_cores(hartid);
 
+    while *(BOOT_COUNT.lock()) != 2 {};
+    // println!("[kernel] (Boot Core) Riscv hartid {} run -----", hartid);
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
@@ -90,6 +93,12 @@ fn others_main(hartid: usize) -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     println!("[kernel] (Other Cores) Riscv hartid {} run ", hartid);
+    {
+        
+        let mut boot_count = BOOT_COUNT.lock();
+        println!("==== boot_count++ before:{:?} ==== ",boot_count);
+        *boot_count += 1 ;
+    }
     task::run_tasks();
     panic!("Unreachable in others_main!");
 }
