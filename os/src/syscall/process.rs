@@ -450,3 +450,13 @@ pub fn sys_sigreturn() -> isize {
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }
+
+pub fn sys_setpgid() -> isize {
+    gdb_println!(SYSCALL_ENABLE, "sys_setpgid(...) = 0");
+    0
+}
+
+pub fn sys_getpgid() -> isize {
+    gdb_println!(SYSCALL_ENABLE, "sys_getpgid(...) = 0");
+    0
+}
