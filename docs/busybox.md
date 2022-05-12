@@ -313,3 +313,60 @@ pub fn init() {
 ## 浮点上下文保存
 
 // TODO...
+
+
+```shell 
+root@oscomp:~/busybox_lua_testsuites# strace busybox sh test.sh
+execve("/bin/busybox", ["busybox", "sh", "test.sh"], 0x3fff960d50 /* 9 vars */) = 0
+brk(NULL)                               = 0xf8000
+faccessat(AT_FDCWD, "/etc/ld.so.preload", R_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/lib64/lp64d/tls/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/lib64/lp64d/tls", 0x3fffb9ae30, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/lib64/lp64d/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\260\261\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=2957368, ...}) = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fc874c000
+mmap(NULL, 528536, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fc86ca000
+mmap(0x3fc874a000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x7f000) = 0x3fc874a000
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/lp64d/libresolv.so.2", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\3201\0\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=460088, ...}) = 0
+mmap(NULL, 59128, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fc86bb000
+mmap(0x3fc86c8000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xc000) = 0x3fc86c8000
+close(3)                                = 0
+openat(AT_FDCWD, "/lib64/lp64d/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0\363\0\1\0\0\0\300\1\2\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=17493888, ...}) = 0
+mmap(NULL, 1065496, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x3fc85b6000
+mmap(0x3fc86b1000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xfa000) = 0x3fc86b1000
+mmap(0x3fc86b7000, 12824, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x3fc86b7000
+close(3)                                = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x3fc85b4000
+mprotect(0x3fc86b1000, 16384, PROT_READ) = 0
+mprotect(0x3fc86c8000, 4096, PROT_READ) = 0
+mprotect(0x3fc874a000, 4096, PROT_READ) = 0
+mprotect(0xf5000, 4096, PROT_READ)      = 0
+mprotect(0x3fc8767000, 4096, PROT_READ) = 0
+getuid()                                = 0
+brk(NULL)                               = 0xf8000
+brk(0x119000)                           = 0x119000
+getpid()                                = 60
+rt_sigaction(SIGCHLD, {sa_handler=0x6685c, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+getppid()                               = 57
+uname({sysname="Linux", nodename="oscomp", ...}) = 0
+newfstatat(AT_FDCWD, "/root/busybox_lua_testsuites", {st_mode=S_IFDIR|0755, st_size=1024, ...}, 0) = 0
+newfstatat(AT_FDCWD, ".", {st_mode=S_IFDIR|0755, st_size=1024, ...}, 0) = 0
+openat(AT_FDCWD, "test.sh", O_RDONLY|O_CLOEXEC) = 3
+fcntl(3, F_DUPFD_CLOEXEC, 10)           = 10
+close(3)                                = 0
+rt_sigaction(SIGINT, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGINT, {sa_handler=0x6685c, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGQUIT, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGQUIT, {sa_handler=SIG_IGN, sa_mask=~[RTMIN RT_1], sa_flags=0}, NULL, 8) = 0
+rt_sigaction(SIGTERM, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[HUP], sa_flags=SA_RESTART}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+read(10, "#!./busybox sh\n\n./lua $1\nif [ $?"..., 1023) = 115
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x3fc85b40e0) = 61
+```

@@ -106,11 +106,25 @@ bitflags! {
         const RDONLY = 0;
         const WRONLY = 1 << 0;
         const RDWR = 1 << 1;
+        const _X2 = 1 << 2;
+        const _X3 = 1 << 3;
+        const _X4 = 1 << 4;
+        const _X5 = 1 << 5;
         const CREATE = 1 << 6;
         const EXCL = 1 << 7;
-        const DIRECTORY_ = 1 << 16;
+        const _X8 = 1 << 8;
+        const _X9 = 1 << 9;
+        const _X10 = 1 << 10;
+        const _X11 = 1 << 11;
+        const _X12 = 1 << 12;
+        const _X13 = 1 << 13;
+        const _X14 = 1 << 14;
         const LARGEFILE = 1 << 15;
+        const DIRECTORY_ = 1 << 16;
+        const _X17 = 1 << 17;
+        const _X18 = 1 << 18;
         const CLOEXEC = 1 << 19;
+        const _X20 = 1 << 20;
         const DIRECTORY = 1 << 21;
     }
 }

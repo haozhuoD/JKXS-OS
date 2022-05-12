@@ -125,7 +125,9 @@ pub fn add_initproc() {
 
 pub fn perform_signals_of_current() {
     let process = current_process();
-
+    if process.inner_exclusive_access().signal_info.signal_executing { //正在执行某个信号
+        return;
+    }
     loop {
         // 取出pending的第一个signal
         let signum_option = process
