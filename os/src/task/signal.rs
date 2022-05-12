@@ -1,29 +1,47 @@
-use bitflags::*;
+use alloc::{collections::{BTreeMap, VecDeque}, string::String};
+use spin::Lazy;
 
-bitflags! {
-    pub struct SignalFlags: u32 {
-        const SIGINT    = 1 << 2;
-        const SIGILL    = 1 << 4;
-        const SIGABRT   = 1 << 6;
-        const SIGFPE    = 1 << 8;
-        const SIGSEGV   = 1 << 11;
+pub const SIGINT: usize = 2;
+pub const SIGILL: usize = 4; 
+pub const SIGABRT: usize = 6;
+pub const SIGFPE: usize = 8;
+pub const SIGSEGV: usize = 11;
+
+pub const SIGNAL_ERRORS: Lazy<BTreeMap<usize, String>> = Lazy::new(|| {
+    let mut set_ = BTreeMap::new();
+    set_.insert(SIGINT, String::from("Killed, SIGINT=2"));
+    set_.insert(SIGILL, String::from("Illegal Instruction, SIGILL=4"));
+    set_.insert(SIGABRT, String::from("Aborted, SIGABRT=6"));
+    set_.insert(SIGFPE, String::from("Erroneous Arithmetic Operation, SIGFPE=8"));
+    set_.insert(SIGSEGV, String::from("Segmentation Fault, SIGSEGV=11"));
+    set_
+});
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct SigAction {
+    pub handler: usize,
+    pub sigaction: usize,
+    pub mask: u64,
+}
+
+#[derive(Clone)]
+pub struct SigInfo {
+    pub signal_executing: bool,
+    pub pending_signals: VecDeque<usize>,
+    pub sigactions: BTreeMap<usize, SigAction>,
+}
+
+impl SigInfo {
+    pub fn new() -> Self {
+        Self {
+            signal_executing: false,
+            pending_signals: VecDeque::new(),
+            sigactions: BTreeMap::new(),
+        }
     }
 }
 
-impl SignalFlags {
-    pub fn check_error(&self) -> Option<(i32, &'static str)> {
-        if self.contains(Self::SIGINT) {
-            Some((-2, "Killed, SIGINT=2"))
-        } else if self.contains(Self::SIGILL) {
-            Some((-4, "Illegal Instruction, SIGILL=4"))
-        } else if self.contains(Self::SIGABRT) {
-            Some((-6, "Aborted, SIGABRT=6"))
-        } else if self.contains(Self::SIGFPE) {
-            Some((-8, "Erroneous Arithmetic Operation, SIGFPE=8"))
-        } else if self.contains(Self::SIGSEGV) {
-            Some((-11, "Segmentation Fault, SIGSEGV=11"))
-        } else {
-            None
-        }
-    }
+pub fn is_signal_valid(signum: usize) -> bool {
+    signum >= 1 && signum < 64
 }
