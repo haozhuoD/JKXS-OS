@@ -64,6 +64,7 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
+const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
@@ -163,4 +164,8 @@ pub fn sys_brk(addr: usize) -> isize {
 pub fn sys_shutdown() -> ! {
     syscall(SYSCALL_SHUTDOWN, [0, 0, 0, 0, 0, 0]);
     panic!("Shutdown");
+}
+
+pub fn sys_toggle_trace() -> isize {
+    syscall(SYSCALL_TOGGLE_TRACE, [0, 0, 0, 0, 0, 0])
 }

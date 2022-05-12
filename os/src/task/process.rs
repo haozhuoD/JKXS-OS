@@ -53,12 +53,16 @@ impl ProcessControlBlockInner {
         self.memory_set.token()
     }
 
-    pub fn alloc_fd(&mut self) -> usize {
-        if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
-            self.fd_table.push(None);
-            self.fd_table.len() - 1
+    pub fn alloc_fd(&mut self, minfd: usize) -> usize {
+        let mut i = minfd;
+        loop {
+            while i >= self.fd_table.len() {
+                self.fd_table.push(None);
+            }
+            if self.fd_table[i].is_none() {
+                return i;
+            }
+            i += 1;
         }
     }
 

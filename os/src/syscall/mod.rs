@@ -62,6 +62,7 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
+const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod errorno;
@@ -92,7 +93,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_DUP3 => sys_dup3(args[0], args[1]),
         SYSCALL_IOCTL => sys_ioctl(),
-        SYSCALL_FCNTL => sys_fcntl(),
+        SYSCALL_FCNTL => sys_fcntl(args[0], args[1] as _, args[2]),
         SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
         SYSCALL_UMOUNT2 => sys_umount(args[0] as *const u8, args[1] as usize),
@@ -150,6 +151,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_SHUTDOWN => sys_shutdown(),
+        SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

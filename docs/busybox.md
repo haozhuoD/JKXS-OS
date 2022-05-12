@@ -120,7 +120,7 @@ New value = (void *) 0x4bb9bcb08
 ## 关于进程栈初始化 参考ultraos
 
 ```c
-    // exec will push following arguments to user stack:
+// exec will push following arguments to user stack:
     // STACK TOP
     //      argc
     //      *argv [] (with NULL as the end) 8 bytes each
@@ -314,8 +314,9 @@ pub fn init() {
 
 // TODO...
 
+## busybox sh test.sh执行流
 
-```shell 
+```shell
 root@oscomp:~/busybox_lua_testsuites# strace busybox sh test.sh
 execve("/bin/busybox", ["busybox", "sh", "test.sh"], 0x3fff960d50 /* 9 vars */) = 0
 brk(NULL)                               = 0xf8000
@@ -370,3 +371,5 @@ rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[HUP], sa_flags=SA_RESTART}, {
 read(10, "#!./busybox sh\n\n./lua $1\nif [ $?"..., 1023) = 115
 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x3fc85b40e0) = 61
 ```
+
+目前观察到是fnctl没有返回正确的值（因为是假实现）。

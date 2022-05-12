@@ -16,7 +16,7 @@ const LINE_START: &str = ">> ";
 use alloc::string::String;
 use alloc::vec::Vec;
 use user_lib::console::getchar;
-use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags};
+use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace};
 
 #[derive(Debug)]
 struct ProcessArguments {
@@ -74,7 +74,7 @@ impl ProcessArguments {
     }
 }
 
-fn preliminary_test() -> ! {
+fn preliminary_test() {
     let mut preliminary_apps = Vec::new();
     preliminary_apps.push("times\0");
     preliminary_apps.push("gettimeofday\0");
@@ -110,8 +110,6 @@ fn preliminary_test() -> ! {
     preliminary_apps.push("chdir\0");
     preliminary_apps.push("close\0");
 
-    
-
     for app_name in preliminary_apps {
         let pid = fork();
         if pid == 0 {
@@ -121,13 +119,12 @@ fn preliminary_test() -> ! {
             waitpid(pid as usize, &mut exit_code);
         }
     };
-    
-    shutdown()
 }
 
 // #[no_mangle]
 // pub fn main() -> i32 {
 //     preliminary_test();
+//     shutdown()
 // }
 
 #[no_mangle]
@@ -141,6 +138,17 @@ pub fn main() -> i32 {
             LF | CR => {
                 println!("");
                 if !line.is_empty() {
+                    if line == "trace" {
+                        toggle_trace();
+                        line.clear();
+                        print!("{}", LINE_START);
+                        continue;
+                    } else if line == "usertests" {
+                        preliminary_test();
+                        line.clear();
+                        print!("{}", LINE_START);
+                        continue;
+                    };
                     let splited: Vec<_> = line.as_str().split('|').collect();
                     let process_arguments_list: Vec<_> = splited
                         .iter()

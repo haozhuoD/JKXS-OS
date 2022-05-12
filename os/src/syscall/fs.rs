@@ -9,7 +9,7 @@ use crate::mm::{
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::syscall::errorno::ENOENT;
-use crate::task::{current_process, current_user_token};
+use crate::task::{current_process, current_task, current_user_token, FdTable};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -114,7 +114,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     let ret = {
         if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
             let mut inner = process.inner_exclusive_access();
-            let fd = inner.alloc_fd();
+            let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
@@ -155,9 +155,9 @@ pub fn sys_pipe(pipe: *mut u32) -> isize {
     let token = current_user_token();
     let mut inner = process.inner_exclusive_access();
     let (pipe_read, pipe_write) = make_pipe();
-    let read_fd = inner.alloc_fd();
+    let read_fd = inner.alloc_fd(0);
     inner.fd_table[read_fd] = Some(FileClass::Abs(pipe_read));
-    let write_fd = inner.alloc_fd();
+    let write_fd = inner.alloc_fd(0);
     inner.fd_table[write_fd] = Some(FileClass::Abs(pipe_write));
     *translated_refmut(token, pipe) = read_fd as u32;
     *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd as u32;
@@ -174,7 +174,7 @@ pub fn sys_dup(fd: usize) -> isize {
     if inner.fd_table[fd].is_none() {
         return -EPERM;
     }
-    let new_fd = inner.alloc_fd();
+    let new_fd = inner.alloc_fd(0);
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
     gdb_println!(SYSCALL_ENABLE, "sys_dup(fd: {}) = {}", fd, new_fd);
     new_fd as isize
@@ -529,9 +529,46 @@ pub fn sys_ioctl() -> isize {
     0
 }
 
-pub fn sys_fcntl() -> isize {
-    gdb_println!(SYSCALL_ENABLE, "sys_fcntl(...) = 0");
-    0
+pub const F_DUPFD: u32 = 0;
+pub const F_GETFD: u32 = 1;
+pub const F_SETFD: u32 = 2;
+pub const F_GETFL: u32 = 3;
+pub const F_DUPFD_CLOEXEC: u32 = 1030;
+
+pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
+    let process = current_process();
+    let mut inner = process.inner_exclusive_access();
+
+    if fd > inner.fd_table.len() {
+        return -1;
+    }
+
+    let ret = {
+        if let Some(file) = &mut inner.fd_table[fd] {
+            match cmd {
+                F_DUPFD_CLOEXEC | F_DUPFD => {
+                    let new_fd = inner.alloc_fd(arg);
+                    inner.fd_table[new_fd] = inner.fd_table[fd].clone();
+                    new_fd as isize
+                }
+                F_GETFD | F_SETFD => 0,
+                _ => 0, // WARNING!!!
+            }
+        } else {
+            -1
+        }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_fcntl(fd = {}, cmd = {}, arg = {}) = {}",
+        fd,
+        cmd,
+        arg,
+        ret
+    );
+
+    ret
 }
 
 pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {

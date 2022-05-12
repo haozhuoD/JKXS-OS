@@ -26,6 +26,11 @@ pub fn sys_shutdown() -> ! {
     shutdown();
 }
 
+pub fn sys_toggle_trace() -> isize {
+    unsafe {*(SYSCALL_ENABLE as *mut u8) = 1 - *(SYSCALL_ENABLE as *mut u8)};
+    0
+}
+
 pub fn sys_exit(exit_code: i32) -> ! {
     gdb_println!(SYSCALL_ENABLE, "sys_exit(exit_code: {} ) = ?", exit_code);
     exit_current_and_run_next(exit_code, false);
