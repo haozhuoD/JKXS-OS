@@ -343,6 +343,33 @@ impl MemorySet {
                     .copy_from_slice(src_ppn.get_bytes_array());
             }
         }
+        // 复制mmap区域
+        for area in user_space.mmap_areas.iter() {
+            // 建立新的mmap_area，有vpn范围和dataframes（没有数据）
+            let new_area = MmapArea::from_another(area);
+            // 建立页表映射（物理页帧自动分配），同时添加dataframes
+            memory_set.push_and_map_mmap_area(new_area);
+            // 拷贝数据
+            for vpn in area.data_frames.keys() {
+                let src_ppn = user_space.translate(*vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
+                dst_ppn
+                    .get_bytes_array()
+                    .copy_from_slice(src_ppn.get_bytes_array());
+            }
+        }
+        // 复制heap区域
+        for &vpn in user_space.heap_frames.keys() {
+            let frame = frame_alloc().unwrap();
+            let ppn = frame.ppn;
+            memory_set.heap_frames.insert(vpn, frame_alloc().unwrap());
+            memory_set.page_table.map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            // copy data from another space
+            let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            ppn
+                .get_bytes_array()
+                .copy_from_slice(src_ppn.get_bytes_array());
+        }
         memory_set
     }
     pub fn activate(&self) {
@@ -353,12 +380,6 @@ impl MemorySet {
             asm!("sfence.vma");
         }
     }
-    // pub fn activate_other(&self) {
-    //     unsafe {
-    //         satp::write(SATP);
-    //         asm!("sfence.vma");
-    //     }
-    // }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
@@ -369,6 +390,13 @@ impl MemorySet {
 
     /// 插入一个mmap区域
     pub fn push_mmap_area(&mut self, mmap_area: MmapArea) {
+        self.mmap_areas.push(mmap_area);
+    }
+
+    /// 插入一个mmap区域并将mmap_area添加到页表
+    pub fn push_and_map_mmap_area(&mut self, mmap_area: MmapArea) {
+        // 添加页表和dataframes
+        mmap_area.map_all(&mut self.page_table);
         self.mmap_areas.push(mmap_area);
     }
 

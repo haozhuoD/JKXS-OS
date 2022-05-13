@@ -9,7 +9,7 @@ use crate::mm::{
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::syscall::errorno::ENOENT;
-use crate::task::{current_process, current_task, current_user_token, FdTable};
+use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
