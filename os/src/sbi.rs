@@ -56,12 +56,22 @@ pub fn sbi_send_ipi(mask: usize) {
     sbi_call(SBI_SEND_IPI, NONE, [mask, 0, 0]);
 }
 
-pub fn sbi_hart_start(hartid: usize, start_addr: usize, a1: usize) -> usize {
-    sbi_call(SBI_HSM_EXT, HSM_HART_START_FUNID, [hartid, start_addr, a1]).0
+pub fn sbi_hart_start(hartid: usize, start_addr: usize, a1: usize) -> isize {
+    let (error, value) = sbi_call(SBI_HSM_EXT, HSM_HART_START_FUNID, [hartid, start_addr, a1]);
+    if error!=0 {
+        error as isize
+    } else {
+        value as isize
+    }
 }
 
-pub fn sbi_get_hart_status(hartid: usize) -> usize {
-    sbi_call(SBI_HSM_EXT, HSM_HART_GET_STATUS_FUNID, [hartid, 0, 0]).0
+pub fn sbi_get_hart_status(hartid: usize) -> isize {
+    let (error, value) = sbi_call(SBI_HSM_EXT, HSM_HART_GET_STATUS_FUNID, [hartid, 0, 0]);
+    if error!=0 {
+        error as isize
+    } else {
+        value as isize
+    }
 }
 
 

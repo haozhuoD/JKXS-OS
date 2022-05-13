@@ -179,7 +179,7 @@ pub fn log(log_level: LogLevel, args: fmt::Arguments, file: &'static str, line: 
 #[macro_export]
 macro_rules! verbose {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::log(crate::sbi::LogLevel::Verbose, format_args!($fmt $(, $($arg)+)?), file!(), line!())
+        $crate::console::log(crate::console::LogLevel::Verbose, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
 
@@ -192,7 +192,7 @@ macro_rules! verbose {
 #[macro_export]
 macro_rules! debug {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::log(crate::sbi::LogLevel::Debug, format_args!($fmt $(, $($arg)+)?), file!(), line!())
+        $crate::console::log(crate::console::LogLevel::Debug, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
 
@@ -244,7 +244,7 @@ macro_rules! error {
 #[macro_export]
 macro_rules! fatal {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::sbi::log(crate::console::LogLevel::Fatal, format_args!($fmt $(, $($arg)+)?), file!(), line!())
+        $crate::console::log(crate::console::LogLevel::Fatal, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
 
