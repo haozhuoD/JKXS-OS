@@ -8,7 +8,6 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
-use crate::syscall::errorno::ENOENT;
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -16,7 +15,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::EPERM;
+use super::errorno::{EPERM, ENOENT, EBADF};
 
 const AT_FDCWD: isize = -100;
 
@@ -366,7 +365,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
                 let pathv = path2vec(&path);
                 let mut cwdv: Vec<_> = path2vec(&old_cwd);
 
-                cwdv.pop();
+                // cwdv.pop();
                 for &path_element in pathv.iter() {
                     if path_element == "." || path_element == "" {
                         continue;
@@ -481,7 +480,7 @@ pub fn sys_umount(_p_special: *const u8, _flags: usize) -> isize {
     0
 }
 
-pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
+pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
     let inner = process.inner_exclusive_access();
@@ -490,7 +489,7 @@ pub fn sys_unlinkat(dirfd: i32, path: *const u8, _: u32) -> isize {
     // 如果path是绝对路径，则dirfd被忽略
     if path.starts_with("/") {
         base_path = "/";
-    } else if dirfd != AT_FDCWD as i32 {
+    } else if dirfd != AT_FDCWD {
         let dirfd = dirfd as usize;
         if dirfd >= inner.fd_table.len() {
             return -EPERM;
@@ -613,4 +612,66 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
 
 pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) {
     todo!();
+}
+
+pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.inner_exclusive_access();
+    let path = translated_str(token, path);
+    let mut base_path = inner.cwd.as_str();
+    // 如果path是绝对路径，则dirfd被忽略
+    if path.starts_with("/") {
+        base_path = "/";
+    } else if dirfd != AT_FDCWD {
+        let dirfd = dirfd as usize;
+        if dirfd >= inner.fd_table.len() {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+                dirfd,
+                path,
+                -EBADF
+            );
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+            if let Some(_) = osfile.find(path.as_str(), OpenFlags::empty()) {
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+                    dirfd,
+                    path,
+                    0
+                );
+                return 0;
+            }
+        }
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+            dirfd,
+            path,
+            -ENOENT
+        );
+        return -ENOENT;
+    }
+    if let Some(_) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+            dirfd,
+            path,
+            0
+        );
+        return 0;
+    }
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+        dirfd,
+        path,
+        -ENOENT
+    );
+    return -ENOENT;
 }

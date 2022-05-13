@@ -11,12 +11,13 @@ const LF: u8 = 0x0au8;
 const CR: u8 = 0x0du8;
 const DL: u8 = 0x7fu8;
 const BS: u8 = 0x08u8;
+const HT: u8 = 0x09u8;
 const LINE_START: &str = ">> ";
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use user_lib::console::getchar;
-use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace};
+use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace, chdir};
 
 #[derive(Debug)]
 struct ProcessArguments {
@@ -154,6 +155,7 @@ pub fn main() -> i32 {
                         .iter()
                         .map(|&cmd| ProcessArguments::new(cmd))
                         .collect();
+                    // println!("process_arguments_list: {:?}", process_arguments_list);
                     let mut valid = true;
                     for (i, process_args) in process_arguments_list.iter().enumerate() {
                         if i == 0 {
@@ -171,6 +173,25 @@ pub fn main() -> i32 {
                     }
                     if process_arguments_list.len() == 1 {
                         valid = true;
+                        let arg_copy = &process_arguments_list[0].args_copy;
+                        if arg_copy[0] == "cd\0" {
+                            let path = match arg_copy.len() {
+                                1 => "/\0",
+                                2 => arg_copy[1].as_str(),
+                                _ => {
+                                    println!("cd: too many arguments");
+                                    line.clear();
+                                    print!("{}", LINE_START);
+                                    continue;
+                                }
+                            };
+                            if chdir(path) == -1 {
+                                println!("cd: {}: No such file or directory", path);
+                            }
+                            line.clear();
+                            print!("{}", LINE_START);
+                            continue;
+                        }
                     }
                     if !valid {
                         println!("Invalid command: Inputs/Outputs cannot be correctly binded!");
@@ -267,6 +288,13 @@ pub fn main() -> i32 {
                     print!(" ");
                     print!("{}", BS as char);
                     line.pop();
+                }
+            }
+            HT => {
+                if !line.is_empty() && "busybox".starts_with(&line) {
+                    let line_add = "busybox".trim_start_matches(&line);
+                    print!("{}", line_add);
+                    line.push_str(line_add);
                 }
             }
             _ => {

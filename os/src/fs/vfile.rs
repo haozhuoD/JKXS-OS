@@ -144,6 +144,7 @@ impl OpenFlags {
 }
 
 pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+    println!("cwd: {}, path: {}", cwd, path);
     let cur_vfile = {
         if cwd == "/" {
             ROOT_VFILE.clone()
@@ -152,7 +153,6 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
             ROOT_VFILE.find_vfile_path(wpath).unwrap()
         }
     };
-
     let (readable, writable) = flags.read_write();
 
     let mut pathv = path2vec(path);

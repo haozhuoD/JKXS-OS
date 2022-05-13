@@ -169,3 +169,7 @@ pub fn sys_shutdown() -> ! {
 pub fn sys_toggle_trace() -> isize {
     syscall(SYSCALL_TOGGLE_TRACE, [0, 0, 0, 0, 0, 0])
 }
+
+pub fn sys_chdir(path: &str) -> isize {
+    syscall(SYSCALL_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
+}

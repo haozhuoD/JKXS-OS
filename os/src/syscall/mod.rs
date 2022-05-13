@@ -95,7 +95,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_IOCTL => sys_ioctl(),
         SYSCALL_FCNTL => sys_fcntl(args[0], args[1] as _, args[2]),
         SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as u32),
-        SYSCALL_UNLINKAT => sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
+        SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_UMOUNT2 => sys_umount(args[0] as *const u8, args[1] as usize),
         SYSCALL_MOUNT => sys_mount(
             args[0] as *const u8,
@@ -120,6 +120,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         // SYSCALL_SENDFILE => sys_sendfile(),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *mut u8, args[2] as *mut u8),
         SYSCALL_FSTAT => sys_fstat(args[0] as isize, args[1] as *mut u8),
+        SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as *const u8, args[2] as usize, args[3] as isize),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as i32),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *mut usize),

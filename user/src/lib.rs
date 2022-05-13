@@ -193,3 +193,7 @@ pub fn shutdown() -> ! {
 pub fn toggle_trace() -> isize {
     sys_toggle_trace()
 }
+
+pub fn chdir(path: &str) -> isize {
+    sys_chdir(path)
+}
