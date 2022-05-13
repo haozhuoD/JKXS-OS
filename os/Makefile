@@ -77,7 +77,7 @@ run: build
 ifeq ($(BOARD),qemu)
 	qemu-system-riscv64 \
 		-machine virt \
-		-m 8G	\
+		-m 1G	\
 		-nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
