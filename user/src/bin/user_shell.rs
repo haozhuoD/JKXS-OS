@@ -122,6 +122,10 @@ fn preliminary_test() {
     };
 }
 
+pub fn print_linestart(cwd: &str) {
+    print!("root@JKXS-OS:{} # ",cwd);
+}
+
 // #[no_mangle]
 // pub fn main() -> i32 {
 //     preliminary_test();
@@ -132,7 +136,8 @@ fn preliminary_test() {
 pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
-    print!("{}", LINE_START);
+    let mut cwd = String::from("/");
+    print_linestart(cwd.as_str());
     loop {
         let c = getchar();
         match c {
@@ -142,12 +147,12 @@ pub fn main() -> i32 {
                     if line == "trace" {
                         toggle_trace();
                         line.clear();
-                        print!("{}", LINE_START);
+                        print_linestart(cwd.as_str());
                         continue;
                     } else if line == "usertests" {
                         preliminary_test();
                         line.clear();
-                        print!("{}", LINE_START);
+                        print_linestart(cwd.as_str());
                         continue;
                     };
                     let splited: Vec<_> = line.as_str().split('|').collect();
@@ -176,20 +181,43 @@ pub fn main() -> i32 {
                         let arg_copy = &process_arguments_list[0].args_copy;
                         if arg_copy[0] == "cd\0" {
                             let path = match arg_copy.len() {
-                                1 => "/\0",
+                                1 => {
+                                    cwd = String::from("/");
+                                    "/\0"
+                                },
                                 2 => arg_copy[1].as_str(),
                                 _ => {
                                     println!("cd: too many arguments");
                                     line.clear();
-                                    print!("{}", LINE_START);
+                                    print_linestart(cwd.as_str());
                                     continue;
                                 }
                             };
                             if chdir(path) == -1 {
                                 println!("cd: {}: No such file or directory", path);
+                            } else {
+                                let old_cwd = cwd.clone();
+                                let mut cwdv: Vec<&str> = old_cwd.as_str().split("/").filter(|x| *x != "").collect();
+                                let pathv: Vec<&str> = path.split("/")
+                                    .map(|x| x.trim_end_matches("\0"))
+                                    .filter(|x| *x != "").collect();
+                                for &path_element in pathv.iter() {
+                                    if path_element == "." {
+                                        continue;
+                                    } else if path_element == ".." {
+                                        cwdv.pop();
+                                    } else {
+                                        cwdv.push(path_element);
+                                    }
+                                }
+                                cwd = String::from("/");
+                                for &cwd_element in cwdv.iter() {
+                                    cwd.push_str(cwd_element);
+                                    cwd.push('/');
+                                }
                             }
                             line.clear();
-                            print!("{}", LINE_START);
+                            print_linestart(cwd.as_str());
                             continue;
                         }
                     }
@@ -280,7 +308,7 @@ pub fn main() -> i32 {
                     }
                     line.clear();
                 }
-                print!("{}", LINE_START);
+                print_linestart(cwd.as_str());
             }
             BS | DL => {
                 if !line.is_empty() {

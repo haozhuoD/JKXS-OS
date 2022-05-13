@@ -77,7 +77,7 @@ impl Drop for BlockCache {
     }
 }
 
-const BLOCK_CACHE_SIZE: usize = 4096;
+const BLOCK_CACHE_SIZE: usize = 10;
 
 pub struct BlockCacheManager {
     start_sector: usize,
@@ -146,6 +146,10 @@ impl BlockCacheManager {
 
     pub fn drop_all(&mut self) {
         self.queue.clear();
+    }
+
+    pub fn sync_all(&self) {
+        self.queue.iter().for_each(|pair| pair.1.write().sync());
     }
 }
 
@@ -234,4 +238,9 @@ pub fn set_start_sector(start_sector: usize) {
 pub fn write_to_dev() {
     INFO_BLOCK_CACHE_MANAGER.write().drop_all();
     DATA_BLOCK_CACHE_MANAGER.write().drop_all();
+}
+
+pub fn sync_all() {
+    INFO_BLOCK_CACHE_MANAGER.write().sync_all();
+    DATA_BLOCK_CACHE_MANAGER.write().sync_all();
 }
