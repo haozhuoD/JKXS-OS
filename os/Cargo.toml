@@ -22,6 +22,12 @@ fat32_fs = { path = "../fat32_fs" }
 spin = "0.9.2"
 
 [features]
+min_log_level_verbose = []
+min_log_level_debug = []
+min_log_level_info = []
+min_log_level_warning = []
+min_log_level_error = []
+min_log_level_fatal = []
 board_qemu = []
 board_fu740 = []
-local_fu740 = ["board_fu740"]
+local_fu740 = ["board_fu740","min_log_level_info"]
