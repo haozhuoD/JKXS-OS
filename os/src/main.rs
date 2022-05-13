@@ -59,8 +59,7 @@ static BOOT_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 pub fn rust_main() -> ! {
     save_hartid(); // 这句话之前不能加任何函数调用，否则a0的值会被覆盖
     let hartid = get_hartid();
-    println!("[kernel] Riscv hartid {} init ", hartid);
-    info!("[info] Kernel hello world!");
+    info!("Riscv hartid {} init ", hartid);
     if *(BOOT_CORE_READY.read()) {
         // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
         others_main(hartid);
@@ -74,13 +73,12 @@ pub fn rust_main() -> ! {
     timer::set_next_trigger();
     fs::list_apps();
     task::add_initproc();
-    println!("[kernel] (Boot Core) Riscv hartid {} run ", hartid);
+    info!("(Boot Core) Riscv hartid {} run ", hartid);
 
     *(BOOT_CORE_READY.write()) = true;
     wakeup_other_cores(hartid);
 
     while *(BOOT_COUNT.lock()) != 2 {};
-    // println!("[kernel] (Boot Core) Riscv hartid {} run -----", hartid);
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
@@ -91,11 +89,11 @@ fn others_main(hartid: usize) -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    println!("[kernel] (Other Cores) Riscv hartid {} run ", hartid);
+    info!("(Other Cores) Riscv hartid {} run ", hartid);
     {
         
         let mut boot_count = BOOT_COUNT.lock();
-        println!("==== boot_count++ before:{:?} ==== ",boot_count);
+        // println!("==== boot_count++ before:{:?} ==== ",boot_count);
         *boot_count += 1 ;
     }
     task::run_tasks();

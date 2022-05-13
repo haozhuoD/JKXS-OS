@@ -71,7 +71,6 @@ pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| {
 });
 
 pub fn run_tasks() {
-    warning!("[kernel] Riscv hartid {} run_tasks() +++++++++++++++++ ", get_hartid());
     loop {
         let mut processor = PROCESSORS[get_hartid()].inner_exclusive_access();
 

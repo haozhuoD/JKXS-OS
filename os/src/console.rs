@@ -24,7 +24,7 @@ pub fn print(args: fmt::Arguments) {
 
 // 有锁print
 pub fn lock_console_and_print(args: fmt::Arguments) {
-    let _ = CONSOLE.write();
+    let lock = CONSOLE.write();
     print(args);
 }
 
@@ -164,9 +164,9 @@ fn min_log_level() -> LogLevel {
 /// *Don't call this function. Use marcos instead.*
 pub fn log(log_level: LogLevel, args: fmt::Arguments, file: &'static str, line: u32) {
     if log_level >= min_log_level() {
-        let _ = CONSOLE.write();
+        let lock = CONSOLE.write();
         set_log_color(log_level);
-        print(format_args!("{} {:>#30} @ {:<#5} : {:#?} \n", log_level, file, line , args));
+        print(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line , args));
         reset_color();
     }
 }
@@ -253,8 +253,8 @@ macro_rules! fatal {
 /// *Don't call this function. Use marcos instead.*
 pub fn monitor_log(args: fmt::Arguments) {
     //可以在这里设置monitor打印的颜色
-    let _ = CONSOLE.write();
-    set_color(FG_B_BLACK,    BG_DEFAULT);
+    let lock = CONSOLE.write();
+    set_color(FG_B_MAGENTA,    BG_DEFAULT);
     print(format_args!("[syscall] : {:#?}",args));
     // print(args);
     reset_color();
