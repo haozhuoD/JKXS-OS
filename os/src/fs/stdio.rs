@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use super::File;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
@@ -7,6 +9,11 @@ pub struct Stdin;
 
 pub struct Stdout;
 
+const LF: usize = 0x0a;
+const CR: usize = 0x0d;
+// const DL: usize = 0x7f;
+// const BS: usize = 0x08;
+
 impl File for Stdin {
     fn readable(&self) -> bool {
         true
@@ -15,24 +22,32 @@ impl File for Stdin {
         false
     }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
-        assert_eq!(user_buf.len(), 1);
+        // assert_eq!(user_buf.len(), 1);
         // busy loop
         let mut c: usize;
-        loop {
+        let mut count: usize = 0;
+        let mut buf = Vec::new();
+        while count < user_buf.len() {
             c = console_getchar();
-            // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
-            if c == 0 || c > 255 {
-                suspend_current_and_run_next();
-                continue;
-            } else {
-                break;
+            match c {
+                // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
+                0 | 256.. => {
+                    suspend_current_and_run_next();
+                    continue;
+                }
+                LF | CR => {
+                    buf.push(CR as u8);
+                    count += 1;
+                    break;
+                }
+                _ => {
+                    buf.push(c as u8);
+                    count += 1;
+                }
             }
         }
-        let ch = c as u8;
-        unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
-        }
-        1
+        user_buf.write(buf.as_slice());
+        count
     }
     fn write(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot write to stdin!");
