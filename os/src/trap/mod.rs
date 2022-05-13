@@ -5,8 +5,8 @@ use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
-    check_signals_of_current, current_add_signal, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, exit_current_and_run_next, suspend_current_and_run_next, SignalFlags,
+    current_add_signal, current_trap_cx, current_trap_cx_user_va, current_user_token,
+    perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -79,7 +79,7 @@ pub fn trap_handler() -> ! {
                 for (i, v) in cx.x.iter().enumerate() {
                     println!("[kernel] x[{}] = {:#x?}", i, v);
                 }
-                current_add_signal(SignalFlags::SIGSEGV);
+                current_add_signal(SIGSEGV);
             }
             unsafe {
                 asm!("sfence.vma");
@@ -87,7 +87,7 @@ pub fn trap_handler() -> ! {
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            current_add_signal(SignalFlags::SIGILL);
+            current_add_signal(SIGILL);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
@@ -101,11 +101,8 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    // check signals
-    if let Some((errno, msg)) = check_signals_of_current() {
-        println!("[kernel] {}", msg);
-        exit_current_and_run_next(errno, false);
-    }
+    // 处理当前进程的信号
+    perform_signals_of_current();
     trap_return();
 }
 

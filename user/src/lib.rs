@@ -189,3 +189,7 @@ pub fn brk(addr: usize) -> isize {
 pub fn shutdown() -> ! {
     sys_shutdown()
 }
+
+pub fn toggle_trace() -> isize {
+    sys_toggle_trace()
+}

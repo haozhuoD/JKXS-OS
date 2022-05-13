@@ -39,6 +39,8 @@ const SYSCALL_KILL: usize = 129;
 const SYSCALL_SIGACTION: usize = 134;
 const SYSCALL_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
+const SYSCALL_SETPGID: usize = 154;
+const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GETRUSAGE: usize = 165;
 const SYSCALL_GETTIMEOFDAY: usize = 169;
@@ -60,6 +62,7 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
+const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod errorno;
@@ -90,7 +93,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_DUP3 => sys_dup3(args[0], args[1]),
         SYSCALL_IOCTL => sys_ioctl(),
-        SYSCALL_FCNTL => sys_fcntl(),
+        SYSCALL_FCNTL => sys_fcntl(args[0], args[1] as _, args[2]),
         SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as i32, args[1] as *const u8, args[2] as u32),
         SYSCALL_UMOUNT2 => sys_umount(args[0] as *const u8, args[1] as usize),
@@ -113,7 +116,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETDENTS64 => sys_getdents64(args[0] as isize, args[1] as *mut u8, args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
-        SYSCALL_WRITEV => sys_writev(args[0], args[1] as *mut crate::fs::IOVec, args[2]),
+        SYSCALL_WRITEV => sys_writev(args[0], args[1] as _, args[2]),
         // SYSCALL_SENDFILE => sys_sendfile(),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *mut u8, args[2] as *mut u8),
         SYSCALL_FSTAT => sys_fstat(args[0] as isize, args[1] as *mut u8),
@@ -124,7 +127,11 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CLOCK_GETTIME => sys_clock_get_time(args[0], args[1] as *mut u64),
         SYSCALL_SCHED_YIELD => sys_yield(),
         SYSCALL_KILL => sys_kill(args[0], args[1] as u32),
+        SYSCALL_SIGACTION => sys_sigaction(args[0], args[1] as _, args[2] as _),
+        SYSCALL_SIGRETURN => sys_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut usize),
+        SYSCALL_SETPGID => sys_setpgid(),
+        SYSCALL_GETPGID => sys_getpgid(),
         SYSCALL_UNAME => sys_uname(args[0] as *mut u8),
         SYSCALL_GETTIMEOFDAY => sys_get_time(args[0] as *mut u64, args[1]),
         SYSCALL_GETPID => sys_getpid(),
@@ -144,6 +151,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_SHUTDOWN => sys_shutdown(),
+        SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

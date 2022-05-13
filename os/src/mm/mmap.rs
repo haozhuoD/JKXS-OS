@@ -41,6 +41,31 @@ impl MmapArea {
         }
     }
 
+    pub fn from_another(another: &MmapArea) -> Self {
+        let mut new_area = Self {
+            start_vpn: another.start_vpn,
+            end_vpn: another.end_vpn,
+            map_perm: another.map_perm,
+            flags: another.flags,
+            fd: another.fd,
+            offset: another.offset,
+            data_frames: BTreeMap::new(),
+        };
+        for (vpn, _) in (&another.data_frames).into_iter() {
+            let frame = frame_alloc().unwrap();
+            new_area.data_frames.insert(*vpn, frame);
+        }
+        new_area
+    }
+
+    pub fn map_all(&self, page_table: &mut PageTable) {
+        for (vpn, frame) in (&self.data_frames).into_iter() {
+            let ppn = frame.ppn;
+            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
+            page_table.map(*vpn, ppn, pte_flags);
+        }
+    }
+
     /// (lazy)分配一个物理页帧并建立vpn到它的mmap映射，同时从fd中读取对应文件，失败返回-1
     pub fn map_one(
         &mut self,

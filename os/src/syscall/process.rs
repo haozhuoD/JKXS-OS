@@ -12,24 +12,28 @@ use crate::mm::{
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
-    current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
-    suspend_current_and_run_next, SignalFlags,
+    current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
+    pid2process, suspend_current_and_run_next, SigAction, mark_current_signal_done,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use super::errorno::EPERM;
+use super::errorno::{EINVAL, EPERM};
 
 pub fn sys_shutdown() -> ! {
     shutdown();
 }
 
+pub fn sys_toggle_trace() -> isize {
+    unsafe {*(SYSCALL_ENABLE as *mut u8) = 1 - *(SYSCALL_ENABLE as *mut u8)};
+    0
+}
+
 pub fn sys_exit(exit_code: i32) -> ! {
     gdb_println!(SYSCALL_ENABLE, "sys_exit(exit_code: {} ) = ?", exit_code);
     exit_current_and_run_next(exit_code, false);
-    panic!("Unreachable in sys_exit!");
 }
 
 pub fn sys_exit_group(exit_code: i32) -> ! {
@@ -209,10 +213,15 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
     }
 }
 
-pub fn sys_kill(pid: usize, signal: u32) -> isize {
+pub fn sys_kill(pid: usize, signum: u32) -> isize {
+    let signum = signum as usize;
     let ret = if let Some(process) = pid2process(pid) {
-        if let Some(flag) = SignalFlags::from_bits(signal) {
-            process.inner_exclusive_access().signals |= flag;
+        if is_signal_valid(signum) {
+            process
+                .inner_exclusive_access()
+                .signal_info
+                .pending_signals
+                .push_back(signum);
             0
         } else {
             -EPERM
@@ -224,7 +233,7 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
         SYSCALL_ENABLE,
         "sys_kill(pid: {}, signal: {:#x?}) = {}",
         pid,
-        signal,
+        signum,
         ret
     );
     ret
@@ -386,5 +395,73 @@ pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize {
         _clk_id,
         tp
     );
+    0
+}
+
+pub fn sys_sigaction(
+    signum: usize,
+    sigaction: *const SigAction,
+    old_sigaction: *mut SigAction,
+) -> isize {
+    // todo: 暂不支持sa_flags
+    // todo: 支持SIGIGNORE
+    let token = current_user_token();
+    let process = current_process();
+    let mut inner = process.inner_exclusive_access();
+
+    // signum超出范围，返回错误
+    if !is_signal_valid(signum) {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) = {}",
+            signum,
+            sigaction,
+            old_sigaction,
+            -EINVAL
+        );
+        return -EINVAL;
+    }
+
+    // 如果旧的sigaction存在，则将它保存到指定位置
+    if let Some(old) = inner.signal_info.sigactions.get(&signum) {
+        if old_sigaction as usize != 0 {
+            *translated_refmut(token, old_sigaction) = (*old).clone();
+        }
+    }
+
+    // 在pcb中注册给定的signaction
+    if sigaction as usize != 0 {
+        inner
+            .signal_info
+            .sigactions
+            .insert(signum, (*translated_ref(token, sigaction)).clone());
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) = {}",
+        signum,
+        sigaction,
+        old_sigaction,
+        0
+    );
+    return 0;
+}
+
+pub fn sys_sigreturn() -> isize {
+    // 恢复之前保存的trap_cx
+    current_task().unwrap().inner_exclusive_access().restore_trap_cx_backup();
+    mark_current_signal_done();
+    gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
+    return 0;
+}
+
+pub fn sys_setpgid() -> isize {
+    gdb_println!(SYSCALL_ENABLE, "sys_setpgid(...) = 0");
+    0
+}
+
+pub fn sys_getpgid() -> isize {
+    gdb_println!(SYSCALL_ENABLE, "sys_getpgid(...) = 0");
     0
 }

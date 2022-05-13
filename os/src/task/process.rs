@@ -1,8 +1,9 @@
 use super::id::RecycleAllocator;
 use super::manager::insert_into_pid2process;
-use super::TaskControlBlock;
-use super::{add_task, SignalFlags};
+use super::signal::SigInfo;
+use super::add_task;
 use super::{pid_alloc, PidHandle};
+use super::TaskControlBlock;
 use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE};
@@ -32,7 +33,7 @@ pub struct ProcessControlBlockInner {
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
     pub fd_table: FdTable,
-    pub signals: SignalFlags,
+    pub signal_info: SigInfo,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
     pub cwd: String,
@@ -52,12 +53,16 @@ impl ProcessControlBlockInner {
         self.memory_set.token()
     }
 
-    pub fn alloc_fd(&mut self) -> usize {
-        if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
-            self.fd_table.push(None);
-            self.fd_table.len() - 1
+    pub fn alloc_fd(&mut self, minfd: usize) -> usize {
+        let mut i = minfd;
+        loop {
+            while i >= self.fd_table.len() {
+                self.fd_table.push(None);
+            }
+            if self.fd_table[i].is_none() {
+                return i;
+            }
+            i += 1;
         }
     }
 
@@ -104,13 +109,10 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                signals: SignalFlags::empty(),
+                signal_info: SigInfo::new(),
                 tasks: Vec::new(),
                 task_res_allocator: RecycleAllocator::new(),
                 cwd: String::from("/"),
-                // mutex_list: Vec::new(),
-                // semaphore_list: Vec::new(),
-                // condvar_list: Vec::new(),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
                 mmap_area_top: MMAP_BASE,
@@ -338,6 +340,10 @@ impl ProcessControlBlock {
                 new_fd_table.push(None);
             }
         }
+        // copy signal-info
+        let mut new_signal_info = parent.signal_info.clone();
+        new_signal_info.pending_signals.clear();
+        new_signal_info.signal_executing = false;
 
         // create child process pcb
         let child = Arc::new(Self {
@@ -349,13 +355,10 @@ impl ProcessControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
-                signals: SignalFlags::empty(),
+                signal_info: new_signal_info,
                 tasks: Vec::new(),
                 task_res_allocator: RecycleAllocator::new(),
                 cwd: parent.cwd.clone(),
-                // mutex_list: Vec::new(),
-                // semaphore_list: Vec::new(),
-                // condvar_list: Vec::new(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
                 mmap_area_top: parent.mmap_area_top,

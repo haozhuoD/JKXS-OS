@@ -25,7 +25,7 @@ pub use processor::{
     current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
     current_user_token, run_tasks, schedule, take_current_task,
 };
-pub use signal::SignalFlags;
+pub use signal::*;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub fn suspend_current_and_run_next() {
@@ -63,7 +63,7 @@ pub fn suspend_current_and_run_next() {
 //     schedule(task_cx_ptr);
 // }
 
-pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
+pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let task = take_current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
     let process = task.process.upgrade().unwrap();
@@ -113,6 +113,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) {
     // we do not have to save task context
     let mut _unused = TaskContext::zero_init();
     schedule(&mut _unused as *mut _);
+    panic!("Shouldn't reach here in `exit_current_and_run_next`!")
 }
 
 pub static INITPROC: Lazy<Arc<ProcessControlBlock>> =
@@ -122,14 +123,66 @@ pub fn add_initproc() {
     let _initproc = INITPROC.clone();
 }
 
-pub fn check_signals_of_current() -> Option<(i32, &'static str)> {
+pub fn perform_signals_of_current() {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
-    process_inner.signals.check_error()
+    if process.inner_exclusive_access().signal_info.signal_executing { //正在执行某个信号
+        return;
+    }
+    loop {
+        // 取出pending的第一个signal
+        let signum_option = process
+            .inner_exclusive_access()
+            .signal_info
+            .pending_signals
+            .pop_front();
+        if signum_option.is_none() {
+            break;
+        }
+        let signum = signum_option.unwrap();
+        // 如果信号代表当前进程出错，则exit
+        if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
+            println!("[kernel] {}", msg);
+            drop(process);
+            exit_current_and_run_next(-(signum as i32), false);
+        };
+
+        {
+            let mut inner = process.inner_exclusive_access();
+            if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
+                let sigaction = sigaction.clone();
+                // 如果信号对应的处理函数存在，则做好跳转到handler的准备
+                if sigaction.handler != 0 {
+                    let task = current_task().unwrap();
+                    let mut task_inner = task.inner_exclusive_access();
+                    let mut trap_cx = task_inner.get_trap_cx();
+                    // 保存当前trap_cx
+                    task_inner.save_trap_cx();
+
+                    inner.signal_info.signal_executing = true;
+
+                    // 准备跳到signal handler
+                    extern "C" {
+                        fn __sigreturn();
+                    }
+                    trap_cx.x[1] = __sigreturn as usize; // ra
+                    trap_cx.x[10] = signum; // a0 (args0 = signum)
+                    trap_cx.sepc = sigaction.handler; // sepc
+                    return;
+                }
+            }
+        }
+    }
 }
 
-pub fn current_add_signal(signal: SignalFlags) {
+pub fn current_add_signal(signum: usize) {
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
-    process_inner.signals |= signal;
+    process_inner.signal_info.pending_signals.push_back(signum);
+}
+
+pub fn mark_current_signal_done() {
+    current_process()
+        .inner_exclusive_access()
+        .signal_info
+        .signal_executing = false;
 }
