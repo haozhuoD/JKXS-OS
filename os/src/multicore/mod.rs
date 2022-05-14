@@ -35,7 +35,7 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
     for i in hart_min..=hart_max {
         if i != boot_hartid {
             let hart_status = sbi_get_hart_status(i);
-            println!("[wakeup_other_cores]   hartid: {} status:{}", i, hart_status as isize);
+            info!("(wakeup_other_cores)   hart{} status:{}", i, hart_status as isize);
             // let ret = sbi_hart_start(i, skernel as usize, 0);
             // while sbi_hart_start(i, skernel as usize, 0)!=0 {
 
@@ -48,12 +48,13 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
                 }
 
             } else {
-                debug!("hartid: {}  is not in stopped ", i);
+                warning!("hartid: {}  is not in stopped ", i);
                 // sbi_send_ipi(1<<i);
                 // println!("hartid: {}  ipi_ret: {} ", i, ipi_ret);
             }
-            
             // println!("sbi_hart_start hartid: {}  ret: {}", i, ret as isize);
+        } else {
+            info!("(wakeup_other_cores)  hart{} is boot_hard ",i );
         }
     }
 }
