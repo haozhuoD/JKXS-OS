@@ -12,12 +12,13 @@ const CR: u8 = 0x0du8;
 const DL: u8 = 0x7fu8;
 const BS: u8 = 0x08u8;
 const HT: u8 = 0x09u8;
+const SP: u8 = 0x20u8;
 const LINE_START: &str = ">> ";
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use user_lib::console::getchar;
-use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace, chdir};
+use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace, chdir, readcwd, longest_common_prefix};
 
 #[derive(Debug)]
 struct ProcessArguments {
@@ -137,12 +138,16 @@ pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
     let mut cwd = String::from("/");
+    let mut cwd_wl = readcwd();
+    let mut sub_wl = cwd_wl.clone();
+    let mut search_sub_flag = false;
     print_linestart(cwd.as_str());
     loop {
         let c = getchar();
         match c {
             LF | CR => {
                 println!("");
+                search_sub_flag = false;
                 if !line.is_empty() {
                     if line == "trace" {
                         toggle_trace();
@@ -193,27 +198,30 @@ pub fn main() -> i32 {
                                     continue;
                                 }
                             };
-                            if chdir(path) == -1 {
-                                println!("cd: {}: No such file or directory", path);
-                            } else {
-                                let old_cwd = cwd.clone();
-                                let mut cwdv: Vec<&str> = old_cwd.as_str().split("/").filter(|x| *x != "").collect();
-                                let pathv: Vec<&str> = path.split("/")
-                                    .map(|x| x.trim_end_matches("\0"))
-                                    .filter(|x| *x != "").collect();
-                                for &path_element in pathv.iter() {
-                                    if path_element == "." {
-                                        continue;
-                                    } else if path_element == ".." {
-                                        cwdv.pop();
-                                    } else {
-                                        cwdv.push(path_element);
+                            match chdir(path) {
+                                -1 => println!("cd: {}: No such file or directory", path),
+                                -20 => println!("cd: {}: Not a directory", path),
+                                _ => {
+                                    let old_cwd = cwd.clone();
+                                    let mut cwdv: Vec<&str> = old_cwd.as_str().split("/").filter(|x| *x != "").collect();
+                                    let pathv: Vec<&str> = path.split("/")
+                                        .map(|x| x.trim_end_matches("\0"))
+                                        .filter(|x| *x != "").collect();
+                                    for &path_element in pathv.iter() {
+                                        if path_element == "." {
+                                            continue;
+                                        } else if path_element == ".." {
+                                            cwdv.pop();
+                                        } else {
+                                            cwdv.push(path_element);
+                                        }
                                     }
-                                }
-                                cwd = String::from("/");
-                                for &cwd_element in cwdv.iter() {
-                                    cwd.push_str(cwd_element);
-                                    cwd.push('/');
+                                    cwd = String::from("/");
+                                    for &cwd_element in cwdv.iter() {
+                                        cwd.push_str(cwd_element);
+                                        cwd.push('/');
+                                    }
+                                    cwd_wl = readcwd();  // cd后重新读取工作目录下的wordlist
                                 }
                             }
                             line.clear();
@@ -305,6 +313,7 @@ pub fn main() -> i32 {
                             assert_eq!(pid, exit_pid);
                             //println!("Shell: Process {} exited with code {}", pid, exit_code);
                         }
+                        cwd_wl = readcwd();  // 有可能有更改工作目录下目录项的操作
                     }
                     line.clear();
                 }
@@ -312,6 +321,7 @@ pub fn main() -> i32 {
             }
             BS | DL => {
                 if !line.is_empty() {
+                    search_sub_flag = false;
                     print!("{}", BS as char);
                     print!(" ");
                     print!("{}", BS as char);
@@ -319,11 +329,38 @@ pub fn main() -> i32 {
                 }
             }
             HT => {
-                if !line.is_empty() && "busybox".starts_with(&line) {
-                    let line_add = "busybox".trim_start_matches(&line);
-                    print!("{}", line_add);
-                    line.push_str(line_add);
+                let wordv: Vec<&str> = line.as_str().split(' ').collect();
+                let word = wordv.last().unwrap();
+                if !word.is_empty() {
+                    if search_sub_flag {
+                        sub_wl = sub_wl.into_iter().filter(|x| x.starts_with(word)).collect();  // 在sub_wl中找以line为首的word
+                    } else {
+                        sub_wl = cwd_wl.clone().into_iter().filter(|x| x.starts_with(word)).collect();  // 在cwd_wl中找以line为首的word
+                        search_sub_flag = true;
+                    }
+                    if sub_wl.len() == 0 {
+                        continue;
+                    }
+                    // 找到最长公共前缀
+                    let longest_prefix = longest_common_prefix(&sub_wl);
+                    if longest_prefix == *word {
+                        // 如果相等，则展示sub_wl
+                        println!("");
+                        println!("{:#?}", sub_wl);
+                        print_linestart(cwd.as_str());
+                        print!("{}", line);
+                    } else {
+                        // 不相等则补全
+                        let word_add = longest_prefix.trim_start_matches(word);
+                        print!("{}", word_add);
+                        line.push_str(word_add);
+                    }
                 }
+            }
+            SP => {
+                search_sub_flag = false;
+                print!("{}", c as char);
+                line.push(c as char);
             }
             _ => {
                 print!("{}", c as char);
