@@ -13,12 +13,23 @@ const DL: u8 = 0x7fu8;
 const BS: u8 = 0x08u8;
 const HT: u8 = 0x09u8;
 const SP: u8 = 0x20u8;
-const LINE_START: &str = ">> ";
+const ESC: u8 = 0x1bu8;
+const SBK: u8 = 0x5bu8;
+
+const KEY_UP: u8 = 65u8;
+const KEY_DOWN: u8 = 66u8;
+const KEY_RIGHT: u8 = 67u8;
+const KEY_LEFT: u8 = 68u8;
+
+const CMD_HISTORY_SIZE: usize = 5;
 
 use alloc::string::String;
 use alloc::vec::Vec;
 use user_lib::console::getchar;
-use user_lib::{close, dup, exec, fork, open, pipe, waitpid, shutdown, OpenFlags, toggle_trace, chdir, readcwd, longest_common_prefix};
+use user_lib::{
+    chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test, readcwd,
+    toggle_trace, waitpid, OpenFlags,
+};
 
 #[derive(Debug)]
 struct ProcessArguments {
@@ -76,55 +87,28 @@ impl ProcessArguments {
     }
 }
 
-fn preliminary_test() {
-    let mut preliminary_apps = Vec::new();
-    preliminary_apps.push("times\0");
-    preliminary_apps.push("gettimeofday\0");
-    preliminary_apps.push("sleep\0");
-    preliminary_apps.push("brk\0");
-    preliminary_apps.push("clone\0");
-    // preliminary_apps.push("close\0");
-    preliminary_apps.push("dup2\0");
-    preliminary_apps.push("dup\0");
-    preliminary_apps.push("execve\0");
-    preliminary_apps.push("exit\0");
-    preliminary_apps.push("fork\0");
-    preliminary_apps.push("fstat\0");
-    preliminary_apps.push("getcwd\0");
-    preliminary_apps.push("getdents\0");
-    preliminary_apps.push("getpid\0");
-    preliminary_apps.push("getppid\0");
-    preliminary_apps.push("mkdir_\0");
-    preliminary_apps.push("mmap\0");
-    preliminary_apps.push("munmap\0");
-    preliminary_apps.push("mount\0");
-    preliminary_apps.push("openat\0");
-    preliminary_apps.push("open\0");
-    preliminary_apps.push("pipe\0");
-    preliminary_apps.push("read\0");
-    preliminary_apps.push("umount\0");
-    preliminary_apps.push("uname\0");
-    preliminary_apps.push("wait\0");
-    preliminary_apps.push("waitpid\0");
-    preliminary_apps.push("write\0");
-    preliminary_apps.push("yield\0");
-    preliminary_apps.push("unlink\0");
-    preliminary_apps.push("chdir\0");
-    preliminary_apps.push("close\0");
-
-    for app_name in preliminary_apps {
-        let pid = fork();
-        if pid == 0 {
-            exec(app_name, &[core::ptr::null::<u8>()]);
-        } else {
-            let mut exit_code = 0;
-            waitpid(pid as usize, &mut exit_code);
-        }
-    };
+pub fn print_line_start(cwd: &str) {
+    print!("root@JKXS-OS:{} # ", cwd);
 }
 
-pub fn print_linestart(cwd: &str) {
-    print!("root@JKXS-OS:{} # ",cwd);
+pub fn start_new_line(line: &mut String, pos: &mut usize, cwd: &str) {
+    line.clear();
+    *pos = 0;
+    print_line_start(cwd);
+}
+
+pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usize) {
+    for _ in 0..former_pos {
+        print!("{}", BS as char);
+    }
+    print!("{}", line);
+    let final_pos = line.len() + (0.max(-line_len_inc) as usize);
+    for _ in line.len()..final_pos {
+        print!(" ");
+    }
+    for _ in 0..final_pos - pos {
+        print!("{}", BS as char);
+    }
 }
 
 // #[no_mangle]
@@ -137,27 +121,38 @@ pub fn print_linestart(cwd: &str) {
 pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
+    let mut pos: usize = 0;
     let mut cwd = String::from("/");
     let mut cwd_wl = readcwd();
     let mut sub_wl = cwd_wl.clone();
     let mut search_sub_flag = false;
-    print_linestart(cwd.as_str());
+
+    let mut cmd_history = Vec::<String>::new();
+    let mut cmd_history_idx = 0;
+
+    start_new_line(&mut line, &mut pos, cwd.as_str());
     loop {
         let c = getchar();
+        if c != ESC {
+            cmd_history_idx = cmd_history.len();
+        }
         match c {
             LF | CR => {
                 println!("");
                 search_sub_flag = false;
                 if !line.is_empty() {
+                    cmd_history.push(line.clone());
+                    while cmd_history.len() > CMD_HISTORY_SIZE {
+                       cmd_history.remove(0);
+                    }
+                    cmd_history_idx = cmd_history.len();
                     if line == "trace" {
                         toggle_trace();
-                        line.clear();
-                        print_linestart(cwd.as_str());
+                        start_new_line(&mut line, &mut pos, cwd.as_str());
                         continue;
                     } else if line == "usertests" {
                         preliminary_test();
-                        line.clear();
-                        print_linestart(cwd.as_str());
+                        start_new_line(&mut line, &mut pos, cwd.as_str());
                         continue;
                     };
                     let splited: Vec<_> = line.as_str().split('|').collect();
@@ -189,12 +184,11 @@ pub fn main() -> i32 {
                                 1 => {
                                     cwd = String::from("/");
                                     "/\0"
-                                },
+                                }
                                 2 => arg_copy[1].as_str(),
                                 _ => {
                                     println!("cd: too many arguments");
-                                    line.clear();
-                                    print_linestart(cwd.as_str());
+                                    start_new_line(&mut line, &mut pos, cwd.as_str());
                                     continue;
                                 }
                             };
@@ -203,10 +197,13 @@ pub fn main() -> i32 {
                                 -20 => println!("cd: {}: Not a directory", path),
                                 _ => {
                                     let old_cwd = cwd.clone();
-                                    let mut cwdv: Vec<&str> = old_cwd.as_str().split("/").filter(|x| *x != "").collect();
-                                    let pathv: Vec<&str> = path.split("/")
+                                    let mut cwdv: Vec<&str> =
+                                        old_cwd.as_str().split("/").filter(|x| *x != "").collect();
+                                    let pathv: Vec<&str> = path
+                                        .split("/")
                                         .map(|x| x.trim_end_matches("\0"))
-                                        .filter(|x| *x != "").collect();
+                                        .filter(|x| *x != "")
+                                        .collect();
                                     for &path_element in pathv.iter() {
                                         if path_element == "." {
                                             continue;
@@ -221,11 +218,10 @@ pub fn main() -> i32 {
                                         cwd.push_str(cwd_element);
                                         cwd.push('/');
                                     }
-                                    cwd_wl = readcwd();  // cd后重新读取工作目录下的wordlist
+                                    cwd_wl = readcwd(); // cd后重新读取工作目录下的wordlist
                                 }
                             }
-                            line.clear();
-                            print_linestart(cwd.as_str());
+                            start_new_line(&mut line, &mut pos, cwd.as_str());
                             continue;
                         }
                     }
@@ -313,29 +309,38 @@ pub fn main() -> i32 {
                             assert_eq!(pid, exit_pid);
                             //println!("Shell: Process {} exited with code {}", pid, exit_code);
                         }
-                        cwd_wl = readcwd();  // 有可能有更改工作目录下目录项的操作
+                        cwd_wl = readcwd(); // 有可能有更改工作目录下目录项的操作
                     }
-                    line.clear();
                 }
-                print_linestart(cwd.as_str());
+                start_new_line(&mut line, &mut pos, cwd.as_str());
             }
             BS | DL => {
-                if !line.is_empty() {
+                if pos > 0 {
                     search_sub_flag = false;
-                    print!("{}", BS as char);
-                    print!(" ");
-                    print!("{}", BS as char);
-                    line.pop();
+                    line.remove(pos - 1);
+                    pos -= 1;
+                    reprint_line(&line, -1, pos + 1, pos);
+                    // print!("{}", BS as char);
+                    // print!(" ");
+                    // print!("{}", BS as char);
                 }
             }
             HT => {
+                if pos < line.len() {
+                    continue;
+                }
                 let wordv: Vec<&str> = line.as_str().split(' ').collect();
                 let word = wordv.last().unwrap();
                 if !word.is_empty() {
                     if search_sub_flag {
-                        sub_wl = sub_wl.into_iter().filter(|x| x.starts_with(word)).collect();  // 在sub_wl中找以line为首的word
+                        sub_wl = sub_wl.into_iter().filter(|x| x.starts_with(word)).collect();
+                    // 在sub_wl中找以line为首的word
                     } else {
-                        sub_wl = cwd_wl.clone().into_iter().filter(|x| x.starts_with(word)).collect();  // 在cwd_wl中找以line为首的word
+                        sub_wl = cwd_wl
+                            .clone()
+                            .into_iter()
+                            .filter(|x| x.starts_with(word))
+                            .collect(); // 在cwd_wl中找以line为首的word
                         search_sub_flag = true;
                     }
                     if sub_wl.len() == 0 {
@@ -345,26 +350,73 @@ pub fn main() -> i32 {
                     let longest_prefix = longest_common_prefix(&sub_wl);
                     if longest_prefix == *word {
                         // 如果相等，则展示sub_wl
-                        println!("");
-                        println!("{:#?}", sub_wl);
-                        print_linestart(cwd.as_str());
+                        println!("\n{:#?}", sub_wl);
+                        print_line_start(cwd.as_str());
                         print!("{}", line);
                     } else {
                         // 不相等则补全
                         let word_add = longest_prefix.trim_start_matches(word);
                         print!("{}", word_add);
                         line.push_str(word_add);
+                        pos += word_add.len();
                     }
                 }
             }
-            SP => {
-                search_sub_flag = false;
-                print!("{}", c as char);
-                line.push(c as char);
+            ESC => {
+                if getchar() == SBK {
+                    //up 65, down 66, right 67, left 68
+                    match getchar() {
+                        KEY_UP => {
+                            if cmd_history.len() == 0 {
+                                continue;
+                            }
+                            if cmd_history_idx > 0 {
+                                cmd_history_idx -= 1;
+                            }
+                            reprint_line("", -(line.len() as isize), pos, 0);
+                            line = cmd_history[cmd_history_idx].clone();
+                            pos = line.len();
+                            reprint_line(&line, line.len() as isize, 0, pos);
+                        }
+                        KEY_DOWN => {
+                            if cmd_history.len() == 0 {
+                                continue;
+                            }
+                            if cmd_history_idx < cmd_history.len() {
+                                cmd_history_idx += 1;
+                            }
+                            reprint_line("", -(line.len() as isize), pos, 0);
+                            if cmd_history_idx < cmd_history.len() {
+                                line = cmd_history[cmd_history_idx].clone();
+                            } else {
+                                line = String::new();
+                            }
+                            pos = line.len();
+                            reprint_line(&line, line.len() as isize, 0, pos);
+                        }
+                        KEY_LEFT => {
+                            if pos > 0 {
+                                pos -= 1;
+                                print!("{}", BS as char);
+                            }
+                        }
+                        KEY_RIGHT => {
+                            if pos < line.len() {
+                                print!("{}", line.chars().nth(pos).unwrap() as char);
+                                pos += 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {
-                print!("{}", c as char);
-                line.push(c as char);
+                if c == SP {
+                    search_sub_flag = false;
+                }
+                line.insert(pos, c as char);
+                pos += 1;
+                reprint_line(&line, 1, pos - 1, pos);
             }
         }
     }

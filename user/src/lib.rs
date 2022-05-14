@@ -239,3 +239,50 @@ pub fn longest_common_prefix(str_vec: &Vec<String>) -> String {
         .map(|x| x.0)
         .collect()
 }
+
+pub fn preliminary_test() {
+    let mut preliminary_apps = Vec::new();
+    preliminary_apps.push("times\0");
+    preliminary_apps.push("gettimeofday\0");
+    preliminary_apps.push("sleep\0");
+    preliminary_apps.push("brk\0");
+    preliminary_apps.push("clone\0");
+    // preliminary_apps.push("close\0");
+    preliminary_apps.push("dup2\0");
+    preliminary_apps.push("dup\0");
+    preliminary_apps.push("execve\0");
+    preliminary_apps.push("exit\0");
+    preliminary_apps.push("fork\0");
+    preliminary_apps.push("fstat\0");
+    preliminary_apps.push("getcwd\0");
+    preliminary_apps.push("getdents\0");
+    preliminary_apps.push("getpid\0");
+    preliminary_apps.push("getppid\0");
+    preliminary_apps.push("mkdir_\0");
+    preliminary_apps.push("mmap\0");
+    preliminary_apps.push("munmap\0");
+    preliminary_apps.push("mount\0");
+    preliminary_apps.push("openat\0");
+    preliminary_apps.push("open\0");
+    preliminary_apps.push("pipe\0");
+    preliminary_apps.push("read\0");
+    preliminary_apps.push("umount\0");
+    preliminary_apps.push("uname\0");
+    preliminary_apps.push("wait\0");
+    preliminary_apps.push("waitpid\0");
+    preliminary_apps.push("write\0");
+    preliminary_apps.push("yield\0");
+    preliminary_apps.push("unlink\0");
+    preliminary_apps.push("chdir\0");
+    preliminary_apps.push("close\0");
+
+    for app_name in preliminary_apps {
+        let pid = fork();
+        if pid == 0 {
+            exec(app_name, &[core::ptr::null::<u8>()]);
+        } else {
+            let mut exit_code = 0;
+            waitpid(pid as usize, &mut exit_code);
+        }
+    };
+}
