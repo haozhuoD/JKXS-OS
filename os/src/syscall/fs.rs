@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EPERM, ENOENT, EBADF};
+use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR};
 
 const AT_FDCWD: isize = -100;
 
@@ -357,33 +357,37 @@ pub fn sys_chdir(path: *const u8) -> isize {
     };
 
     let ret = {
-        if let Some(_) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
-            if path.starts_with("/") {
-                inner.cwd = path.clone();
-            } else {
-                assert!(old_cwd.ends_with("/"));
-                let pathv = path2vec(&path);
-                let mut cwdv: Vec<_> = path2vec(&old_cwd);
+        if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+            if osfile.is_dir() {
+                if path.starts_with("/") {
+                    inner.cwd = path.clone();
+                } else {
+                    assert!(old_cwd.ends_with("/"));
+                    let pathv = path2vec(&path);
+                    let mut cwdv: Vec<_> = path2vec(&old_cwd);
 
-                // cwdv.pop();
-                for &path_element in pathv.iter() {
-                    if path_element == "." || path_element == "" {
-                        continue;
-                    } else if path_element == ".." {
-                        cwdv.pop();
-                    } else {
-                        cwdv.push(path_element);
+                    // cwdv.pop();
+                    for &path_element in pathv.iter() {
+                        if path_element == "." || path_element == "" {
+                            continue;
+                        } else if path_element == ".." {
+                            cwdv.pop();
+                        } else {
+                            cwdv.push(path_element);
+                        }
+                    }
+                    inner.cwd = String::from("/");
+                    for &cwd_element in cwdv.iter() {
+                        if cwd_element != "" {
+                            inner.cwd.push_str(cwd_element);
+                            inner.cwd.push('/');
+                        }
                     }
                 }
-                inner.cwd = String::from("/");
-                for &cwd_element in cwdv.iter() {
-                    if cwd_element != "" {
-                        inner.cwd.push_str(cwd_element);
-                        inner.cwd.push('/');
-                    }
-                }
+                0
+            } else {
+                -ENOTDIR
             }
-            0
         } else {
             -EPERM
         }

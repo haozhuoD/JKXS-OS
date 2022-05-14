@@ -12,13 +12,15 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use alloc::vec::Vec;
+use alloc::{vec::Vec, string::{String, ToString}};
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
 
 const USER_HEAP_SIZE: usize = 32768;
 
 static mut HEAP_SPACE: [u8; USER_HEAP_SIZE] = [0; USER_HEAP_SIZE];
+
+const AT_FDCWD: isize = -100;
 
 #[global_allocator]
 static HEAP: LockedHeap<32> = LockedHeap::empty();
@@ -94,11 +96,18 @@ impl TimeVal{
 
 }
 
+#[allow(unused)]
+#[repr(packed)]
+pub struct FSDirent {
+    d_ino: u64,    // 索引结点号
+    d_off: i64,    // 到下一个dirent的偏移
+    d_reclen: u16, // 当前dirent的长度
+    d_type: u8,    // 文件类型
+}
+
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
-
-const AT_FDCWD: isize = -100;
 
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_open_at(AT_FDCWD, path, flags.bits, 2)
@@ -172,6 +181,7 @@ pub fn sleep(_sleep_ms: usize) {
 pub fn gettid() -> isize {
     sys_gettid()
 }
+
 // pub fn waittid(tid: usize) -> isize {
 //     loop {
 //         match sys_waittid(tid) {
@@ -182,6 +192,7 @@ pub fn gettid() -> isize {
 //         }
 //     }
 // }
+
 pub fn brk(addr: usize) -> isize {
     sys_brk(addr)
 }
@@ -196,4 +207,35 @@ pub fn toggle_trace() -> isize {
 
 pub fn chdir(path: &str) -> isize {
     sys_chdir(path)
+}
+
+pub fn readcwd() -> Vec<String> {
+    let mut buf = [0u8; 3000];
+    let len = sys_getdents64(AT_FDCWD, &mut buf);
+    let dir_size = core::mem::size_of::<FSDirent>();
+    let mut start_offset = dir_size;
+    let mut end_offset = start_offset;
+    let mut dirv: Vec<String> = Vec::new();
+    if len > 0 {
+        while end_offset <= len as usize {
+            while buf[end_offset] != 0 {
+                end_offset += 1;
+            }
+            dirv.push(core::str::from_utf8(&buf[start_offset..end_offset]).unwrap().to_string());
+            end_offset = end_offset + dir_size + 1;
+            start_offset = end_offset;
+        }
+    }
+    dirv
+}
+
+pub fn longest_common_prefix(str_vec: &Vec<String>) -> String {
+    str_vec.iter()
+        .max()
+        .unwrap()
+        .chars()
+        .zip(str_vec.iter().min().unwrap().chars())
+        .take_while(|x| x.0 == x.1)
+        .map(|x| x.0)
+        .collect()
 }
