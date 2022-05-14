@@ -1,7 +1,9 @@
 mod sdcard;
+mod k210_sdcard;
 mod sleep;
 mod spi;
 mod virtio_blk;
+
 
 pub use sdcard::SDCardWrapper;
 use spin::Lazy;

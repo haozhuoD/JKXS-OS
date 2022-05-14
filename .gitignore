@@ -26,5 +26,8 @@ simple_fat32/target/*
 tools/
 external_libs/fu740-hal/target/*
 external_libs/fu740-pac/target/*
+external_libs/k210-pac/target/*
+external_libs/k210-hal/target/*
+external_libs/k210-soc/target/*
 os.bin
 os.elf
