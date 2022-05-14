@@ -27,3 +27,4 @@ tools/
 external_libs/fu740-hal/target/*
 external_libs/fu740-pac/target/*
 os.bin
+os.elf

@@ -49,6 +49,9 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
 
             } else {
                 warning!("hartid: {}  is not in stopped ", i);
+                // while sbi_get_hart_status(i)!=1 {
+                //     warning!("waiting hart{} to stopped ", i);
+                // }
                 // sbi_send_ipi(1<<i);
                 // println!("hartid: {}  ipi_ret: {} ", i, ipi_ret);
             }

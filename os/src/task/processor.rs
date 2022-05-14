@@ -71,6 +71,7 @@ pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| {
 });
 
 pub fn run_tasks() {
+    info!("hart{} in schedule",get_hartid());
     loop {
         let mut processor = PROCESSORS[get_hartid()].inner_exclusive_access();
 

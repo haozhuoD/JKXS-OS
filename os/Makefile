@@ -148,6 +148,15 @@ move:
 	rm -f ~/nfs/os.bin
 	sudo cp ./os.bin ~/nfs	
 
+local_nfs:
+	sudo mount 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
+
+REMOTE_ELF := ../os.elf
+
+remote-fu740: build
+	@cp $(KERNEL_ELF) $(REMOTE_ELF)
+# scp -P 8122 nxos.elf ubuntu@183.173.21.114:/srv/tftp/
+
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)
 # 	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(HANDIN_BIN)

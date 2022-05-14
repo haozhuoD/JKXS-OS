@@ -96,6 +96,7 @@ fn others_main(hartid: usize) -> ! {
         // println!("==== boot_count++ before:{:?} ==== ",boot_count);
         *boot_count += 1 ;
     }
+    while *(BOOT_COUNT.lock()) != 2 {};
     task::run_tasks();
     panic!("Unreachable in others_main!");
 }
