@@ -21,7 +21,7 @@ const KEY_DOWN: u8 = 66u8;
 const KEY_RIGHT: u8 = 67u8;
 const KEY_LEFT: u8 = 68u8;
 
-const LINE_START: &str = ">> ";
+const CMD_HISTORY_SIZE: usize = 5;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -126,14 +126,26 @@ pub fn main() -> i32 {
     let mut cwd_wl = readcwd();
     let mut sub_wl = cwd_wl.clone();
     let mut search_sub_flag = false;
+
+    let mut cmd_history = Vec::<String>::new();
+    let mut cmd_history_idx = 0;
+
     start_new_line(&mut line, &mut pos, cwd.as_str());
     loop {
         let c = getchar();
+        if c != ESC {
+            cmd_history_idx = cmd_history.len();
+        }
         match c {
             LF | CR => {
                 println!("");
                 search_sub_flag = false;
                 if !line.is_empty() {
+                    cmd_history.push(line.clone());
+                    while cmd_history.len() > CMD_HISTORY_SIZE {
+                       cmd_history.remove(0);
+                    }
+                    cmd_history_idx = cmd_history.len();
                     if line == "trace" {
                         toggle_trace();
                         start_new_line(&mut line, &mut pos, cwd.as_str());
@@ -354,8 +366,34 @@ pub fn main() -> i32 {
                 if getchar() == SBK {
                     //up 65, down 66, right 67, left 68
                     match getchar() {
-                        KEY_UP => {}
-                        KEY_DOWN => {}
+                        KEY_UP => {
+                            if cmd_history.len() == 0 {
+                                continue;
+                            }
+                            if cmd_history_idx > 0 {
+                                cmd_history_idx -= 1;
+                            }
+                            reprint_line("", -(line.len() as isize), pos, 0);
+                            line = cmd_history[cmd_history_idx].clone();
+                            pos = line.len();
+                            reprint_line(&line, line.len() as isize, 0, pos);
+                        }
+                        KEY_DOWN => {
+                            if cmd_history.len() == 0 {
+                                continue;
+                            }
+                            if cmd_history_idx < cmd_history.len() {
+                                cmd_history_idx += 1;
+                            }
+                            reprint_line("", -(line.len() as isize), pos, 0);
+                            if cmd_history_idx < cmd_history.len() {
+                                line = cmd_history[cmd_history_idx].clone();
+                            } else {
+                                line = String::new();
+                            }
+                            pos = line.len();
+                            reprint_line(&line, line.len() as isize, 0, pos);
+                        }
                         KEY_LEFT => {
                             if pos > 0 {
                                 pos -= 1;
