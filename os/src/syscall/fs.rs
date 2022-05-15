@@ -679,3 +679,20 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
     );
     return -ENOENT;
 }
+
+pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
+    let token = current_user_token();
+    let buf_vec = translated_byte_buffer(token, buf, len);
+    let abs_path = translated_str(token, abs_path);
+    let mut userbuf = UserBuffer::new(buf_vec);
+    let ret = if let Some(osfile) = open_file("/", abs_path.as_str(), OpenFlags::RDONLY) {
+        getdents64_inner(
+            osfile,
+            &mut userbuf,
+            len,
+        )
+    } else {
+        -EPERM
+    };
+    ret
+}

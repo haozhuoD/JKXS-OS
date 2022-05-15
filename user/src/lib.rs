@@ -229,6 +229,52 @@ pub fn readcwd() -> Vec<String> {
     dirv
 }
 
+pub fn change_cwd(cwd: &str, path: &str) -> String {
+    let mut cwdv: Vec<&str> = cwd.split("/").filter(|x| *x != "").collect();
+    let pathv: Vec<&str> = path
+        .split("/")
+        .map(|x| x.trim_end_matches("\0"))
+        .filter(|x| *x != "")
+        .collect();
+    for &path_element in pathv.iter() {
+        if path_element == "." {
+            continue;
+        } else if path_element == ".." {
+            cwdv.pop();
+        } else {
+            cwdv.push(path_element);
+        }
+    }
+    let mut cwd = String::from("/");
+    for &cwd_element in cwdv.iter() {
+        cwd.push_str(cwd_element);
+        cwd.push('/');
+    }
+    cwd
+}
+
+pub fn readdir(abs_path: &str) -> Vec<String> {
+    let mut buf = [0u8; 3000];
+    let mut abs_path = abs_path.to_string();
+    abs_path.push('\0');
+    let len = sys_readdir(abs_path.as_str(), &mut buf);
+    let dir_size = core::mem::size_of::<FSDirent>();
+    let mut start_offset = dir_size;
+    let mut end_offset = start_offset;
+    let mut dirv: Vec<String> = Vec::new();
+    if len > 0 {
+        while end_offset <= len as usize {
+            while buf[end_offset] != 0 {
+                end_offset += 1;
+            }
+            dirv.push(core::str::from_utf8(&buf[start_offset..end_offset]).unwrap().to_string());
+            end_offset = end_offset + dir_size + 1;
+            start_offset = end_offset;
+        }
+    }
+    dirv
+}
+
 pub fn longest_common_prefix(str_vec: &Vec<String>) -> String {
     str_vec.iter()
         .max()
