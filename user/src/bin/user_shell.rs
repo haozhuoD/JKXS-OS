@@ -141,7 +141,9 @@ pub fn main() -> i32 {
                 println!("");
                 search_sub_flag = false;
                 if !line.is_empty() {
-                    cmd_history.push(line.clone());
+                    if cmd_history.is_empty() || cmd_history[cmd_history.len() - 1] != line {
+                        cmd_history.push(line.clone());
+                    }
                     while cmd_history.len() > CMD_HISTORY_SIZE {
                        cmd_history.remove(0);
                     }

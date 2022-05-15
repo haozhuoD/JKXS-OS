@@ -8,6 +8,7 @@ use super::{
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::vec::Vec;
+use crate::println;
 
 #[derive(Clone)]
 pub struct VFile {
@@ -222,6 +223,9 @@ impl VFile {
 
     // 通过短文件名name(可以是小写)查找目录dir_ent下的目录项
     fn find_short_name(&self, name: &str, dir_ent: &ShortDirEntry) -> Option<VFile> {
+        if dir_ent.first_cluster() == 2 && name == ".." {
+            return Some(self.get_fs().get_root_vfile(&self.get_fs()));
+        }
         let name_upper = name.to_ascii_uppercase();
         let mut short_ent = ShortDirEntry::empty();
         let mut offset = 0;
