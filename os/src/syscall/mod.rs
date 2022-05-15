@@ -63,6 +63,7 @@ const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
 const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
+const SYSCALL_READDIR: usize = 0xf001;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod errorno;
@@ -153,6 +154,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
+        SYSCALL_READDIR => sys_readdir(args[0] as *const u8, args[1] as *mut u8, args[2]),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

@@ -63,7 +63,9 @@ impl FAT {
 
     // 查询当前簇的下一个簇,如果空闲或坏簇则返回0
     pub fn get_next_cluster(&self, cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        assert!(cluster < self.max_cluster, "The current cluster number exceeds the maximum cluster number!");
+        assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+                , cluster, self.max_cluster);
+        // assert!(cluster < self.max_cluster, "The current cluster number exceeds the maximum cluster number!");
         let (fat1_sec, fat2_sec, offset) = self.cluster_position(cluster);
         let fat1_next_cluster = get_info_block_cache(
             fat1_sec as usize, 
