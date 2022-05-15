@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test, readcwd,
-    readdir, toggle_trace, waitpid, OpenFlags, change_cwd,
+    readdir, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown
 };
 
 #[derive(Debug)]
@@ -154,7 +154,9 @@ pub fn main() -> i32 {
                         preliminary_test();
                         start_new_line(&mut line, &mut pos, cwd.as_str());
                         continue;
-                    };
+                    } else if line == "shutdown" {
+                        shutdown();
+                    }
                     let splited: Vec<_> = line.as_str().split('|').collect();
                     let process_arguments_list: Vec<_> = splited
                         .iter()
