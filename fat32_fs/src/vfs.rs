@@ -8,7 +8,6 @@ use super::{
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use crate::println;
 
 #[derive(Clone)]
 pub struct VFile {

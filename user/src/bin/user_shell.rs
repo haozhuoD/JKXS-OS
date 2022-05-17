@@ -23,12 +23,12 @@ const KEY_LEFT: u8 = 68u8;
 
 const CMD_HISTORY_SIZE: usize = 5;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
-    chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test, readcwd,
-    readdir, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown
+    chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test,
+    get_wordlist, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown
 };
 
 #[derive(Debug)]
@@ -123,7 +123,7 @@ pub fn main() -> i32 {
     let mut line: String = String::new();
     let mut pos: usize = 0;
     let mut cwd = String::from("/");
-    let mut cwd_wl = readdir(cwd.as_str());
+    let mut cwd_wl = get_wordlist(cwd.as_str());
     let mut sub_wl = cwd_wl.clone();
     let mut search_sub_flag = false;
 
@@ -201,7 +201,7 @@ pub fn main() -> i32 {
                                 -20 => println!("cd: {}: Not a directory", path),
                                 _ => {
                                     cwd = change_cwd(cwd.as_str(), path);
-                                    cwd_wl = readdir(cwd.as_str()); // cd后重新读取工作目录下的wordlist
+                                    cwd_wl = get_wordlist(cwd.as_str()); // cd后重新读取工作目录下的wordlist
                                 }
                             }
                             start_new_line(&mut line, &mut pos, cwd.as_str());
@@ -292,7 +292,7 @@ pub fn main() -> i32 {
                             assert_eq!(pid, exit_pid);
                             //println!("Shell: Process {} exited with code {}", pid, exit_code);
                         }
-                        cwd_wl = readdir(cwd.as_str()); // 有可能有更改工作目录下目录项的操作
+                        cwd_wl = get_wordlist(cwd.as_str()); // 有可能有更改工作目录下目录项的操作
                     }
                 }
                 start_new_line(&mut line, &mut pos, cwd.as_str());
@@ -319,24 +319,24 @@ pub fn main() -> i32 {
                 if !slash_word.is_empty() {
                     if space_word != slash_word {  // 还可以加个search_dir_flag来加快二次tab的搜索效率
                         let search_path = space_word.rsplit_once('/').unwrap().0;
-                        let mut search_dir: String;
+                        let search_dir: String;
                         if space_word.starts_with('/') {
-                            search_dir = change_cwd("/", search_path);
+                            search_dir = search_path.to_string();
                         } else {
                             search_dir = change_cwd(cwd.as_str(), search_path);
                         }
-                        sub_wl = readdir(search_dir.as_str());
+                        sub_wl = get_wordlist(search_dir.as_str());
                         search_sub_flag = true;
                     }
                     if search_sub_flag {
                         sub_wl = sub_wl.into_iter().filter(|x| x.starts_with(slash_word)).collect();
-                    // 在sub_wl中找以line为首的word
+                    // 在sub_wl中找以slash_word为首的补全词
                     } else {
                         sub_wl = cwd_wl
                             .clone()
                             .into_iter()
                             .filter(|x| x.starts_with(slash_word))
-                            .collect(); // 在cwd_wl中找以line为首的word
+                            .collect(); // 在cwd_wl中找以slash_word为首的补全词
                         search_sub_flag = true;
                     }
                     if sub_wl.len() == 0 {
@@ -344,7 +344,7 @@ pub fn main() -> i32 {
                     }
                     // 找到最长公共前缀
                     let longest_prefix = longest_common_prefix(&sub_wl);
-                    if longest_prefix == *slash_word {
+                    if longest_prefix == *slash_word && sub_wl.len() > 1 {
                         // 如果相等，则展示sub_wl
                         println!("\n{:#?}", sub_wl);
                         print_line_start(cwd.as_str());
