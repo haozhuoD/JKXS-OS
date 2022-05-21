@@ -230,6 +230,11 @@ pub fn readcwd() -> Vec<String> {
 }
 
 pub fn change_cwd(cwd: &str, path: &str) -> String {
+    if path.starts_with("/") {
+        let mut path = path.trim_end_matches("/\0").to_string();
+        path.push('/');    
+        return path; 
+    }
     let mut cwdv: Vec<&str> = cwd.split("/").filter(|x| *x != "").collect();
     let pathv: Vec<&str> = path
         .split("/")
@@ -253,7 +258,7 @@ pub fn change_cwd(cwd: &str, path: &str) -> String {
     cwd
 }
 
-pub fn readdir(abs_path: &str) -> Vec<String> {
+pub fn get_wordlist(abs_path: &str) -> Vec<String> {
     let mut buf = [0u8; 3000];
     let mut abs_path = abs_path.to_string();
     abs_path.push('\0');

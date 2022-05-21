@@ -347,7 +347,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
 pub fn sys_chdir(path: *const u8) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let mut path = translated_str(token, path);
     let mut inner = process.inner_exclusive_access();
 
     let old_cwd = if !path.starts_with("/") {
@@ -360,6 +360,9 @@ pub fn sys_chdir(path: *const u8) -> isize {
         if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {
                 if path.starts_with("/") {
+                    if !path.ends_with("/") {
+                        path.push('/');
+                    }
                     inner.cwd = path.clone();
                 } else {
                     assert!(old_cwd.ends_with("/"));
