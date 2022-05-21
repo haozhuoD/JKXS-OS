@@ -370,7 +370,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
      *         - status 110: Data rejected due to a Write error.    6
      *         - status 111: Data rejected due to other error.      7
      */
-    // 一定会马上返回dataresponse？ 我觉得不会
+    // 一定会马上返回dataresponse？ no
     fn get_dataresponse(&self) -> u8 {
         let response = &mut [0u8];
         /* Read resonse */
@@ -686,50 +686,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             }
         }
 
-        // cnt = 0xff;
-        // result = 0xff;
-
-        // let mut index = 255;
-        // while index != 0 {
-        //     /* <ACMD> */
-        //     self.send_cmd(CMD::CMD55, 0, 0);
-        //     let result = self.get_response();
-        //     self.end_cmd();
-        //     if result != 0x01 {
-        //         return Err(InitError::CMDFailed(CMD::CMD55, result));
-        //     }
-        //     /* Initiate SDC initialization process */
-        //     self.send_cmd(CMD::ACMD41, 0x40000000, 0);
-        //     let result = self.get_response();
-        //     self.end_cmd();
-        //     if result == 0x00 {
-        //         break;
-        //     }
-        //     index -= 1;
-        // }
-        // if index == 0 {
-        //     return Err(InitError::CMDFailed(CMD::ACMD41, result));
-        // }
-        // index = 255;
-        // let mut frame = [0u8; 4];
-        // while index != 0 {
-        //     /* Read OCR */
-        //     self.send_cmd(CMD::CMD58, 0, 1);
-        //     let result = self.get_response();
-        //     self.read_data(&mut frame);
-        //     self.end_cmd();
-        //     if result == 0 {
-        //         break;
-        //     }
-        //     index -= 1;
-        // }
-        // if index == 0 {
-        //     return Err(InitError::CMDFailed(CMD::CMD58, result));
-        // }
-        // if (frame[0] & 0x40) == 0 {
-        //     return Err(InitError::CardCapacityStatusNotSet(frame));
-        // }
-
         self.spi.switch_cs(false, 0);
         self.write_data(&[0xff; 10]);
 
@@ -812,46 +768,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         } else {
             Ok(())
         }
-
-        ///////////////////////// xwh
-        // let mut cur_sector = sector;
-
-        // for chunk in data_buf.chunks_mut(SEC_LEN) {
-
-        //     /* Send CMD17 to read one block */
-        //     self.send_cmd(CMD::CMD17, cur_sector, 0);
-        //     /* Check if the SD acknowledged the read block command: R1 response (0x00: no errors) */
-        //     let res = self.get_response();
-        //     if res != 0x00 {
-        //     self.end_cmd();
-        //     return Err(());
-        //     }
-
-        //     //let mut dma_chunk = [0u32; SEC_LEN];
-        //     let mut tmp_chunk= [0u8; SEC_LEN];
-        //     let mut count = 0;
-        //     let mut resp = self.get_response();
-        //     if resp != SD_START_DATA_SINGLE_BLOCK_READ {
-        //     resp = self.get_response();
-        //     break;
-        //     }
-
-        //     /* Read the SD block data : read NumByteToRead data */
-        //     self.read_data(&mut tmp_chunk);
-        //     /* Place the data received as u32 units from DMA into the u8 target buffer */
-        //     for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/tmp_chunk.iter()) {
-        //     *a = *b;
-        //     }
-        //     /* Get CRC bytes (not really needed by us, but required by SD) */
-        //     let mut frame = [0u8; 2];
-        //     self.read_data(&mut frame);
-
-        //     // put some dummy bytes
-        //     self.end_cmd();
-        //     self.end_cmd();
-
-        //     cur_sector += SEC_LEN as u32;
-        // }
 
         // // put some dummy bytes
         // self.end_cmd();
@@ -956,56 +872,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         // self.end_cmd();
 
         Ok(())
-
-        /////////////////// xwh
-
-        // let mut frame = [0xff, 0x00];
-        // if data_buf.len() == SEC_LEN {
-        //     frame[1] = SD_START_DATA_SINGLE_BLOCK_WRITE;
-        //     self.send_cmd(CMD::CMD24, sector, 0);
-        // } else {
-        //     frame[1] = SD_START_DATA_MULTIPLE_BLOCK_WRITE;
-        //     self.send_cmd(CMD::CMD55, 0, 0x01);
-        //     self.get_response();
-        //     self.end_cmd();
-        //     self.send_cmd(CMD::ACMD23, (data_buf.len() / SEC_LEN).try_into().unwrap(), 0);
-        //     self.get_response();
-        //     self.end_cmd();
-        //     self.send_cmd(CMD::CMD25, sector, 0);
-        // }
-        // /* Check if the SD acknowledged the write block command: R1 response (0x00: no errors) */
-        // if self.get_response() != 0x00 {
-        //     //self.end_cmd();
-        //     // return Err(());
-        // }
-        // //let mut dma_chunk = [0u32; SEC_LEN];
-        // let mut tmp_chunk = [0u8; SEC_LEN];
-        // for chunk in data_buf.chunks(SEC_LEN) {
-        //     /* Send the data token to signify the start of the data */
-        //     self.write_data(&frame);
-        //     /* Write the block data to SD : write count data by block */
-        //     for (a, &b) in /*dma_chunk*/tmp_chunk.iter_mut().zip(chunk.iter()) {
-        //     //*a = b.into();
-        //     *a = b;
-        //     }
-        //     //self.write_data_dma(&mut dma_chunk);
-        //     self.write_data(&mut tmp_chunk);
-        //     /* Put dummy CRC bytes */
-        //     self.write_data(&[0xff, 0xff]);
-        //     /* Read data response */
-        //     if self.get_dataresponse() != 0x05 {
-        //     //self.end_cmd();
-        //     //return Err(());
-        //     }
-        // }
-
-        // if frame[1] == SD_START_DATA_MULTIPLE_BLOCK_WRITE {
-        //     frame[1] = SD_STOP_DATA_MULTIPLE_BLOCK_WRITE;
-        //     self.write_data(&frame);
-        // }
-
-        // self.end_cmd();
-        // self.end_cmd();
 
         // /*
         // self.send_cmd(CMD::CMD12, 0, 0);
