@@ -148,6 +148,16 @@ move:
 	rm -f ~/nfs/os.bin
 	sudo cp ./os.bin ~/nfs	
 
+showmount:
+	showmount -e 10.251.176.187
+
+nfs-mount:
+	sudo mount -t nfs 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
+
+unmount:
+	sudo umount ~/nfs
+
+
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)
 # 	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(HANDIN_BIN)
