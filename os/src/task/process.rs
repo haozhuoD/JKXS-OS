@@ -24,8 +24,6 @@ pub struct ProcessControlBlock {
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
-pub type FdTable = Vec<Option<FileClass>>;
-
 pub struct ProcessControlBlockInner {
     pub is_zombie: bool,
     pub memory_set: MemorySet,
@@ -37,15 +35,12 @@ pub struct ProcessControlBlockInner {
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
     pub cwd: String,
-    // pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
-    // pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
-    // pub condvar_list: Vec<Option<Arc<Condvar>>>,
-    // user heap
-    pub user_heap_base: usize,
+    pub user_heap_base: usize, // user heap
     pub user_heap_top: usize,
-    // mmap area
-    pub mmap_area_top: usize,
+    pub mmap_area_top: usize,  // mmap area
 }
+
+pub type FdTable = Vec<Option<FileClass>>;
 
 impl ProcessControlBlockInner {
     #[allow(unused)]
