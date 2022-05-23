@@ -53,6 +53,7 @@ fn clear_bss() {
         fn sbss();
         fn ebss();
     }
+    info!(" sbss: {:#x}    ebss: {:#x} ",sbss as usize, ebss as usize);
     unsafe {
         core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
             .fill(0);
@@ -73,6 +74,7 @@ pub fn rust_main() -> ! {
     }
     clear_bss();
     mm::init();
+    info!("test 0");
     mm::remap_test();
     fpu::init();
     trap::init();
@@ -83,10 +85,12 @@ pub fn rust_main() -> ! {
     task::add_initproc();
     info!("(Boot Core) Riscv hartid {} run ", hartid);
 
-    *(BOOT_CORE_READY.write()) = true;
-    wakeup_other_cores(hartid);
-
-    while *(BOOT_COUNT.lock()) != 2 {};
+    if cfg!(not(feature = "board_k210")){
+        *(BOOT_CORE_READY.write()) = true;
+        wakeup_other_cores(hartid);
+        while *(BOOT_COUNT.lock()) != 2 {};
+    }
+    
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

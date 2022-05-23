@@ -20,9 +20,13 @@ pub use page_table::{
 use riscv::register::satp;
 
 pub fn init() {
+    info!("test a");
     heap_allocator::init_heap();
+    info!("test b");
     frame_allocator::init_frame_allocator();
+    info!("test c");
     KERNEL_SPACE.write().activate();
+    info!("test d");
 }
 
 pub fn init_other() {

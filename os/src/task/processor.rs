@@ -166,24 +166,6 @@ pub fn run_tasks() {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         }
-
-        // if let Some(task) = fetch_task() {
-        //     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-        //     // access coming task TCB exclusively
-        //     let mut task_inner = task.inner_exclusive_access();
-        //     let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-        //     task_inner.task_status = TaskStatus::Running;
-        //     drop(task_inner);
-        //     // release coming task TCB manually
-        //     // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-        //     processor.current = Some(task);
-
-        //     // release processor manually
-        //     drop(processor);
-        //     unsafe {
-        //         __switch(idle_task_cx_ptr, next_task_cx_ptr);
-        //     }
-        // }
     }
 }
 

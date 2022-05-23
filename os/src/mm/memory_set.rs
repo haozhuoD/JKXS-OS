@@ -47,6 +47,7 @@ pub struct MemorySet {
 
 impl MemorySet {
     pub fn new_bare() -> Self {
+        info!("new_bare s");
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
@@ -97,6 +98,9 @@ impl MemorySet {
             TRAMPOLINE,
             strampoline as usize
         );
+        info!("map_trampoline onepage va[0x{:X}-] -> pa[0x{:X}-]",
+        TRAMPOLINE,
+        strampoline as usize);
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
             PhysAddr::from(strampoline as usize).into(),
@@ -105,9 +109,12 @@ impl MemorySet {
     }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
+        info!("new_kernel s");
         let mut memory_set = Self::new_bare();
         // map trampoline
+        info!("map trampoline s");
         memory_set.map_trampoline();
+        info!("map trampoline e");
         // map kernel sections
         debug!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
         debug!(
@@ -194,6 +201,7 @@ impl MemorySet {
             );
         }
         debug!("mapping done");
+        debug!("kernel stap {:#x}", memory_set.page_table.token());
         memory_set
     }
     /// Include sections in elf and trampoline,
@@ -373,12 +381,17 @@ impl MemorySet {
         memory_set
     }
     pub fn activate(&self) {
+        info!("activate s");
         let satp = self.page_table.token();
+        debug!("activate stap {:#x}", satp);
+        info!("activate 1");
         unsafe {
             SATP = satp; //其他核初始化
             satp::write(satp);
+            info!("activate 2");
             asm!("sfence.vma");
         }
+        info!("activate e");
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)

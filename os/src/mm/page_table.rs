@@ -85,7 +85,11 @@ impl PageTable {
             }
             if !pte.is_valid() {
                 let frame = frame_alloc().unwrap();
-                *pte = PageTableEntry::new(frame.ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
+                if cfg!(feature = "board_k210") {
+                    *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                } else {
+                    *pte = PageTableEntry::new(frame.ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
+                }
                 self.frames.push(frame);
             }
             ppn = pte.ppn();
@@ -113,7 +117,11 @@ impl PageTable {
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V | PTEFlags::A | PTEFlags::D);
+        if cfg!(feature = "board_k210") {
+            *pte = PageTableEntry::new(ppn, PTEFlags::V);
+        } else {
+            *pte = PageTableEntry::new(ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
+        }
     }
     #[allow(unused)]
     pub fn unmap(&mut self, vpn: VirtPageNum) {
