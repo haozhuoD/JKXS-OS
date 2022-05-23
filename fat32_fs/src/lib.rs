@@ -21,6 +21,7 @@ pub use block_cache::{
     get_info_block_cache,
     set_start_sector,
     write_to_dev,
+    sync_all,
     DATA_BLOCK_CACHE_MANAGER,
     INFO_BLOCK_CACHE_MANAGER
 };

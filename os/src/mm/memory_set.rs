@@ -109,17 +109,17 @@ impl MemorySet {
         // map trampoline
         memory_set.map_trampoline();
         // map kernel sections
-        println!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(
+        debug!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
+        debug!(
             ".rodata va[{:#x}, {:#x})",
             srodata as usize, erodata as usize
         );
-        println!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
-        println!(
+        debug!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
+        debug!(
             ".bss va[{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
-        println!("mapping .text section Identical");
+        debug!("mapping .text section Identical");
         memory_set.push(
             MapArea::new(
                 (stext as usize).into(),
@@ -130,7 +130,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .rodata section Identical");
+        debug!("mapping .rodata section Identical");
         memory_set.push(
             MapArea::new(
                 (srodata as usize).into(),
@@ -141,7 +141,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .data section Identical");
+        debug!("mapping .data section Identical");
         memory_set.push(
             MapArea::new(
                 (sdata as usize).into(),
@@ -152,7 +152,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .bss section Identical");
+        debug!("mapping .bss section Identical");
         memory_set.push(
             MapArea::new(
                 (sbss_with_stack as usize).into(),
@@ -163,7 +163,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping physical memory Identical");
+        debug!("mapping physical memory Identical");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -174,9 +174,9 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping memory-mapped registers Identical");
+        debug!("mapping memory-mapped registers Identical");
         for pair in MMIO {
-            println!(
+            debug!(
                 "MMIO range [ {:#x} ~ {:#x}  ]",
                 (*pair).0,
                 (*pair).0 + (*pair).1
@@ -193,7 +193,7 @@ impl MemorySet {
                 0,
             );
         }
-        println!("[kernel] mapping done");
+        debug!("mapping done");
         memory_set
     }
     /// Include sections in elf and trampoline,
@@ -572,7 +572,7 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    println!("[kernel] remap test start...");
+    debug!("remap test start...");
     let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
@@ -594,6 +594,5 @@ pub fn remap_test() {
         .translate(mid_data.floor())
         .unwrap()
         .executable(),);
-
-    println!("remap_test passed!");
+    debug!("remap_test passed!");
 }

@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EPERM, ENOENT, EBADF};
+use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR};
 
 const AT_FDCWD: isize = -100;
 
@@ -347,7 +347,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
 pub fn sys_chdir(path: *const u8) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let mut path = translated_str(token, path);
     let mut inner = process.inner_exclusive_access();
 
     let old_cwd = if !path.starts_with("/") {
@@ -357,33 +357,40 @@ pub fn sys_chdir(path: *const u8) -> isize {
     };
 
     let ret = {
-        if let Some(_) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
-            if path.starts_with("/") {
-                inner.cwd = path.clone();
-            } else {
-                assert!(old_cwd.ends_with("/"));
-                let pathv = path2vec(&path);
-                let mut cwdv: Vec<_> = path2vec(&old_cwd);
+        if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+            if osfile.is_dir() {
+                if path.starts_with("/") {
+                    if !path.ends_with("/") {
+                        path.push('/');
+                    }
+                    inner.cwd = path.clone();
+                } else {
+                    assert!(old_cwd.ends_with("/"));
+                    let pathv = path2vec(&path);
+                    let mut cwdv: Vec<_> = path2vec(&old_cwd);
 
-                // cwdv.pop();
-                for &path_element in pathv.iter() {
-                    if path_element == "." || path_element == "" {
-                        continue;
-                    } else if path_element == ".." {
-                        cwdv.pop();
-                    } else {
-                        cwdv.push(path_element);
+                    // cwdv.pop();
+                    for &path_element in pathv.iter() {
+                        if path_element == "." || path_element == "" {
+                            continue;
+                        } else if path_element == ".." {
+                            cwdv.pop();
+                        } else {
+                            cwdv.push(path_element);
+                        }
+                    }
+                    inner.cwd = String::from("/");
+                    for &cwd_element in cwdv.iter() {
+                        if cwd_element != "" {
+                            inner.cwd.push_str(cwd_element);
+                            inner.cwd.push('/');
+                        }
                     }
                 }
-                inner.cwd = String::from("/");
-                for &cwd_element in cwdv.iter() {
-                    if cwd_element != "" {
-                        inner.cwd.push_str(cwd_element);
-                        inner.cwd.push('/');
-                    }
-                }
+                0
+            } else {
+                -ENOTDIR
             }
-            0
         } else {
             -EPERM
         }
@@ -674,4 +681,21 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         -ENOENT
     );
     return -ENOENT;
+}
+
+pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
+    let token = current_user_token();
+    let buf_vec = translated_byte_buffer(token, buf, len);
+    let abs_path = translated_str(token, abs_path);
+    let mut userbuf = UserBuffer::new(buf_vec);
+    let ret = if let Some(osfile) = open_file("/", abs_path.as_str(), OpenFlags::RDONLY) {
+        getdents64_inner(
+            osfile,
+            &mut userbuf,
+            len,
+        )
+    } else {
+        -EPERM
+    };
+    ret
 }

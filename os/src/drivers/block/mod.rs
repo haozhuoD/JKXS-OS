@@ -38,7 +38,7 @@ pub fn block_device_test() {
     let block_device = BLOCK_DEVICE.clone();
     let mut write_buffer = [0u8; 512];
     let mut read_buffer = [0u8; 512];
-    for i in 0..512 {
+    for i in 131072..131584 {
         for byte in write_buffer.iter_mut() {
             *byte = i as u8;
         }
@@ -46,5 +46,15 @@ pub fn block_device_test() {
         block_device.read_block(i as usize, &mut read_buffer);
         assert_eq!(write_buffer, read_buffer);
     }
-    println!("block device test passed!");
+    println!("block device 512 blocks loop[ write-read ]  test passed!");
+    let mut write_buffer = [66u8; 512];
+    let mut read_buffer = [0u8; 512];
+    for i in 131072..131584 {
+        block_device.write_block(i as usize, &write_buffer);
+    }
+    for i in 131072..131584 {
+        block_device.read_block(i as usize, &mut read_buffer);
+        assert_eq!(write_buffer, read_buffer);
+    }
+    println!("block device 512 blocks test passed!");
 }

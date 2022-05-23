@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
 
+use fat32_fs::sync_all;
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
 use crate::gdb_println;
@@ -23,6 +24,7 @@ use alloc::vec::Vec;
 use super::errorno::{EINVAL, EPERM};
 
 pub fn sys_shutdown() -> ! {
+    sync_all();
     shutdown();
 }
 

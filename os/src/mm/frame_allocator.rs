@@ -49,7 +49,7 @@ impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
-        println!("Remain {} free physical frames", self.end - self.current);
+        info!("Remain {} free physical frames", self.end - self.current);
     }
 }
 impl FrameAllocator for StackFrameAllocator {

@@ -65,6 +65,7 @@ const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
 const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
+const SYSCALL_READDIR: usize = 0xf001;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
@@ -172,4 +173,12 @@ pub fn sys_toggle_trace() -> isize {
 
 pub fn sys_chdir(path: &str) -> isize {
     syscall(SYSCALL_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_getdents64(fd: isize, buf: &mut [u8]) -> isize {
+    syscall(SYSCALL_GETDENTS64, [fd as usize, buf.as_mut_ptr() as usize, buf.len(), 0, 0, 0])
+}
+
+pub fn sys_readdir(abs_path: &str, buf: &mut [u8]) -> isize {
+    syscall(SYSCALL_READDIR, [abs_path.as_ptr() as usize, buf.as_mut_ptr() as usize, buf.len(), 0, 0, 0])
 }

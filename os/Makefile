@@ -155,7 +155,16 @@ REMOTE_ELF := ../os.elf
 
 remote-fu740: build
 	@cp $(KERNEL_ELF) $(REMOTE_ELF)
-# scp -P 8122 nxos.elf ubuntu@183.173.21.114:/srv/tftp/
+
+showmount:
+	showmount -e 10.251.176.187
+
+nfs-mount:
+	sudo mount -t nfs 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
+
+unmount:
+	sudo umount ~/nfs
+
 
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)

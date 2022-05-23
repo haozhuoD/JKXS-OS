@@ -35,8 +35,8 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
     for i in hart_min..=hart_max {
         if i != boot_hartid {
             let hart_status = sbi_get_hart_status(i);
-            info!("(wakeup_other_cores)   hart{} status:{}", i, hart_status as isize);
-            // let ret = sbi_hart_start(i, skernel as usize, 0);
+            debug!("Wakeup other cores, hartid: {} status:{}", i, hart_status as isize);
+            let ret = sbi_hart_start(i, skernel as usize, 0);
             // while sbi_hart_start(i, skernel as usize, 0)!=0 {
 
             //根据核状态做不同处理
