@@ -7,6 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-k210-hal = { path = "../k210-hal" }
-k210-pac = { path = "../k210-pac" }
-riscv = { path = "../riscv", features = ["inline-asm"] }
+k210-hal = { path="../k210-hal"} 
+k210-pac = { path="../k210-pac"} 
+riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }

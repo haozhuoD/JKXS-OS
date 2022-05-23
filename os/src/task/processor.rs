@@ -60,11 +60,19 @@ pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| {
     ]
 });
 
-#[cfg(not(any(feature = "board_fu740")))]
+#[cfg(feature = "board_qemu")]
 pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| {
     [
         Processor::new(),
         Processor::new(),
+        Processor::new(),
+        Processor::new(),
+    ]
+});
+
+#[cfg(not(any(feature = "board_qemu", feature = "board_fu740")))]
+pub static PROCESSORS: Lazy<[Processor; MAX_CPU_NUM]> = Lazy::new(|| {
+    [
         Processor::new(),
         Processor::new(),
     ]

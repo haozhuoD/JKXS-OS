@@ -19,4 +19,6 @@ pub const MMIO: &[(usize, usize)] = &[
     (0x5400_0000, 0x1000), /* SPI2      */
 ];
 
-pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
+pub type BlockDeviceImpl = crate::drivers::k210_block::SDCardWrapper;
+
+pub const MAX_CPU_NUM: usize = 2;

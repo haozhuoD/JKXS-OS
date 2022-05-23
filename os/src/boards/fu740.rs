@@ -52,6 +52,6 @@ pub const MMIO: &[(usize, usize)] = &[
                                // (0x0020_0000_0000, 0x003F_FFFF_FFFF),  // PCIe */           0x20_0000_0000  0x003F_FFFF_FFFF
 ];
 
-pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
+pub type BlockDeviceImpl = crate::drivers::fu740_block::SDCardWrapper;
 
 pub const MAX_CPU_NUM: usize = 5;

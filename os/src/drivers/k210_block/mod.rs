@@ -1,13 +1,8 @@
-mod sdcard;
 mod k210_sdcard;
-mod sleep;
-mod spi;
-mod virtio_blk;
 
+pub use k210_sdcard::SDCardWrapper;
 
-pub use sdcard::SDCardWrapper;
 use spin::Lazy;
-pub use virtio_blk::VirtIOBlock;
 
 use crate::board::BlockDeviceImpl;
 use alloc::sync::Arc;
@@ -34,7 +29,7 @@ pub static BLOCK_DEVICE: Lazy<Arc<dyn BlockDevice>> =
 // }
 
 #[allow(unused)]
-pub fn block_device_test() {
+pub fn k210_block_device_test() {
     let block_device = BLOCK_DEVICE.clone();
     let mut write_buffer = [0u8; 512];
     let mut read_buffer = [0u8; 512];

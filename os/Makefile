@@ -23,18 +23,19 @@ else
 	BOOTLOADER := ../bootloader/fw_jump.bin
 endif
 
-fu740_BOOTLOADER_SIZE := 1310720
+# fu740_BOOTLOADER_SIZE := 1310720
+K210_BOOTLOADER_SIZE := 131072
 
 # KERNEL ENTRY 0x80200000
-ifeq ($(BOARD), qemu)
-	KERNEL_ENTRY_PA := 0x80200000
-else ifeq ($(BOARD), fu740)
+ifeq ($(BOARD), k210)
+	KERNEL_ENTRY_PA := 0x80020000
+else 
 	KERNEL_ENTRY_PA := 0x80200000
 endif
 
-# Run fu740
-fu740-SERIALPORT	= /dev/ttyUSB0
-fu740-BURNER	= ../tools/kflash.py
+# Run K210
+K210-SERIALPORT	= /dev/ttyUSB0
+K210-BURNER	= ../tools/kflash.py
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
@@ -84,14 +85,15 @@ ifeq ($(BOARD),qemu)
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-smp $(CPUS)
-else
-	(which $(fu740-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
+else ifeq ($(BOARD),k210)
+	@echo "run k210"
+	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(fu740_BOOTLOADER_SIZE) seek=1
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
-	@sudo chmod 777 $(fu740-SERIALPORT)
-	python3 $(fu740-BURNER) -p $(fu740-SERIALPORT) -b 1500000 $(KERNEL_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(fu740-SERIALPORT) 115200
+	@sudo chmod 777 $(K210-SERIALPORT)
+	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(KERNEL_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 endif
 
 gdb:
@@ -151,11 +153,6 @@ move:
 local_nfs:
 	sudo mount 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
 
-REMOTE_ELF := ../os.elf
-
-remote-fu740: build
-	@cp $(KERNEL_ELF) $(REMOTE_ELF)
-
 showmount:
 	showmount -e 10.251.176.187
 
@@ -165,6 +162,23 @@ nfs-mount:
 unmount:
 	sudo umount ~/nfs
 
+# ------------------------- 远程U740平台
+REMOTE_ELF := ../os.elf
+
+remote-fu740: build
+	@cp $(KERNEL_ELF) $(REMOTE_ELF)
+
+
+# ----------------------- k210 提交
+handin-k210: build
+	@cp $(BOOTLOADER) $(BOOTLOADER).copy
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@mv $(BOOTLOADER).copy $(HANDIN_BIN)
+
+burn-k210:
+	@sudo chmod 777 $(K210-SERIALPORT)
+	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(HANDIN_BIN)
+	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
 
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)

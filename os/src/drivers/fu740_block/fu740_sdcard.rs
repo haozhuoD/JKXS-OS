@@ -5,7 +5,7 @@
 use super::BlockDevice;
 
 use super::sleep::usleep;
-use super::spi::{SPIImpl, SPI}; //, SPIExt
+use super::fu740_spi::{SPIImpl, SPI}; //, SPIExt
 use alloc::sync::Arc;
 use core::convert::TryInto;
 use fu740_hal::prelude::*;
