@@ -1,5 +1,18 @@
 # system overview
 
+#### 内核赛道 初赛双赛道（k210 & fu740）测评满分
+
+#### 相关文档存于 `/doc`
+
+#### 分支简介
+* main               ------主分支
+* hifive-SingleCore  ------fu740平台单核分支
+* pre-k210           ------k210平台单核分支
+* finalcomp-syscalls ------面向决赛开发分支（正在开发）
+* K210-Hifive        ------同时支持fu740多核 & k210单核分支（正在开发）
+* usershell          ------user-shell开发分支
+
+
 ## Our Work
 
 jkxs-OS致力于开发一个能在RISCV-64处理器上运行的宏内核操作系统。我们以清华大学吴一凡同学的教学项目rCore-Tutorial为基础，在其代码框架上进行迭代开发。
