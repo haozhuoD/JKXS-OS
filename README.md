@@ -8,8 +8,8 @@
 * main               ------主分支
 * hifive-SingleCore  ------fu740平台单核分支
 * pre-k210           ------k210平台单核分支
-* finalcomp-syscalls ------面向决赛开发分支（正在开发）
-* K210-Hifive        ------同时支持fu740多核 & k210单核分支（正在开发）
+* finalcomp-syscalls ------面向决赛的多核开发分支
+* K210-Hifive        ------同时支持fu740多核 & k210单核开发分支
 * usershell          ------user-shell开发分支
 
 
