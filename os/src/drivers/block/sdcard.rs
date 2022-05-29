@@ -930,7 +930,7 @@ impl BlockDevice for SDCardWrapper {
         // self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
         let ret = self.0.lock().write_sector(buf, block_id as u32 +10274);
         let ret = match ret {
-            Ok(()) =>  println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
+            Ok(()) =>  {},//println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
             Err(()) => {
                 println!("[BlockDevice-write_sector] retry write block {} | {} ......", block_id+10274, block_id);
                 self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
