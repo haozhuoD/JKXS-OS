@@ -1,18 +1,12 @@
-# rCore-Tutorial-v3
-rCore-Tutorial version 3.x
+# jkxs-OS
+jkxs-OS version 0.1
 
 ## Dependency
 
 ### Binaries
 
-* rustc: 1.57.0-nightly (e1e9319d9 2021-10-14)
-
-* cargo-binutils: 0.3.3
+* rustc 1.60.0-nightly (9ad5d82f8 2022-01-18)
 
 * qemu: 5.0.0
 
-* rustsbi-lib: 0.2.0-alpha.4
-
-  rustsbi-qemu: d4968dd2
-
-  rustsbi-k210: b689314e
+* todo
