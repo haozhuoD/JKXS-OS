@@ -349,13 +349,11 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let token = current_user_token();
     let mut path = translated_str(token, path);
     let mut inner = process.inner_exclusive_access();
-
     let old_cwd = if !path.starts_with("/") {
         inner.cwd.clone()
     } else {
         String::from("/")
     };
-
     let ret = {
         if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {

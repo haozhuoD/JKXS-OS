@@ -153,6 +153,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
     };
     let (readable, writable) = flags.read_write();
+    println!("open_file");
 
     let mut pathv = path2vec(path);
 
