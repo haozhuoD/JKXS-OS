@@ -578,7 +578,47 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
     ret
 }
 
-pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+
+    let mut ret = 0isize;
+
+    if fd >= inner.fd_table.len() {
+        return -EPERM;
+    }
+
+    if let Some(file) = &inner.fd_table[fd] {
+        let f: Arc<dyn File + Send + Sync>;
+        match file {
+            FileClass::File(fi) => f = fi.clone(),
+            FileClass::Abs(fi) => f = fi.clone(),
+        }
+        if !f.readable() {
+            return -EPERM;
+        }
+
+        for i in 0..iocnt {
+            let iovec = translated_ref(token, unsafe { iov.add(i) });
+            let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
+            ret += f.read(UserBuffer::new(buf)) as isize;
+        }
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_readv(fd: {}, iov = {:x?}, iocnt: {}) = {}",
+        fd,
+        iov,
+        iocnt,
+        ret
+    );
+
+    ret
+}
+
+pub fn sys_writev(fd: usize, iov: *const IOVec, iocnt: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.inner_exclusive_access();
@@ -636,7 +676,7 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
                 if offset as usize != 0 {
                     fi.seek(*translated_ref(token, offset));
                 };
-                
+
                 fin_inner = fi.clone();
             }
             _ => return -EPERM,

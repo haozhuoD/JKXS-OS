@@ -19,6 +19,7 @@ const SYSCALL_GETDENTS64: usize = 61;
 const SYSCALL_LSEEK: usize = 62;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PSELECT6: usize = 72;
@@ -105,6 +106,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[3] as _,
             args[4] as _,
         ),
+        SYSCALL_FACCESSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _), // fake
         SYSCALL_CHDIR => sys_chdir(args[0] as _),
         SYSCALL_OPENAT => sys_open_at(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_CLOSE => sys_close(args[0]),
@@ -112,6 +114,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETDENTS64 => sys_getdents64(args[0] as _, args[1] as _, args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as _, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as _, args[2]),
+        SYSCALL_READV => sys_readv(args[0], args[1] as _, args[2]),
         SYSCALL_WRITEV => sys_writev(args[0], args[1] as _, args[2]),
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2] as _, args[3]),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as _, args[1] as _, args[2] as _),
