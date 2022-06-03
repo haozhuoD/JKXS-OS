@@ -118,7 +118,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
-            -EPERM
+            -ENOENT
         }
     };
 
