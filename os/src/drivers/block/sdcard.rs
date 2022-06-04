@@ -772,7 +772,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         // // put some dummy bytes
         // self.end_cmd();
         // self.end_cmd();
-
         // /* It is an error if not everything requested was read */
         // Ok(())
     }
@@ -872,26 +871,16 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         // self.end_cmd();
 
         Ok(())
-
-        // /*
-        // self.send_cmd(CMD::CMD12, 0, 0);
-        // self.get_response();
-        // self.end_cmd();
-        // self.end_cmd();
-        // */
-
-        // Ok(())
     }
 }
- 
-// todo 片选序号随意？！  和GPIO序号随意？！   单个SPI端口就可以（hifive完全集成到SPI控制寄存器里了
+
 /** GPIOHS GPIO number to use for controlling the SD card CS pin */
 // const SD_CS_GPIONUM: u8 = 7;
 /** CS value passed to SPI controller, this is a dummy value as SPI0_CS3 is not mapping to anything
  * in the FPIOA */
 const SD_CS: u32 = 0;
 
-// todo 如何实现如下功能   无需实现
+// 无需实现如下功能  
 /** Connect pins to internal functions */
 // fn io_init() {
 //     fpioa::set_function(io::SPI0_SCLK, fpioa::function::SPI0_SCLK);
@@ -969,7 +958,7 @@ impl BlockDevice for SDCardWrapper {
         // self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
         let ret = self.0.lock().write_sector(buf, block_id as u32 + 10274);
         let ret = match ret {
-            Ok(()) => (), //println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
+            Ok(()) =>  {},//println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
             Err(()) => {
                 println!(
                     "[BlockDevice-write_sector] retry write block {} | {} ......",

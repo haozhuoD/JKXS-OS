@@ -350,10 +350,10 @@ pub struct Uname {
 impl Uname {
     pub fn new() -> Self {
         Self {
-            sysname: Uname::fill_field("oscomp-2022"),
-            nodename: Uname::fill_field("oscomp-2022"),
-            release: Uname::fill_field("???"),
-            version: Uname::fill_field("1.0"),
+            sysname: Uname::fill_field("Linux"),
+            nodename: Uname::fill_field("debian"),
+            release: Uname::fill_field("5.10.0-7-riscv64"),
+            version: Uname::fill_field("#1 SMP Debian 5.10.40-1 (2021-05-28)"),
             machine: Uname::fill_field("riscv-64"),
             domainname: Uname::fill_field(""),
         }

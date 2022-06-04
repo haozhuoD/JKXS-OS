@@ -11,11 +11,12 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR};
+use super::errorno::{EBADF, ENOENT, ENOTDIR, EPERM};
 
 const AT_FDCWD: isize = -100;
 
@@ -117,7 +118,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
-            -EPERM
+            -ENOENT
         }
     };
 
@@ -577,7 +578,47 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
     ret
 }
 
-pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+
+    let mut ret = 0isize;
+
+    if fd >= inner.fd_table.len() {
+        return -EPERM;
+    }
+
+    if let Some(file) = &inner.fd_table[fd] {
+        let f: Arc<dyn File + Send + Sync>;
+        match file {
+            FileClass::File(fi) => f = fi.clone(),
+            FileClass::Abs(fi) => f = fi.clone(),
+        }
+        if !f.readable() {
+            return -EPERM;
+        }
+
+        for i in 0..iocnt {
+            let iovec = translated_ref(token, unsafe { iov.add(i) });
+            let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
+            ret += f.read(UserBuffer::new(buf)) as isize;
+        }
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_readv(fd: {}, iov = {:x?}, iocnt: {}) = {}",
+        fd,
+        iov,
+        iocnt,
+        ret
+    );
+
+    ret
+}
+
+pub fn sys_writev(fd: usize, iov: *const IOVec, iocnt: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.inner_exclusive_access();
@@ -617,8 +658,65 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     ret
 }
 
-pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) {
-    todo!();
+pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+
+    let fout = inner.fd_table.get(out_fd).unwrap_or(&None);
+    let fin = inner.fd_table.get(in_fd).unwrap_or(&None);
+
+    if fin.is_none() || fout.is_none() {
+        return -EPERM;
+    } else {
+        let fin = fin.clone().unwrap();
+        let fin_inner: Arc<dyn File + Send + Sync>;
+        match fin {
+            FileClass::File(fi) => {
+                if offset as usize != 0 {
+                    fi.seek(*translated_ref(token, offset));
+                };
+
+                fin_inner = fi.clone();
+            }
+            _ => return -EPERM,
+        }
+        if !fin_inner.readable() {
+            return -EPERM;
+        }
+
+        let fout = fout.clone().unwrap();
+        let fout_inner: Arc<dyn File + Send + Sync>;
+        match fout {
+            FileClass::File(fi) => fout_inner = fi.clone(),
+            FileClass::Abs(fi) => fout_inner = fi.clone(),
+        }
+        if !fout_inner.writable() {
+            return -EPERM;
+        }
+
+        // sendfile
+        let mut buf = vec![0u8; count];
+        let userbuf_read = UserBuffer::new(vec![unsafe {
+            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), count)
+        }]);
+        let read_cnt = fin_inner.read(userbuf_read);
+
+        let userbuf_write = UserBuffer::new(vec![unsafe {
+            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), read_cnt)
+        }]);
+        let ret = fout_inner.write(userbuf_write) as isize;
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_sendfile(out_fd = {}, in_fd = {}, offset = {:#x?}, count = {}) = {}",
+            out_fd,
+            in_fd,
+            offset,
+            count,
+            ret
+        );
+        ret
+    }
 }
 
 pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize) -> isize {
@@ -689,11 +787,7 @@ pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
     let abs_path = translated_str(token, abs_path);
     let mut userbuf = UserBuffer::new(buf_vec);
     let ret = if let Some(osfile) = open_file("/", abs_path.as_str(), OpenFlags::RDONLY) {
-        getdents64_inner(
-            osfile,
-            &mut userbuf,
-            len,
-        )
+        getdents64_inner(osfile, &mut userbuf, len)
     } else {
         -EPERM
     };
