@@ -158,8 +158,8 @@ impl FAT {
         let mut v_cluster: Vec<u32> = Vec::new();
         loop {
             v_cluster.push(curr_cluster & 0x0FFFFFFF);
-            // assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
-            // , curr_cluster, self.max_cluster);
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {
                 return v_cluster;
@@ -177,6 +177,8 @@ impl FAT {
         let mut curr_cluster = start_cluster;
         let mut count: u32 = 0;
         loop {
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             count += 1;
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {

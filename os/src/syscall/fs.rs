@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR};
+use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR, EINVAL};
 
 const AT_FDCWD: isize = -100;
 
@@ -575,6 +575,42 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
     ret
 }
 
+pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+    let mut ret = 0isize;
+    if fd >= inner.fd_table.len() {
+        return -EPERM;
+    }
+    if let Some(file) = &inner.fd_table[fd] {
+        let f: Arc<dyn File + Send + Sync>;
+        match file {
+            FileClass::File(fi) => f = fi.clone(),
+            FileClass::Abs(fi) => f = fi.clone(),
+        }
+        if !f.readable() {
+            return -EPERM;
+        }
+        for i in 0..iocnt {
+            let iovec = translated_ref(token, unsafe { iov.add(i) });
+            let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
+            ret += f.read(UserBuffer::new(buf)) as isize;
+        }
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_readv(fd: {}, iov = {:x?}, iocnt: {}) = {}",
+        fd,
+        iov,
+        iocnt,
+        ret
+    );
+
+    ret
+}
+
 pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
@@ -615,8 +651,77 @@ pub fn sys_writev(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     ret
 }
 
-pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) {
-    todo!();
+pub fn sys_sendfile(out_fd: isize, in_fd: isize, p_offset: *mut usize, count: usize) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.inner_exclusive_access();
+    let fd_table_len = inner.fd_table.len();
+    let out_fd = out_fd as usize;
+    let in_fd = in_fd as usize;
+    if out_fd >= fd_table_len || in_fd >= fd_table_len {
+        return -EBADF;
+    }
+    if let Some(FileClass::File(in_file)) = &inner.fd_table[in_fd] {
+        if let Some(out_file) = &inner.fd_table[out_fd] {
+            if in_file.readable() {
+                let file_offset = in_file.offset();
+                let mut buf;
+                let write_sz;
+                // offset is not NULL
+                if p_offset as usize != 0 {
+                    let offset = translated_refmut(token, p_offset);
+                    buf = in_file.read_from_offset(*offset, count);
+                } else {
+                    buf = in_file.read_from_offset(file_offset, count);
+                }
+                match out_file {
+                    FileClass::File(out_file) => {
+                        if !out_file.writable() {
+                            return -EBADF;
+                        }
+                        write_sz = out_file.write_all(&buf)
+                    },
+                    // 如果是Abs但writeable的话，也可以通过构造UserBuffer来写入
+                    FileClass::Abs(out_file) => {
+                        if !out_file.writable() {
+                            return -EBADF;
+                        }
+                        let mut bufv = Vec::new();
+                        bufv.push(
+                            unsafe { 
+                                core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len())
+                            }
+                        );
+                        let userbuf = UserBuffer::new(bufv);
+                        write_sz = out_file.write(userbuf);
+                    }
+                }
+                if p_offset as usize != 0 {
+                    let offset = translated_refmut(token, p_offset);
+                    gdb_println!(
+                        SYSCALL_ENABLE,
+                        "sys_sendfile(out_fd: {}, in_fd: {}, offset: {}, count: {}) = {}",
+                        out_fd, in_fd, *offset, count, write_sz
+                    );
+                    *offset += write_sz;
+                } else {
+                    in_file.seek(file_offset + write_sz);
+                    gdb_println!(
+                        SYSCALL_ENABLE,
+                        "sys_sendfile(out_fd: {}, in_fd: {}, offset: {}, count: {}) = {}",
+                        out_fd, in_fd, 0, count, write_sz
+                    );
+                }
+                return write_sz as isize;
+            }
+        }
+    }
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_sendfile(out_fd: {}, in_fd: {}, count: {}) = {}",
+        out_fd, in_fd, count, -EBADF
+    );
+    return -EBADF;
 }
 
 pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize) -> isize {
@@ -634,9 +739,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                dirfd,
-                path,
-                -EBADF
+                dirfd, path, -EBADF
             );
             return -EBADF;
         }
@@ -645,9 +748,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                    dirfd,
-                    path,
-                    0
+                    dirfd, path, 0
                 );
                 return 0;
             }
@@ -655,9 +756,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd,
-            path,
-            -ENOENT
+            dirfd, path, -ENOENT
         );
         return -ENOENT;
     }
@@ -665,20 +764,147 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd,
-            path,
-            0
+            dirfd, path, 0
         );
         return 0;
     }
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-        dirfd,
-        path,
-        -ENOENT
+        dirfd, path, -ENOENT
     );
     return -ENOENT;
+}
+
+pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.inner_exclusive_access();
+    let path = translated_str(token, path);
+    let flags = OpenFlags::from_bits(flags as u32).unwrap();
+    let mut base_path = inner.cwd.as_str();
+    if path.starts_with("/") {
+        base_path = "/";
+    } else if dirfd != AT_FDCWD {
+        let dirfd = dirfd as usize;
+        if dirfd >= inner.fd_table.len() {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+                dirfd, path, flags, -EBADF
+            );
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+            if let Some(_) = osfile.find(path.as_str(), flags) {
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+                    dirfd, path, flags, 0
+                );
+                return 0;
+            }
+        }
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+            dirfd, path, flags, -ENOENT
+        );
+        return -ENOENT;
+    }
+    if let Some(_) = open_file(base_path, path.as_str(), flags) {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+            dirfd, path, flags, 0
+        );
+        return 0;
+    }
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+        dirfd, path, flags, -ENOENT
+    );
+    return -ENOENT;
+}
+
+// todo,存在bug
+pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path: *const u8, flags: usize) -> isize {
+    if flags != 0 {
+        return -EINVAL;
+    }   
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.inner_exclusive_access();
+    let old_path = translated_str(token, old_path);
+    let new_path = translated_str(token, new_path);
+    let cwd = inner.cwd.as_str();
+    let old_file;
+    let new_file;
+
+    if old_path.starts_with("/") {
+        match open_file("/", old_path.as_str(), OpenFlags::empty()) {
+            Some(tmp_file) => old_file = tmp_file.clone(),
+            None => return -ENOENT,
+        }
+    } else if old_fd != AT_FDCWD {
+        let old_fd = old_fd as usize;
+        if old_fd >= inner.fd_table.len() {
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[old_fd] {
+            match osfile.find(old_path.as_str(), OpenFlags::empty()) {
+                Some(tmp_file) => old_file = tmp_file.clone(),
+                None => return -ENOENT,
+            }
+        } else {
+            return -ENOENT;
+        }
+    } else if let Some(tmp_file) = open_file(cwd, old_path.as_str(), OpenFlags::empty()) {
+        old_file = tmp_file.clone();
+    } else {
+        return -ENOENT;  
+    }  
+
+    let open_flags = {
+        if old_file.is_dir() {
+            OpenFlags::CREATE | OpenFlags::RDWR | OpenFlags::DIRECTORY
+        } else {
+            OpenFlags::CREATE | OpenFlags::RDWR
+        }
+    };
+
+    if new_path.starts_with("/") {
+        match open_file("/", new_path.as_str(), open_flags) {
+            Some(tmp_file) => new_file = tmp_file.clone(),
+            None => return -ENOENT,
+        }
+    } else if new_fd != AT_FDCWD {
+        let new_fd = new_fd as usize;
+        if new_fd >= inner.fd_table.len() {
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[new_fd] {
+            match osfile.find(new_path.as_str(), open_flags) {
+                Some(tmp_file) => new_file = tmp_file.clone(),
+                None => return -ENOENT,
+            }
+        } else {
+            return -ENOENT;
+        }
+    } else if let Some(tmp_file) = open_file(cwd, new_path.as_str(), open_flags) {
+        new_file = tmp_file.clone();
+    } else {
+        return -ENOENT;  
+    }
+    let old_ino = old_file.inode_id();
+    let new_ino = new_file.inode_id();
+    if old_ino == new_ino {
+        return -EPERM;
+    }
+    new_file.set_inode_id(old_ino);
+    old_file.delete();
+    return 0;
 }
 
 pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {

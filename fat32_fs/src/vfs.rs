@@ -592,8 +592,13 @@ impl VFile {
         })
     }
 
-    // TODO：貌似没什么用
+    // 删除目录项，不清理fat表
     pub fn delete(&self) {
+        (0..self.long_pos_vec.len()).for_each(|i| {
+            self.modify_long_dirent(i, |long_ent| {
+                long_ent.delete();
+            });
+        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });

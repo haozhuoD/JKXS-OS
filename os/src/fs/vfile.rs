@@ -43,6 +43,32 @@ impl OSFile {
         v
     }
 
+    // read from offset and do not change the file offset
+    pub fn read_from_offset(&self, offset: usize, count: usize) -> Vec<u8> {
+        let inner = self.inner.lock();
+        let mut buffer = [0u8; 512];
+        let mut v: Vec<u8> = Vec::new();
+        let mut offset = offset;
+        let mut remain = count;
+        for _i in 0..((count+511)/512) {
+            let len = inner.vfile.read_at(offset, &mut buffer);
+            if len == 0 {
+                break;
+            }
+            offset += len;
+            remain -= len;
+            v.extend_from_slice(&buffer[..len.min(remain)]);
+        }
+        v
+    }
+
+    pub fn write_all(&self, buf: &Vec<u8>) -> usize {
+        let mut inner = self.inner.lock();
+        let write_sz = inner.vfile.write_at(inner.offset, buf);
+        inner.offset += write_sz;
+        write_sz
+    }    
+
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
         let inner = self.inner.lock();
         let pathv = path2vec(path);
@@ -56,6 +82,10 @@ impl OSFile {
     pub fn remove(&self) -> usize {
         let inner = self.inner.lock();
         inner.vfile.remove()
+    }
+
+    pub fn delete(&self) {
+        self.inner.lock().vfile.delete();
     }
 
     pub fn file_size(&self) -> usize {
@@ -76,6 +106,10 @@ impl OSFile {
     pub fn inode_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.vfile.first_cluster()
+    }
+
+    pub fn set_inode_id(&self, inode_id: u32) {
+        self.inner.lock().vfile.set_first_cluster(inode_id);
     }
 
     pub fn offset(&self) -> usize {
@@ -153,7 +187,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
     };
     let (readable, writable) = flags.read_write();
-    println!("open_file");
+    // println!("open_file");
 
     let mut pathv = path2vec(path);
 
