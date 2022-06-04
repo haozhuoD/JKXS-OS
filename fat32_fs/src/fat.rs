@@ -125,6 +125,8 @@ impl FAT {
     pub fn get_cluster_at(&self, start_cluster: u32, index: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
         let mut cluster = start_cluster;
         for _ in 0..index {
+            assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , cluster, self.max_cluster);
             cluster = self.get_next_cluster(cluster, block_device);
             if cluster == 0 {
                 return 0;
@@ -137,6 +139,8 @@ impl FAT {
     pub fn get_final_cluster(&self, start_cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
         let mut curr_cluster = start_cluster;
         loop {
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER {  // 结束簇
                 return curr_cluster & 0x0FFFFFFF;
@@ -154,6 +158,8 @@ impl FAT {
         let mut v_cluster: Vec<u32> = Vec::new();
         loop {
             v_cluster.push(curr_cluster & 0x0FFFFFFF);
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {
                 return v_cluster;
@@ -165,12 +171,14 @@ impl FAT {
 
     // 获取start_cluster所在簇链上簇的个数
     pub fn cluster_count(&self, start_cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        if start_cluster == 0 || start_cluster == 1{
+        if start_cluster == 0 || start_cluster == 1 {
             return 0;
         }
         let mut curr_cluster = start_cluster;
         let mut count: u32 = 0;
         loop {
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             count += 1;
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {

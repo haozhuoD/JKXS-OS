@@ -106,7 +106,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[3] as _,
             args[4] as _,
         ),
-        SYSCALL_FACCESSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _), // fake
+        SYSCALL_FACCESSAT => sys_faccessat(args[0] as _, args[1] as _, args[2], args[3] as _), // fake
         SYSCALL_CHDIR => sys_chdir(args[0] as _),
         SYSCALL_OPENAT => sys_open_at(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_CLOSE => sys_close(args[0]),
@@ -150,6 +150,13 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WAIT4 => sys_waitpid(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
+        SYSCALL_RENAMEAT2 => sys_renameat2(
+            args[0] as _,
+            args[1] as _, 
+            args[2] as _, 
+            args[3] as _, 
+            args[4]
+        ),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),

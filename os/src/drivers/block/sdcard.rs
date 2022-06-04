@@ -370,7 +370,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
      *         - status 110: Data rejected due to a Write error.    6
      *         - status 111: Data rejected due to other error.      7
      */
-    // 一定会马上返回dataresponse？ 我觉得不会
+    // 一定会马上返回dataresponse？ no
     fn get_dataresponse(&self) -> u8 {
         let response = &mut [0u8];
         /* Read resonse */

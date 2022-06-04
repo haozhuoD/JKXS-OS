@@ -96,7 +96,7 @@ endif
 
 gdb:
 	@qemu-system-riscv64 \
-		-m 8G	\
+		-m 1G	\
 		-machine virt -nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
@@ -147,6 +147,16 @@ local: user-apps
 move:
 	rm -f ~/nfs/os.bin
 	sudo cp ./os.bin ~/nfs	
+
+showmount:
+	showmount -e 10.251.176.187
+
+nfs-mount:
+	sudo mount -t nfs 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
+
+unmount:
+	sudo umount ~/nfs
+
 
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)

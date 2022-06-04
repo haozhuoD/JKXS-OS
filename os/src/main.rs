@@ -37,6 +37,8 @@ use spin::{Lazy, RwLock, Mutex};
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
+#[allow(unused)]
+use drivers::block_device_test;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -72,6 +74,7 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
+    // block_device_test();
     task::add_initproc();
     info!("(Boot Core) Riscv hartid {} run ", hartid);
 

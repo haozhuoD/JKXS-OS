@@ -58,6 +58,10 @@ impl OSFile {
         inner.vfile.remove()
     }
 
+    pub fn delete(&self) {
+        self.inner.lock().vfile.delete();
+    }
+
     pub fn file_size(&self) -> usize {
         let inner = self.inner.lock();
         inner.vfile.get_size() as usize
@@ -76,6 +80,10 @@ impl OSFile {
     pub fn inode_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.vfile.first_cluster()
+    }
+
+    pub fn set_inode_id(&self, inode_id: u32) {
+        self.inner.lock().vfile.set_first_cluster(inode_id);
     }
 
     pub fn offset(&self) -> usize {
@@ -153,6 +161,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
     };
     let (readable, writable) = flags.read_write();
+    // println!("open_file");
 
     let mut pathv = path2vec(path);
 
