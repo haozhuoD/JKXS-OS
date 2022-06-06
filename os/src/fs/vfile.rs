@@ -161,7 +161,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
             inode.remove();
         }
-        let name = pathv.pop().unwrap();
+        let name = pathv.pop().unwrap_or("/");
         if let Some(parent_dir) = cur_vfile.find_vfile_path(pathv.clone()) {
             let attribute = {
                 if flags.contains(OpenFlags::DIRECTORY) {
@@ -219,3 +219,4 @@ impl File for OSFile {
 pub fn path2vec(path: &str) -> Vec<&str> {
     path.split("/").filter(|x| *x != "").collect()
 }
+ 

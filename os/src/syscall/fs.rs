@@ -321,6 +321,13 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     } else {
         String::from("/")
     };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_mkdirat(dirfd: {}, path: {:?}, mode: {})",
+        dirfd,
+        path,
+        _mode,
+    );
 
     let ret = {
         if let Some(_) = open_file(
@@ -334,14 +341,14 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
         }
     };
 
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
-        dirfd,
-        path,
-        _mode,
-        ret
-    );
+    // gdb_println!(
+    //     SYSCALL_ENABLE,
+    //     "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
+    //     dirfd,
+    //     path,
+    //     _mode,
+    //     ret
+    // );
     ret
 }
 

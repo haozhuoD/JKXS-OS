@@ -2,6 +2,8 @@ mod sdcard;
 mod sleep;
 mod spi;
 mod virtio_blk;
+#[cfg(feature = "board_fu740")]
+mod clock;
 
 pub use sdcard::SDCardWrapper;
 use spin::Lazy;
@@ -10,6 +12,9 @@ pub use virtio_blk::VirtIOBlock;
 use crate::board::BlockDeviceImpl;
 use alloc::sync::Arc;
 use fat32_fs::BlockDevice;
+
+#[cfg(feature = "board_fu740")]
+pub use clock::core_freq;
 
 pub static BLOCK_DEVICE: Lazy<Arc<dyn BlockDevice>> = Lazy::new(|| Arc::new(BlockDeviceImpl::new()));
 

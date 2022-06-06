@@ -77,7 +77,13 @@ pub fn rust_main() -> ! {
     // block_device_test();
     task::add_initproc();
     info!("(Boot Core) Riscv hartid {} run ", hartid);
-
+    // get core_clock
+    #[cfg(feature = "board_fu740")]
+    {
+        let core_f = drivers::core_freq();
+        info!("core_freq is 0x{:X} ", core_f);
+    }
+    
     *(BOOT_CORE_READY.write()) = true;
     wakeup_other_cores(hartid);
 
