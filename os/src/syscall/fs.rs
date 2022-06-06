@@ -8,6 +8,7 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
+use crate::syscall::errorno::EEXIST;
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -321,34 +322,42 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     } else {
         String::from("/")
     };
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_mkdirat(dirfd: {}, path: {:?}, mode: {})",
-        dirfd,
-        path,
-        _mode,
-    );
+    // gdb_println!(
+    //     SYSCALL_ENABLE,
+    //     "sys_mkdirat(dirfd: {}, path: {:?}, mode: {})",
+    //     dirfd,
+    //     path,
+    //     _mode,
+    // );
 
     let ret = {
         if let Some(_) = open_file(
             cwd.as_str(),
             path.as_str(),
-            OpenFlags::DIRECTORY | OpenFlags::RDWR | OpenFlags::CREATE,
+            OpenFlags::DIRECTORY | OpenFlags::RDWR,
         ) {
-            0
+            -EEXIST
         } else {
-            -EPERM
+            if let Some(_) = open_file(
+                cwd.as_str(),
+                path.as_str(),
+                OpenFlags::DIRECTORY | OpenFlags::RDWR | OpenFlags::CREATE,
+            ) {
+                0
+            } else {
+                -EPERM
+            }
         }
     };
 
-    // gdb_println!(
-    //     SYSCALL_ENABLE,
-    //     "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
-    //     dirfd,
-    //     path,
-    //     _mode,
-    //     ret
-    // );
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_mkdirat(dirfd: {}, path: {:?}, mode: {}) = {}",
+        dirfd,
+        path,
+        _mode,
+        ret
+    );
     ret
 }
 
