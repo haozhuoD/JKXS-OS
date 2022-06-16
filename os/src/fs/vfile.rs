@@ -67,6 +67,10 @@ impl OSFile {
         inner.vfile.get_size() as usize
     }
 
+    pub fn set_file_size(&self, size: u32) {
+        self.inner.lock().vfile.set_size(size);
+    }
+
     pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
         let inner = self.inner.lock();
         inner.vfile.dirent_info(offset)

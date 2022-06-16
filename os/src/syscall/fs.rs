@@ -891,8 +891,14 @@ pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path
     if old_ino == new_ino {
         return -EPERM;
     }
+    new_file.set_file_size(old_file.file_size() as u32);
     new_file.set_inode_id(old_ino);
     old_file.delete();
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_renameat2(old_fd = {}, old_path = {:#?}, new_fd = {}, new_path = {}, flags: {:#?}) = {}",
+        old_fd, old_path, new_fd, new_path, flags, 0
+    );
     return 0;
 }
 
