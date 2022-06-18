@@ -17,7 +17,7 @@ use crate::task::{
     pid2process, suspend_current_and_run_next, SigAction, mark_current_signal_done,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -94,8 +94,9 @@ pub fn sys_fork(flags: u32, stack: usize) -> isize {
 
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let mut path = translated_str(token, path);
     let mut args_vec: Vec<String> = Vec::new();
+
     loop {
         let arg_str_ptr = *translated_ref(token, args);
         if arg_str_ptr == 0 {
@@ -109,6 +110,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
 
     let cwd = current_process().inner_exclusive_access().cwd.clone();
 
+    // run usershell
     if cwd == "/" && path == "user_shell" {
         let process = current_process();
         process.exec(get_usershell_binary(), args_vec);
@@ -119,6 +121,14 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         return 0;
     }
 
+    // 执行./xxx.sh时，自动转化为 /busybox sh ./xxx.sh
+    if path.ends_with(".sh") {
+        args_vec.insert(0, String::from("sh"));
+        args_vec.insert(0, String::from("/busybox"));
+        path = String::from("/busybox");
+    }
+
+    // run other programs
     if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
