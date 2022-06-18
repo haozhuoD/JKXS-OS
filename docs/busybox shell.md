@@ -10,3 +10,8 @@
 特点似乎是只要while read line就会出错。
 不对，好像是只要有while就会死掉？？
 
+```shell
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu-
+```

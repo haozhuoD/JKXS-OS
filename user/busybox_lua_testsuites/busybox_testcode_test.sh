@@ -32,9 +32,11 @@ echo "TEST START"
 
 # busybox cat ./busybox_cmd.txt
 # busybox echo "hello" | while read line
-while true
-do
-	eval "./busybox ls"
+# while true
+# do
+# 	echo "12345"
+# done
+eval ./busybox ls
 	# RTN=$?
 	# if [[ $RTN -ne 0 && $line != "false" ]] ;then
 	# 	echo "testcase busybox $line fail"
@@ -42,6 +44,6 @@ do
 	# else
 	# 	echo "testcase busybox $line success"
 	# fi
-done
+# done
 
 echo "TEST END"
