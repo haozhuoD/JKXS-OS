@@ -8,9 +8,10 @@ use crate::board::MAX_CPU_NUM;
 use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
-use spin::Lazy;
+use spin::{Lazy, RwLock};
 
 pub struct Processor {
+    pid: RwLock<usize>,
     inner: RefCell<ProcessorInner>,
 }
 
@@ -24,6 +25,7 @@ unsafe impl Sync for Processor {}
 impl Processor {
     pub fn new() -> Self {
         Self {
+            pid: RwLock::new(0),
             inner: RefCell::new(ProcessorInner {
                 current: None,
                 idle_task_cx: TaskContext::zero_init(),
@@ -149,6 +151,7 @@ pub fn run_tasks() {
             drop(task_inner);
             // release coming task TCB manually
             // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
+            *(PROCESSORS[get_hartid()].pid.write()) = task.process.upgrade().unwrap().pid.0;
             processor.current = Some(task);
 
             // release processor manually
@@ -190,6 +193,10 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 
 pub fn current_process() -> Arc<ProcessControlBlock> {
     current_task().unwrap().process.upgrade().unwrap()
+}
+
+pub fn current_pid() -> usize {
+    *(PROCESSORS[get_hartid()].pid.read())
 }
 
 pub fn current_user_token() -> usize {

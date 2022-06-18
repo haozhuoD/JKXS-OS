@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::sbi::console_putchar;
+use crate::{sbi::console_putchar, task::current_pid};
 use core::fmt::{self, Write};
 use spin::{Lazy, RwLock};
 
@@ -255,7 +255,8 @@ pub fn monitor_log(args: fmt::Arguments) {
     //可以在这里设置monitor打印的颜色
     let lock = CONSOLE.write();
     set_color(FG_B_MAGENTA,    BG_DEFAULT);
-    print(format_args!("[syscall] : {:#?}",args));
+    let pid = current_pid();
+    print(format_args!("[syscall pid={}] : {:#?}", pid, args));
     // print(args);
     reset_color();
 }

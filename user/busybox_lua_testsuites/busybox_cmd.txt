@@ -3,7 +3,7 @@ ash -c exit
 sh -c exit
 basename /aaa/bbb
 cal
-# clear
+clear
 date 
 df 
 dirname /aaa/bbb
