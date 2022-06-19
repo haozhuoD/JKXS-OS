@@ -108,7 +108,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         }
     }
 
-    let cwd = current_process().inner_exclusive_access().cwd.clone();
+    let cwd = current_process().acquire_inner_lock().cwd.clone();
 
     // run usershell
     if cwd == "/" && path == "user_shell" {
@@ -162,7 +162,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
         let mut exited: bool = true;
         {
             let process = current_process();
-            let mut inner = process.inner_exclusive_access();
+            let mut inner = process.acquire_inner_lock();
 
             // find a child process
             if !inner
@@ -177,7 +177,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
             if found {
                 let pair = inner.children.iter().enumerate().find(|(_, p)| {
                     // ++++ temporarily access child PCB exclusively
-                    p.inner_exclusive_access().is_zombie
+                    p.acquire_inner_lock().is_zombie
                         && (pid == -1 || pid as usize == p.getpid())
                     // ++++ release child PCB
                 });
@@ -187,7 +187,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                     assert_eq!(Arc::strong_count(&child), 1);
                     let found_pid = child.getpid();
                     // ++++ temporarily access child PCB exclusively
-                    let exit_code = child.inner_exclusive_access().exit_code;
+                    let exit_code = child.acquire_inner_lock().exit_code;
                     // ++++ release child PCB
                     if wstatus as usize != 0 {
                         *translated_refmut(inner.memory_set.token(), wstatus) =
@@ -230,7 +230,7 @@ pub fn sys_kill(pid: usize, signum: u32) -> isize {
     let ret = if let Some(process) = pid2process(pid) {
         if is_signal_valid(signum) {
             process
-                .inner_exclusive_access()
+                .acquire_inner_lock()
                 .signal_info
                 .pending_signals
                 .push_back(signum);
@@ -253,7 +253,7 @@ pub fn sys_kill(pid: usize, signum: u32) -> isize {
 
 pub fn sys_brk(addr: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
     // println!("syscall brk addr = {:x?}, base = {:x?}, top = {:x?}", addr, inner.user_heap_base, inner.user_heap_top);
     let ret = if addr == 0 {
         inner.user_heap_top as isize
@@ -283,7 +283,7 @@ pub fn sys_mmap(
     //     unimplemented!();
     // }
     // 如果start != 0，也当start = 0处理
-    let start = aligned_up(current_process().inner_exclusive_access().mmap_area_top);
+    let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
     let aligned_len = aligned_up(len);
 
     let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
@@ -307,7 +307,7 @@ pub fn sys_munmap(start: usize, _len: usize) -> isize {
 
 pub fn sys_getppid() -> isize {
     let parent = current_process()
-        .inner_exclusive_access()
+        .acquire_inner_lock()
         .parent
         .clone()
         .unwrap()
@@ -419,7 +419,7 @@ pub fn sys_sigaction(
     // todo: 支持SIGIGNORE
     let token = current_user_token();
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
 
     // signum超出范围，返回错误
     if !is_signal_valid(signum) {
@@ -462,7 +462,7 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     // 恢复之前保存的trap_cx
-    current_task().unwrap().inner_exclusive_access().restore_trap_cx_backup();
+    current_task().unwrap().acquire_inner_lock().restore_trap_cx_backup();
     mark_current_signal_done();
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;

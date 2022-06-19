@@ -24,7 +24,7 @@ const AT_FDCWD: isize = -100;
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
         return -EPERM;
     }
@@ -69,7 +69,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
         return -EPERM;
     }
@@ -107,14 +107,14 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     let flags = OpenFlags::from_bits(flags).unwrap();
 
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        process.inner_exclusive_access().cwd.clone()
+        process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
     };
 
     let ret = {
         if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
-            let mut inner = process.inner_exclusive_access();
+            let mut inner = process.acquire_inner_lock();
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
@@ -137,7 +137,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
 
 pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
         gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
         return -EPERM;
@@ -154,7 +154,7 @@ pub fn sys_close(fd: usize) -> isize {
 pub fn sys_pipe(pipe: *mut u32) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
     let (pipe_read, pipe_write) = make_pipe();
     let read_fd = inner.alloc_fd(0);
     inner.fd_table[read_fd] = Some(FileClass::Abs(pipe_read));
@@ -168,7 +168,7 @@ pub fn sys_pipe(pipe: *mut u32) -> isize {
 
 pub fn sys_dup(fd: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
         return -EPERM;
     }
@@ -183,7 +183,7 @@ pub fn sys_dup(fd: usize) -> isize {
 
 pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
     if old_fd >= inner.fd_table.len() {
         return -EPERM;
     }
@@ -224,7 +224,7 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     let cwd = inner.cwd.clone();
     let mut userbuf = UserBuffer::new(buf_vec);
 
@@ -264,7 +264,7 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     let mut userbuf = UserBuffer::new(buf_vec);
 
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        process.inner_exclusive_access().cwd.clone()
+        process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
     };
@@ -291,7 +291,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, size);
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
 
     let mut user_buf = UserBuffer::new(buf_vec);
     let mut cwd = inner.cwd.clone();
@@ -318,7 +318,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     let path = translated_str(token, path);
 
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        process.inner_exclusive_access().cwd.clone()
+        process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
     };
@@ -365,7 +365,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let process = current_process();
     let token = current_user_token();
     let mut path = translated_str(token, path);
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
 
     let old_cwd = if !path.starts_with("/") {
         inner.cwd.clone()
@@ -452,7 +452,7 @@ pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, len);
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     let cwd = inner.cwd.clone();
 
     let mut userbuf = UserBuffer::new(buf_vec);
@@ -507,7 +507,7 @@ pub fn sys_umount(_p_special: *const u8, _flags: usize) -> isize {
 pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     let path = translated_str(token, path);
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
@@ -560,7 +560,7 @@ pub const F_DUPFD_CLOEXEC: u32 = 1030;
 
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.acquire_inner_lock();
 
     if fd > inner.fd_table.len() {
         return -1;
@@ -597,7 +597,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
 pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
 
     let mut ret = 0isize;
 
@@ -637,7 +637,7 @@ pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
 pub fn sys_writev(fd: usize, iov: *const IOVec, iocnt: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
 
     let mut ret = 0isize;
 
@@ -677,7 +677,7 @@ pub fn sys_writev(fd: usize, iov: *const IOVec, iocnt: usize) -> isize {
 pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
 
     let fout = inner.fd_table.get(out_fd).unwrap_or(&None);
     let fin = inner.fd_table.get(in_fd).unwrap_or(&None);
@@ -738,7 +738,7 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
 pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let inner = process.inner_exclusive_access();
+    let inner = process.acquire_inner_lock();
     let path = translated_str(token, path);
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略

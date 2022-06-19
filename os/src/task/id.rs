@@ -134,7 +134,7 @@ impl TaskUserRes {
         ustack_base: usize,
         alloc_user_res: bool,
     ) -> Self {
-        let tid = process.inner_exclusive_access().alloc_tid();
+        let tid = process.acquire_inner_lock().alloc_tid();
         let task_user_res = Self {
             tid,
             ustack_base,
@@ -148,7 +148,7 @@ impl TaskUserRes {
 
     pub fn alloc_user_res(&self) {
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.acquire_inner_lock();
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE;
@@ -183,7 +183,7 @@ impl TaskUserRes {
     fn dealloc_user_res(&self) {
         // dealloc tid
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.acquire_inner_lock();
         // dealloc ustack manually
         let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.tid).into();
         process_inner
@@ -202,13 +202,13 @@ impl TaskUserRes {
             .process
             .upgrade()
             .unwrap()
-            .inner_exclusive_access()
+            .acquire_inner_lock()
             .alloc_tid();
     }
 
     pub fn dealloc_tid(&self) {
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.acquire_inner_lock();
         process_inner.dealloc_tid(self.tid);
     }
 
@@ -218,7 +218,7 @@ impl TaskUserRes {
 
     pub fn trap_cx_ppn(&self) -> PhysPageNum {
         let process = self.process.upgrade().unwrap();
-        let process_inner = process.inner_exclusive_access();
+        let process_inner = process.acquire_inner_lock();
         let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.tid).into();
         process_inner
             .memory_set

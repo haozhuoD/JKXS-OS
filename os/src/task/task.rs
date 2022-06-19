@@ -15,13 +15,13 @@ pub struct TaskControlBlock {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, TaskControlBlockInner> {
+    pub fn acquire_inner_lock(&self) -> MutexGuard<'_, TaskControlBlockInner> {
         self.inner.lock()
     }
 
     pub fn get_user_token(&self) -> usize {
         let process = self.process.upgrade().unwrap();
-        let inner = process.inner_exclusive_access();
+        let inner = process.acquire_inner_lock();
         inner.memory_set.token()
     }
 }

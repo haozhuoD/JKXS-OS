@@ -79,7 +79,7 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
-    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, ProcessControlBlockInner> {
+    pub fn acquire_inner_lock(&self) -> MutexGuard<'_, ProcessControlBlockInner> {
         self.inner.lock()
     }
 
@@ -120,7 +120,7 @@ impl ProcessControlBlock {
             true,
         ));
         // prepare trap_cx of main thread
-        let task_inner = task.inner_exclusive_access();
+        let task_inner = task.acquire_inner_lock();
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
@@ -134,7 +134,7 @@ impl ProcessControlBlock {
             get_hartid(),
         );
         // add main thread to the process
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.acquire_inner_lock();
         process_inner.tasks.push(Some(Arc::clone(&task)));
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
@@ -145,22 +145,22 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
-        assert_eq!(self.inner_exclusive_access().thread_count(), 1);
+        assert_eq!(self.acquire_inner_lock().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
             MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
-        self.inner_exclusive_access().memory_set = memory_set;
+        self.acquire_inner_lock().memory_set = memory_set;
 
         // ****设置用户堆顶和mmap顶端位置****
-        self.inner_exclusive_access().user_heap_base = uheap_base;
-        self.inner_exclusive_access().user_heap_top = uheap_base;
-        self.inner_exclusive_access().mmap_area_top = MMAP_BASE;
+        self.acquire_inner_lock().user_heap_base = uheap_base;
+        self.acquire_inner_lock().user_heap_top = uheap_base;
+        self.acquire_inner_lock().mmap_area_top = MMAP_BASE;
         // then we alloc user resource for main thread again
         // since memory_set has been changed
-        let task = self.inner_exclusive_access().get_task(0);
-        let mut task_inner = task.inner_exclusive_access();
+        let task = self.acquire_inner_lock().get_task(0);
+        let mut task_inner = task.acquire_inner_lock();
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
         task_inner.res.as_mut().unwrap().alloc_user_res();
         task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
@@ -319,7 +319,7 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn fork(self: &Arc<Self>, _flags: u32, stack: usize) -> Arc<Self> {
-        let mut parent = self.inner_exclusive_access();
+        let mut parent = self.acquire_inner_lock();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         // 复制trapframe等内存区域均在这里
@@ -367,7 +367,7 @@ impl ProcessControlBlock {
             Arc::clone(&child),
             parent
                 .get_task(0)
-                .inner_exclusive_access()
+                .acquire_inner_lock()
                 .res
                 .as_ref()
                 .unwrap()
@@ -377,11 +377,11 @@ impl ProcessControlBlock {
             false,
         ));
         // attach task to child process
-        let mut child_inner = child.inner_exclusive_access();
+        let mut child_inner = child.acquire_inner_lock();
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
-        let task_inner = task.inner_exclusive_access();
+        let task_inner = task.acquire_inner_lock();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         // sys_fork return value ...
@@ -408,7 +408,7 @@ impl ProcessControlBlock {
     ) -> isize {
         // `flags` field unimplemented
         assert!(is_aligned(start) && is_aligned(len));
-        let mut inner = self.inner_exclusive_access();
+        let mut inner = self.acquire_inner_lock();
         assert_eq!(start, inner.mmap_area_top);
 
         let start_vpn = VirtAddr::from(start).floor();
@@ -430,7 +430,7 @@ impl ProcessControlBlock {
 
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
         assert!(is_aligned(start));
-        let mut inner = self.inner_exclusive_access();
+        let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
     }

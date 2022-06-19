@@ -8,8 +8,9 @@ mod signal;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
+mod utils;
 
-use crate::loader::get_initproc_binary;
+use crate::{loader::get_initproc_binary, task::utils::user_backtrace};
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;
@@ -31,7 +32,7 @@ pub fn suspend_current_and_run_next() {
     let task = current_task().unwrap();
 
     // ---- access current TCB exclusively
-    let mut task_inner = task.inner_exclusive_access();
+    let mut task_inner = task.acquire_inner_lock();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
@@ -62,7 +63,7 @@ pub fn suspend_current_and_run_next() {
 
 pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let task = take_current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
+    let mut task_inner = task.acquire_inner_lock();
     let process = task.process.upgrade().unwrap();
     let tid = task_inner.res.as_ref().unwrap().tid;
     // record exit code
@@ -76,8 +77,8 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     // the process should terminate at once
     if tid == 0 || is_exit_group {
         remove_from_pid2process(process.getpid());
-        let mut initproc_inner = INITPROC.inner_exclusive_access();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut initproc_inner = INITPROC.acquire_inner_lock();
+        let mut process_inner = process.acquire_inner_lock();
         // mark this process as a zombie process
         process_inner.is_zombie = true;
         // record exit code of main process
@@ -86,7 +87,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
         {
             // move all child processes under init process
             for child in process_inner.children.iter() {
-                child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+                child.acquire_inner_lock().parent = Some(Arc::downgrade(&INITPROC));
                 initproc_inner.children.push(child.clone());
             }
         }
@@ -96,7 +97,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
         // otherwise they will be deallocated twice
         for task in process_inner.tasks.iter().filter(|t| t.is_some()) {
             let task = task.as_ref().unwrap();
-            let mut task_inner = task.inner_exclusive_access();
+            let mut task_inner = task.acquire_inner_lock();
             task_inner.res = None;
         }
 
@@ -122,13 +123,14 @@ pub fn add_initproc() {
 
 pub fn perform_signals_of_current() {
     let process = current_process();
-    if process.inner_exclusive_access().signal_info.signal_executing { //正在执行某个信号
+    if process.acquire_inner_lock().signal_info.signal_executing {
+        //正在执行某个信号
         return;
     }
     loop {
         // 取出pending的第一个signal
         let signum_option = process
-            .inner_exclusive_access()
+            .acquire_inner_lock()
             .signal_info
             .pending_signals
             .pop_front();
@@ -140,17 +142,20 @@ pub fn perform_signals_of_current() {
         if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
             println!("[kernel] {}", msg);
             drop(process);
+            unsafe {
+                user_backtrace(current_user_token(), current_trap_cx().x[8]);
+            }
             exit_current_and_run_next(-(signum as i32), false);
         };
 
         {
-            let mut inner = process.inner_exclusive_access();
+            let mut inner = process.acquire_inner_lock();
             if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
                 let sigaction = sigaction.clone();
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备
                 if sigaction.handler != 0 {
                     let task = current_task().unwrap();
-                    let mut task_inner = task.inner_exclusive_access();
+                    let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
                     task_inner.save_trap_cx();
@@ -173,13 +178,13 @@ pub fn perform_signals_of_current() {
 
 pub fn current_add_signal(signum: usize) {
     let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.acquire_inner_lock();
     process_inner.signal_info.pending_signals.push_back(signum);
 }
 
 pub fn mark_current_signal_done() {
     current_process()
-        .inner_exclusive_access()
+        .acquire_inner_lock()
         .signal_info
         .signal_executing = false;
 }
