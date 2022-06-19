@@ -36,7 +36,7 @@ echo "TEST START"
 # do
 # 	echo "12345"
 # done
-eval ./busybox ls
+eval ./busybox_unstripped2 ls
 	# RTN=$?
 	# if [[ $RTN -ne 0 && $line != "false" ]] ;then
 	# 	echo "testcase busybox $line fail"
