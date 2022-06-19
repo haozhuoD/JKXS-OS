@@ -157,7 +157,7 @@ pub fn getpid() -> isize {
     sys_getpid()
 }
 pub fn fork() -> isize {
-    sys_fork()
+    sys_clone()
 }
 pub fn exec(path: &str, args: &[*const u8]) -> isize {
     sys_exec(path, args)

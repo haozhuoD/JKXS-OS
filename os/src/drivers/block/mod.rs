@@ -31,7 +31,7 @@ pub fn block_device_test() {
         block_device.read_block(i as usize, &mut read_buffer);
         assert_eq!(write_buffer, read_buffer);
     }
-    println!("block device 512 blocks loop[ write-read ]  test passed!");
+    info!("block device 512 blocks loop[ write-read ]  test passed!");
     let mut write_buffer = [66u8; 512];
     let mut read_buffer = [0u8; 512];
     for i in 131072..131584 {
@@ -41,5 +41,5 @@ pub fn block_device_test() {
         block_device.read_block(i as usize, &mut read_buffer);
         assert_eq!(write_buffer, read_buffer);
     }
-    println!("block device 512 blocks test passed!");
+    info!("block device 512 blocks test passed!");
 }

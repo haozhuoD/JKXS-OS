@@ -31,7 +31,7 @@ unsafe fn backtrace() {
             if fp == stop {
                 break;
             }
-            println!("#{}:ra={:#x}", i, *((fp - 8) as *const usize));
+            info!("#{}:ra={:#x}", i, *((fp - 8) as *const usize));
             fp = *((fp - 16) as *const usize);
         }
         info!("---END   BACKTRACE---");

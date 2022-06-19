@@ -140,7 +140,7 @@ pub fn perform_signals_of_current() {
         let signum = signum_option.unwrap();
         // 如果信号代表当前进程出错，则exit
         if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
-            println!("[kernel] {}", msg);
+            error!("{}", msg);
             drop(process);
             unsafe {
                 user_backtrace(current_user_token(), current_trap_cx().x[8]);

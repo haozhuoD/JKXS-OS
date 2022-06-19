@@ -2,7 +2,6 @@ use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
 
-use fat32_fs::sync_all;
 use crate::config::aligned_up;
 use crate::fs::{open_file, OpenFlags};
 use crate::gdb_println;
@@ -14,12 +13,13 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction, mark_current_signal_done,
+    mark_current_signal_done, pid2process, suspend_current_and_run_next, SigAction,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use fat32_fs::sync_all;
 
 use super::errorno::{EINVAL, EPERM};
 
@@ -29,7 +29,7 @@ pub fn sys_shutdown() -> ! {
 }
 
 pub fn sys_toggle_trace() -> isize {
-    unsafe {*(SYSCALL_ENABLE as *mut u8) = 1 - *(SYSCALL_ENABLE as *mut u8)};
+    unsafe { *(SYSCALL_ENABLE as *mut u8) = 1 - *(SYSCALL_ENABLE as *mut u8) };
     0
 }
 
@@ -73,10 +73,31 @@ pub fn sys_getpid() -> isize {
     ret
 }
 
-pub fn sys_fork(flags: u32, stack: usize) -> isize {
+bitflags! {
+    pub struct CloneFlags: u32 {
+        const SIGCHLD = 17;
+        const CLONE_CHILD_CLEARTID = 0x00200000;
+        const CLONE_CHILD_SETTID = 0x01000000;
+    }
+}
+
+pub fn sys_clone(
+    flags: u32,
+    child_stack: *const u8,
+    ptid: usize,
+    ctid: usize,
+    newtls: usize,
+) -> isize {
     let current_process = current_process();
-    let new_process = current_process.fork(flags, stack);
+    let new_process = current_process.fork(flags, child_stack as usize);
     let new_pid = new_process.getpid();
+    let flags = CloneFlags::from_bits(flags).unwrap();
+    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid != 0 {
+        *translated_refmut(
+            new_process.acquire_inner_lock().get_user_token(),
+            ctid as *mut i32,
+        ) = new_pid as i32;
+    }
     // // modify trap context of new_task, because it returns immediately after switching
     // let new_process_inner = new_process.inner_exclusive_access();
     // let task = new_process_inner.tasks[0].as_ref().unwrap();
@@ -84,7 +105,16 @@ pub fn sys_fork(flags: u32, stack: usize) -> isize {
     // // we do not have to move to next instruction since we have done it before
     // // for child process, fork returns 0
     // trap_cx.x[10] = 0;
-    gdb_println!(SYSCALL_ENABLE, "sys_fork() = {}", new_pid as isize);
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_clone(flags: {:#x?}, child_stack: {:#x?}, ptid: {:#x?}, ctid: {:#x?}, newtls: {:#x?}) = {}",
+        flags,
+        child_stack,
+        ptid,
+        ctid,
+        newtls,
+        new_pid
+    );
     unsafe {
         asm!("sfence.vma");
         asm!("fence.i");
@@ -177,8 +207,7 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
             if found {
                 let pair = inner.children.iter().enumerate().find(|(_, p)| {
                     // ++++ temporarily access child PCB exclusively
-                    p.acquire_inner_lock().is_zombie
-                        && (pid == -1 || pid as usize == p.getpid())
+                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p.getpid())
                     // ++++ release child PCB
                 });
                 if let Some((idx, _)) = pair {
@@ -462,7 +491,10 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     // 恢复之前保存的trap_cx
-    current_task().unwrap().acquire_inner_lock().restore_trap_cx_backup();
+    current_task()
+        .unwrap()
+        .acquire_inner_lock()
+        .restore_trap_cx_backup();
     mark_current_signal_done();
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;

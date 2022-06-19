@@ -20,6 +20,9 @@ fn lazy_alloc_heap_page(vaddr: usize) -> isize {
 }
 
 pub fn page_fault_handler(vaddr: usize) -> isize {
+    if vaddr == 0 {
+        error!("Assertion failed in user space");
+    }
     let heap_base = current_process().acquire_inner_lock().user_heap_base;
     let heap_top = current_process().acquire_inner_lock().user_heap_top;
     let mmap_top = current_process().acquire_inner_lock().mmap_area_top;

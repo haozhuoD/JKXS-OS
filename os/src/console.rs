@@ -244,7 +244,7 @@ macro_rules! error {
 #[macro_export]
 macro_rules! fatal {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::sbi::log(crate::console::LogLevel::Fatal, format_args!($fmt $(, $($arg)+)?), file!(), line!())
+        $crate::console::log(crate::console::LogLevel::Fatal, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
 

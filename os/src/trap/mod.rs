@@ -69,15 +69,15 @@ pub fn trap_handler() -> ! {
             //     || scause.cause() == Trap::Exception(Exception::LoadPageFault);
             let ret = page_fault_handler(stval);
             if ret == -1 {
-                println!(
-                    "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                error!(
+                    "{:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                     scause.cause(),
                     stval,
                     current_trap_cx().sepc,
                 );
                 let cx = current_trap_cx();
                 for (i, v) in cx.x.iter().enumerate() {
-                    println!("[kernel] x[{}] = {:#x?}", i, v);
+                    debug!("x[{}] = {:#x?}", i, v);
                 }
                 current_add_signal(SIGSEGV);
             }
@@ -135,7 +135,7 @@ pub fn trap_return() -> ! {
 #[no_mangle]
 pub fn trap_from_kernel() -> ! {
     use riscv::register::sepc;
-    println!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
+    fatal!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 

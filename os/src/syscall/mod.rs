@@ -123,7 +123,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _),
         SYSCALL_EXIT => sys_exit(args[0] as _),
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as _),
-        SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *mut _),
+        SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as _),
         SYSCALL_NANOSLEEP => sys_sleep(args[0] as _),
         SYSCALL_CLOCK_GETTIME => sys_clock_get_time(args[0], args[1] as _),
         SYSCALL_SCHED_YIELD => sys_yield(),
@@ -139,7 +139,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETTID => sys_getpid(),
         SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_CLONE => sys_fork(args[0] as _, args[1]),
+        SYSCALL_CLONE => sys_clone(args[0] as _, args[1] as _, args[2], args[3], args[4]),
         SYSCALL_EXECVE => sys_exec(args[0] as _, args[1] as _),
         SYSCALL_MMAP => sys_mmap(
             args[0] as _,

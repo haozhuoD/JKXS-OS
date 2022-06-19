@@ -139,7 +139,7 @@ pub fn sys_getpid() -> isize {
     syscall(SYSCALL_GETPID, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_clone() -> isize {
     syscall(SYSCALL_CLONE, [0, 0, 0, 0, 0, 0])
 }
 
