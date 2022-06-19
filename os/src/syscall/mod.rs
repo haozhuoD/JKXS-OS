@@ -83,7 +83,7 @@ use crate::{
 };
 
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    if syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE {
+    if syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE && syscall_id != SYSCALL_READDIR {
         gdb_println!(
             SYSCALL_ENABLE,
             "\x1b[034msyscall({}), args = {:x?}\x1b[0m",

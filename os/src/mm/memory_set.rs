@@ -351,8 +351,10 @@ impl MemorySet {
             memory_set.push_and_map_mmap_area(new_area);
             // 拷贝数据
             for vpn in area.data_frames.keys() {
+                debug!("mmap vpn copy {:#x}", vpn.0);
                 let src_ppn = user_space.translate(*vpn).unwrap().ppn();
                 let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
+                debug!("mmap copy: src_ppn = {:#x?},  dst_ppn {:#x}", src_ppn.0, dst_ppn.0);
                 dst_ppn
                     .get_bytes_array()
                     .copy_from_slice(src_ppn.get_bytes_array());
@@ -362,7 +364,7 @@ impl MemorySet {
         for &vpn in user_space.heap_frames.keys() {
             let frame = frame_alloc().unwrap();
             let ppn = frame.ppn;
-            memory_set.heap_frames.insert(vpn, frame_alloc().unwrap());
+            memory_set.heap_frames.insert(vpn, frame);
             memory_set.page_table.map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
             // copy data from another space
             let src_ppn = user_space.translate(vpn).unwrap().ppn();
