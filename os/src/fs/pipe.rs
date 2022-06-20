@@ -29,7 +29,7 @@ impl Pipe {
     }
 }
 
-const RING_BUFFER_SIZE: usize = 8192;
+const RING_BUFFER_SIZE: usize = 1024;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
