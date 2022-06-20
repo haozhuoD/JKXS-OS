@@ -113,8 +113,8 @@ bitflags! {
         const CREATE = 1 << 6;
         const EXCL = 1 << 7;
         const _X8 = 1 << 8;
-        const _X9 = 1 << 9;
-        const _X10 = 1 << 10;
+        const TRUNC = 1 << 9;
+        const APPEND = 1 << 10;
         const _X11 = 1 << 11;
         const _X12 = 1 << 12;
         const _X13 = 1 << 13;
@@ -143,6 +143,29 @@ impl OpenFlags {
     }
 }
 
+fn do_create_file(
+    cur_vfile: Arc<VFile>,
+    mut pathv: Vec<&str>,
+    flags: OpenFlags,
+) -> Option<Arc<OSFile>> {
+    let name = pathv.pop().unwrap_or("/");
+    if let Some(parent_dir) = cur_vfile.find_vfile_path(pathv.clone()) {
+        let attribute = {
+            if flags.contains(OpenFlags::DIRECTORY) {
+                ATTRIBUTE_DIRECTORY
+            } else {
+                ATTRIBUTE_ARCHIVE
+            }
+        };
+        let (readable, writable) = flags.read_write();
+        parent_dir
+            .create(name, attribute)
+            .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
+    } else {
+        None
+    }
+}
+
 pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
     let cur_vfile = {
         if cwd == "/" {
@@ -151,36 +174,29 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
             let wpath = path2vec(cwd);
             ROOT_VFILE.find_vfile_path(wpath).unwrap()
         }
-    };
+    }; // 当前工作路径对应节点
     let (readable, writable) = flags.read_write();
 
-    let mut pathv = path2vec(path);
+    let pathv = path2vec(path);
 
-    if flags.contains(OpenFlags::CREATE) {
-        // 先找到父级目录对应节点
-        if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
+    // 节点是否存在？
+    if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
+        if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
+            return do_create_file(cur_vfile, pathv, flags);
         }
-        let name = pathv.pop().unwrap_or("/");
-        if let Some(parent_dir) = cur_vfile.find_vfile_path(pathv.clone()) {
-            let attribute = {
-                if flags.contains(OpenFlags::DIRECTORY) {
-                    ATTRIBUTE_DIRECTORY
-                } else {
-                    ATTRIBUTE_ARCHIVE
-                }
-            };
-            parent_dir
-                .create(name, attribute)
-                .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
-        } else {
-            None
+        let vfile = OSFile::new(readable, writable, inode);
+        if flags.contains(OpenFlags::APPEND) {
+            vfile.seek(vfile.file_size());
         }
-    } else {
-        cur_vfile
-            .find_vfile_path(pathv)
-            .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
+        return Some(Arc::new(vfile));
     }
+
+    // 节点不存在
+    if flags.contains(OpenFlags::CREATE) {
+        return do_create_file(cur_vfile, pathv, flags);
+    }
+    None
 }
 
 impl File for OSFile {
@@ -219,4 +235,3 @@ impl File for OSFile {
 pub fn path2vec(path: &str) -> Vec<&str> {
     path.split("/").filter(|x| *x != "").collect()
 }
- 

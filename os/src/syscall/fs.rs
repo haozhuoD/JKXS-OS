@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, Pollfd, POLLIN,
+    OpenFlags, Pollfd, POLLIN, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -805,7 +805,7 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
     let mut ret = 0isize;
 
     for i in 0..nfds {
-        let mut pollfd = translated_refmut(token, unsafe{fds.add(i)});
+        let mut pollfd = translated_refmut(token, unsafe { fds.add(i) });
         if let Some(f) = inner.fd_table.get(pollfd.fd as usize) {
             if f.is_some() {
                 pollfd.revents |= POLLIN;
@@ -816,7 +816,7 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
 
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_readv(fds: {:#x?}, nfds = {:x?}, timeout: {}) = {}",
+        "sys_ppoll(fds: {:#x?}, nfds = {:x?}, timeout: {}) = {}",
         fds,
         nfds,
         timeout,
