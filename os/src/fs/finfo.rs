@@ -98,6 +98,23 @@ pub struct IOVec {
     pub iov_len: usize,
 }
 
+#[repr(C)]
+pub struct Pollfd {
+    pub fd: u32,
+    pub events: u16,
+    pub revents: u16,
+}
+
+pub const POLLIN: u16 = 0x001;
+pub const POLLPRI: u16 = 0x002;
+pub const POLLOUT: u16 = 0x004;
+pub const POLLERR: u16 = 0x008;
+pub const POLLHUP: u16 = 0x010;
+pub const POLLNVAL: u16 = 0x020;
+pub const POLLRDNORM: u16 = 0x040;
+pub const POLLRDBAND: u16 = 0x080;
+
+
 pub const S_IFMT: u32 = 0o170000; //bit mask for the file type bit field
 pub const S_IFREG: u32 = 0o100000; //regular file
 pub const S_IFBLK: u32 = 0o060000; //block device

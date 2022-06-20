@@ -23,6 +23,7 @@ const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PSELECT6: usize = 72;
+const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
@@ -118,6 +119,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_READV => sys_readv(args[0], args[1] as _, args[2]),
         SYSCALL_WRITEV => sys_writev(args[0], args[1] as _, args[2]),
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2] as _, args[3]),
+        SYSCALL_PPOLL => sys_ppoll(args[0] as _, args[1], args[2] as _),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_FSTAT => sys_fstat(args[0] as _, args[1] as _),
         SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _),

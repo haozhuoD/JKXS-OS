@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, Pollfd, POLLIN,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -795,6 +795,35 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         -ENOENT
     );
     return -ENOENT;
+}
+
+pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.acquire_inner_lock();
+
+    let mut ret = 0isize;
+
+    for i in 0..nfds {
+        let mut pollfd = translated_refmut(token, unsafe{fds.add(i)});
+        if let Some(f) = inner.fd_table.get(pollfd.fd as usize) {
+            if f.is_some() {
+                pollfd.revents |= POLLIN;
+                ret += 1;
+            }
+        }
+    }
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_readv(fds: {:#x?}, nfds = {:x?}, timeout: {}) = {}",
+        fds,
+        nfds,
+        timeout,
+        ret
+    );
+
+    ret
 }
 
 pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
