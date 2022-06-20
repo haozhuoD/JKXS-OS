@@ -28,6 +28,150 @@ pub fn lock_console_and_print(args: fmt::Arguments) {
     print(args);
 }
 
+// ======================== kernel log buffer ========================
+
+pub const LOG_BUF_LEN: usize = 4096;
+pub struct LogBufInner {
+    pub empty:  bool,  // The same values of head and tail mean that the log_buf is either empty or full
+    pub clear_empty: bool,
+    pub clear_head: usize,  // the head after the last clear command 
+    pub head:   usize,
+    pub tail:   usize,
+    pub inner:  [u8; LOG_BUF_LEN]
+}
+
+impl LogBufInner {
+    // READ
+    pub fn read(&mut self, buf: &mut [u8], len: usize) -> usize {
+        let tail = self.tail;
+        let head = self.head;
+        let r_len = self.unread_size().min(len);
+        let r1_len = LOG_BUF_LEN - head;
+        if r1_len < r_len {
+            buf[0..r1_len].copy_from_slice(&self.inner[head..LOG_BUF_LEN]);
+            buf[r1_len..r_len].copy_from_slice(&self.inner[0..r_len-r1_len]);
+        } else {
+            buf[0..r_len].copy_from_slice(&self.inner[head..head+r_len]);
+        }
+        // update
+        self.head = (head + r_len) % LOG_BUF_LEN;
+        let unread_sz = self.unread_size();
+        if unread_sz < self.unclear_size() {
+            self.clear_head = self.head;
+        }
+        if unread_sz == 0 {
+            self.empty = true;
+            self.clear_empty = true;
+        }
+        return r_len;
+    }
+    // READ_ALL & READ_CLEAR: depend on the value of "clear"
+    // read the last len bytes
+    pub fn read_all(&mut self, buf: &mut [u8], len: usize, clear: bool) -> usize {
+        let tail = self.tail;
+        let clear_head = self.clear_head;
+        let r_len = self.unclear_size().min(len);
+        if tail > r_len {
+            buf[0..r_len].copy_from_slice(&self.inner[tail-r_len..tail]);
+        } else {
+            let r1_len = r_len - tail;
+            buf[0..r1_len].copy_from_slice(&self.inner[LOG_BUF_LEN-r1_len..LOG_BUF_LEN]);
+            buf[r1_len..r_len].copy_from_slice(&self.inner[0..tail]);
+        }
+        // clear
+        if (clear) {
+            self.clear_buf();
+        }
+        return r_len;
+    }
+    // from head to tail
+    pub fn unread_size(&self) -> usize {
+        let head = self.head;
+        let tail = self.tail;
+        if head < tail || self.empty {
+            tail - head
+        } else {
+            LOG_BUF_LEN + tail - head
+        }
+    }
+    // from clear_head to tail
+    fn unclear_size(&self) -> usize {
+        let clear_head = self.clear_head;
+        let tail = self.tail;
+        if clear_head < tail || self.clear_empty {
+            tail - clear_head
+        } else {
+            LOG_BUF_LEN + tail - clear_head
+        }
+    }
+    // clear the log buffer
+    pub fn clear_buf(&mut self) {
+        self.clear_head = self.tail;
+        self.clear_empty = true;
+    }
+}
+
+pub fn read_log_buf(buf: &mut [u8], len: usize) -> usize {
+    LOG_BUF.write().read(buf, len)
+}
+
+pub fn read_all_log_buf(buf: &mut [u8], len: usize) -> usize {
+    LOG_BUF.write().read_all(buf, len, false)
+}
+
+pub fn read_clear_log_buf(buf: &mut [u8], len: usize) -> usize {
+    LOG_BUF.write().read_all(buf, len, true)
+}
+
+pub fn clear_log_buf() {
+    LOG_BUF.write().clear_buf();
+}
+
+pub fn unread_size() -> usize {
+    LOG_BUF.read().unread_size()
+}
+
+impl Write for LogBufInner {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let buf = s.as_bytes();
+        let w_len;
+        let tail = self.tail;
+        let head = self.head;
+        if head < tail || self.empty {
+            w_len = (LOG_BUF_LEN + head - tail).min(buf.len());
+        } else {
+            w_len = (head - tail).min(buf.len());
+        }
+        if w_len > 0 {
+            self.empty = false;
+            self.clear_empty = false;
+            let w1_len = LOG_BUF_LEN - tail;
+            if w1_len < w_len {
+                &self.inner[tail..LOG_BUF_LEN].copy_from_slice(&buf[0..w1_len]);
+                &self.inner[0..w_len-w1_len].copy_from_slice(&buf[w1_len..w_len]);
+            } else {
+                &self.inner[tail..tail+w_len].copy_from_slice(&buf[0..w_len]);
+            }   
+            // update tail
+            self.tail = (tail + w_len) % LOG_BUF_LEN;
+        }
+        Ok(())
+    }
+}
+
+pub static LOG_BUF: Lazy<RwLock<LogBufInner>> = Lazy::new(|| RwLock::new(
+    LogBufInner {
+        empty: true, 
+        clear_empty: true,
+        clear_head: 0,
+        head: 0,
+        tail: 0,
+        inner: [0; LOG_BUF_LEN] 
+    }
+));
+
+// ======================== console ========================
+
 pub static CONSOLE: Lazy<RwLock<ConsoleInner>> = Lazy::new(|| RwLock::new(ConsoleInner {}));
 
 #[macro_export]
@@ -166,8 +310,9 @@ pub fn log(log_level: LogLevel, args: fmt::Arguments, file: &'static str, line: 
     if log_level >= min_log_level() {
         let lock = CONSOLE.write();
         set_log_color(log_level);
-        print(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line , args));
+        print(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line, args));
         reset_color();
+        LOG_BUF.write().write_fmt(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line, args));
     }
 }
 

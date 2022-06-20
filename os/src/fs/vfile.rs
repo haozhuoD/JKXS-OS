@@ -113,6 +113,13 @@ pub fn list_apps() {
     println!("**************/")
 }
 
+pub fn init_rootfs(){
+    let _proc = open_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _mounts = open_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
+}
+
 bitflags! {
     pub struct OpenFlags: u32 {
         const RDONLY = 0;
@@ -126,7 +133,7 @@ bitflags! {
         const EXCL = 1 << 7;
         const _X8 = 1 << 8;
         const _X9 = 1 << 9;
-        const _X10 = 1 << 10;
+        const APPEND = 1 << 10;
         const _X11 = 1 << 11;
         const _X12 = 1 << 12;
         const _X13 = 1 << 13;
