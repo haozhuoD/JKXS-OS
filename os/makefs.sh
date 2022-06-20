@@ -31,14 +31,19 @@ do
     # fi
 done
 
-for programname in $(ls ../user/riscv64)
-do 
-    sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
-done
+# for programname in $(ls ../user/riscv64)
+# do 
+#     sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
+# done
 
 for programname in $(ls ../user/busybox_lua_testsuites)
 do 
     sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
+done
+
+for programname in $(ls ../user/libc-tests)
+do 
+    sudo cp ../user/libc-tests/$programname ${FAT32_DIR}/fs/"$programname"
 done
 
 sudo umount ${FAT32_DIR}/fs

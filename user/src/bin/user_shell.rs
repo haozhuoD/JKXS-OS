@@ -120,7 +120,8 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 
 #[no_mangle]
 pub fn main() -> i32 {
-    busybox_lua_test();
+    // busybox_lua_test();
+    interactive_main();
     shutdown()
 }
 
