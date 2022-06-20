@@ -17,6 +17,7 @@ use crate::task::{
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use alloc::string::{String, ToString};
+use crate::console::{LOG_BUF_LEN, read_log_buf, read_all_log_buf, read_clear_log_buf, clear_log_buf, unread_size};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::sync_all;
@@ -508,4 +509,110 @@ pub fn sys_setpgid() -> isize {
 pub fn sys_getpgid() -> isize {
     gdb_println!(SYSCALL_ENABLE, "sys_getpgid(...) = 0");
     0
+}
+
+#[repr(packed)]
+pub struct Sysinfo {
+    uptime:     isize,
+    loads:      [usize; 3],
+    totalram:   usize,
+    freeram:    usize,
+    sharedram:  usize,
+    bufferram:  usize,
+    totalswap:  usize,
+    freeswap:   usize,
+    procs:      u16,
+    totalhigh:  usize,
+    freehigh:   usize,
+    mem_unit:   u32,
+    _f:         [u8; 20-2*size_of::<usize>()-size_of::<u32>()]
+}
+
+impl Sysinfo {
+    pub fn new() -> Self{
+        Self { 
+            uptime: 0, 
+            loads: [0; 3], 
+            totalram: 0, 
+            freeram: 0, 
+            sharedram: 0, 
+            bufferram: 0, 
+            totalswap: 0, 
+            freeswap: 0, 
+            procs: 0, 
+            totalhigh: 0, 
+            freehigh: 0, 
+            mem_unit: 0, 
+            _f: [0; 20-2*size_of::<usize>()-size_of::<u32>()] 
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { from_raw_parts(self as *const _ as usize as *const u8, size_of::<Sysinfo>()) }
+    }
+}
+
+pub fn sys_sysinfo(buf: *mut u8) -> isize {
+    let token = current_user_token();
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<Sysinfo>());
+    let sysinfo = Sysinfo::new();
+
+    let mut userbuf = UserBuffer::new(buf_vec);
+    userbuf.write(sysinfo.as_bytes());
+    gdb_println!(SYSCALL_ENABLE, "sys_sysinfo(buf: {:#x?}) = {}", buf, 0);
+    return 0;
+}
+
+// const SYSLOG_ACTION_CLOSE: isize = 0;
+// const SYSLOG_ACTION_OPEN: isize = 1;
+const SYSLOG_ACTION_READ: isize = 2;
+const SYSLOG_ACTION_READ_ALL: isize = 3;
+const SYSLOG_ACTION_READ_CLEAR: isize = 4;
+const SYSLOG_ACTION_CLEAR: isize = 5;
+// const SYSLOG_ACTION_CONSOLE_OFF: isize = 6;
+// const SYSLOG_ACTION_CONSOLE_ON: isize = 7;
+// const SYSLOG_ACTION_CONSOLE_LEVER: isize = 8;
+const SYSLOG_ACTION_SIZE_UNREAD: isize = 9;
+const SYSLOG_ACTION_SIZE_BUFFER: isize = 10;
+
+pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize{
+    let token = current_user_token();
+    let buf_vec = translated_byte_buffer(token, bufp, len);
+    let mut userbuf = UserBuffer::new(buf_vec);
+    let ret = match _type {
+        SYSLOG_ACTION_READ => {
+            let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
+            let r_sz = read_log_buf(tmp_buf.as_mut_slice(), len);
+            userbuf.write(&tmp_buf[0..r_sz]);
+            r_sz as isize
+        },
+        SYSLOG_ACTION_READ_ALL => {
+            let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
+            let r_sz = read_all_log_buf(tmp_buf.as_mut_slice(), len);
+            userbuf.write(&tmp_buf[0..r_sz]);
+            r_sz as isize
+        },
+        SYSLOG_ACTION_READ_CLEAR => {
+            let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
+            let r_sz = read_clear_log_buf(tmp_buf.as_mut_slice(), len);
+            userbuf.write(&tmp_buf[0..r_sz]);
+            r_sz as isize
+        },
+        SYSLOG_ACTION_CLEAR => {
+            clear_log_buf();
+            0
+        },
+        SYSLOG_ACTION_SIZE_UNREAD => unread_size() as isize,
+        SYSLOG_ACTION_SIZE_BUFFER => LOG_BUF_LEN as isize,
+        _ => 0
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_syslog(type: {}, bufp = {:#x?}, len = {} ) = {}",
+        _type,
+        bufp,
+        len,
+        ret
+    );
+    ret
 }

@@ -75,8 +75,8 @@ bitflags! {
         const CREATE = 1 << 6;
         const EXCL = 1 << 7;
         const _X8 = 1 << 8;
-        const _X9 = 1 << 9;
-        const _X10 = 1 << 10;
+        const TRUNC = 1 << 9;
+        const APPEND = 1 << 10;
         const _X11 = 1 << 11;
         const _X12 = 1 << 12;
         const _X13 = 1 << 13;

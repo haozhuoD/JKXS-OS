@@ -36,6 +36,7 @@ const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_GETITIMER: usize = 102;
 const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
+const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_SCHED_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_SIGACTION: usize = 134;
@@ -54,6 +55,7 @@ const SYSCALL_GETEUID: usize = 175;
 const SYSCALL_GETGID: usize = 176;
 const SYSCALL_GETEGID: usize = 177;
 const SYSCALL_GETTID: usize = 178;
+const SYSCALL_SYSINFO: usize = 179;
 const SYSCALL_SBRK: usize = 213;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
@@ -108,7 +110,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[3] as _,
             args[4] as _,
         ),
-        SYSCALL_FACCESSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _), // fake
+        SYSCALL_FACCESSAT => sys_faccessat(args[0] as _, args[1] as _, args[2], args[3] as _), // fake
         SYSCALL_CHDIR => sys_chdir(args[0] as _),
         SYSCALL_OPENAT => sys_open_at(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_CLOSE => sys_close(args[0]),
@@ -128,6 +130,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as _),
         SYSCALL_NANOSLEEP => sys_sleep(args[0] as _),
         SYSCALL_CLOCK_GETTIME => sys_clock_get_time(args[0], args[1] as _),
+        SYSCALL_SYSLOG => sys_syslog(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_SCHED_YIELD => sys_yield(),
         SYSCALL_KILL => sys_kill(args[0], args[1] as _),
         SYSCALL_SIGACTION => sys_sigaction(args[0], args[1] as _, args[2] as _),
@@ -155,6 +158,14 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WAIT4 => sys_waitpid(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
+        SYSCALL_SYSINFO => sys_sysinfo(args[0] as _),
+        SYSCALL_RENAMEAT2 => sys_renameat2(
+            args[0] as _,
+            args[1] as _, 
+            args[2] as _, 
+            args[3] as _, 
+            args[4]
+        ),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),

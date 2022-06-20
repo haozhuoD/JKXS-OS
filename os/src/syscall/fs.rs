@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, Pollfd, POLLIN, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, Pollfd, POLLIN
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EBADF, ENOENT, ENOTDIR, EPERM};
+use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR, EINVAL};
 
 const AT_FDCWD: isize = -100;
 
@@ -372,7 +372,6 @@ pub fn sys_chdir(path: *const u8) -> isize {
     } else {
         String::from("/")
     };
-
     let ret = {
         if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {
@@ -600,11 +599,9 @@ pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     let inner = process.acquire_inner_lock();
 
     let mut ret = 0isize;
-
     if fd >= inner.fd_table.len() {
         return -EPERM;
     }
-
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
         match file {
@@ -614,7 +611,6 @@ pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
         if !f.readable() {
             return -EPERM;
         }
-
         for i in 0..iocnt {
             let iovec = translated_ref(token, unsafe { iov.add(i) });
             let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
@@ -750,9 +746,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                dirfd,
-                path,
-                -EBADF
+                dirfd, path, -EBADF
             );
             return -EBADF;
         }
@@ -761,9 +755,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                    dirfd,
-                    path,
-                    0
+                    dirfd, path, 0
                 );
                 return 0;
             }
@@ -771,9 +763,7 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd,
-            path,
-            -ENOENT
+            dirfd, path, -ENOENT
         );
         return -ENOENT;
     }
@@ -781,18 +771,66 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd,
-            path,
-            0
+            dirfd, path, 0
         );
         return 0;
     }
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-        dirfd,
-        path,
-        -ENOENT
+        dirfd, path, -ENOENT
+    );
+    return -ENOENT;
+}
+
+pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) -> isize {
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.acquire_inner_lock();
+    let path = translated_str(token, path);
+    let flags = OpenFlags::from_bits(flags as u32).unwrap();
+    let mut base_path = inner.cwd.as_str();
+    if path.starts_with("/") {
+        base_path = "/";
+    } else if dirfd != AT_FDCWD {
+        let dirfd = dirfd as usize;
+        if dirfd >= inner.fd_table.len() {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+                dirfd, path, flags, -EBADF
+            );
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+            if let Some(_) = osfile.find(path.as_str(), flags) {
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+                    dirfd, path, flags, 0
+                );
+                return 0;
+            }
+        }
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+            dirfd, path, flags, -ENOENT
+        );
+        return -ENOENT;
+    }
+    if let Some(_) = open_file(base_path, path.as_str(), flags) {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+            dirfd, path, flags, 0
+        );
+        return 0;
+    }
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
+        dirfd, path, flags, -ENOENT
     );
     return -ENOENT;
 }
@@ -824,6 +862,90 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
     );
 
     ret
+}
+
+pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path: *const u8, flags: usize) -> isize {
+    if flags != 0 {
+        return -EINVAL;
+    }   
+    let process = current_process();
+    let token = current_user_token();
+    let inner = process.acquire_inner_lock();
+    let old_path = translated_str(token, old_path);
+    let new_path = translated_str(token, new_path);
+    let cwd = inner.cwd.as_str();
+    let old_file;
+    let new_file;
+
+    if old_path.starts_with("/") {
+        match open_file("/", old_path.as_str(), OpenFlags::empty()) {
+            Some(tmp_file) => old_file = tmp_file.clone(),
+            None => return -ENOENT,
+        }
+    } else if old_fd != AT_FDCWD {
+        let old_fd = old_fd as usize;
+        if old_fd >= inner.fd_table.len() {
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[old_fd] {
+            match osfile.find(old_path.as_str(), OpenFlags::empty()) {
+                Some(tmp_file) => old_file = tmp_file.clone(),
+                None => return -ENOENT,
+            }
+        } else {
+            return -ENOENT;
+        }
+    } else if let Some(tmp_file) = open_file(cwd, old_path.as_str(), OpenFlags::empty()) {
+        old_file = tmp_file.clone();
+    } else {
+        return -ENOENT;  
+    }  
+
+    let open_flags = {
+        if old_file.is_dir() {
+            OpenFlags::CREATE | OpenFlags::RDWR | OpenFlags::DIRECTORY
+        } else {
+            OpenFlags::CREATE | OpenFlags::RDWR
+        }
+    };
+
+    if new_path.starts_with("/") {
+        match open_file("/", new_path.as_str(), open_flags) {
+            Some(tmp_file) => new_file = tmp_file.clone(),
+            None => return -ENOENT,
+        }
+    } else if new_fd != AT_FDCWD {
+        let new_fd = new_fd as usize;
+        if new_fd >= inner.fd_table.len() {
+            return -EBADF;
+        }
+        if let Some(FileClass::File(osfile)) = &inner.fd_table[new_fd] {
+            match osfile.find(new_path.as_str(), open_flags) {
+                Some(tmp_file) => new_file = tmp_file.clone(),
+                None => return -ENOENT,
+            }
+        } else {
+            return -ENOENT;
+        }
+    } else if let Some(tmp_file) = open_file(cwd, new_path.as_str(), open_flags) {
+        new_file = tmp_file.clone();
+    } else {
+        return -ENOENT;  
+    }
+    let old_ino = old_file.inode_id();
+    let new_ino = new_file.inode_id();
+    if old_ino == new_ino {
+        return -EPERM;
+    }
+    new_file.set_file_size(old_file.file_size() as u32);
+    new_file.set_inode_id(old_ino);
+    old_file.delete();
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_renameat2(old_fd = {}, old_path = {:#?}, new_fd = {}, new_path = {}, flags: {:#?}) = {}",
+        old_fd, old_path, new_fd, new_path, flags, 0
+    );
+    return 0;
 }
 
 pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {

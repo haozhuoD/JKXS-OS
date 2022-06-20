@@ -592,8 +592,13 @@ impl VFile {
         })
     }
 
-    // TODO：貌似没什么用
+    // 删除目录项，不清理fat表
     pub fn delete(&self) {
+        (0..self.long_pos_vec.len()).for_each(|i| {
+            self.modify_long_dirent(i, |long_ent| {
+                long_ent.delete();
+            });
+        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -615,10 +620,50 @@ impl VFile {
             return 0;
         }
         let all_clusters = self.fs.get_fat().read().get_all_clusters(first_cluster, &self.block_device);
-        // println!("all_clusters:{:?}", all_clusters);
+        if self.is_dir() {
+            let mut offset = 2 * DIRENT_SZ;
+            let mut short_ent = ShortDirEntry::empty();
+            loop {
+                let read_sz = self.read_short_dirent(|curr_ent| {
+                    curr_ent.read_at(
+                        offset, 
+                        short_ent.as_bytes_mut(), 
+                        &self.fs, 
+                        &self.fs.get_fat(), 
+                        &self.block_device
+                    )
+                });
+                if read_sz != DIRENT_SZ || short_ent.is_empty() {
+                    break;
+                }
+                if short_ent.is_deleted() {
+                    offset += DIRENT_SZ;
+                    continue;
+                }
+                if short_ent.is_long() {
+                    let mut long_ent: LongDirEntry = unsafe {
+                        core::mem::transmute(short_ent)
+                    };
+                    long_ent.delete();
+                    offset += DIRENT_SZ;
+                    continue;
+                }
+                let (short_sector, short_offset) = self.get_pos(offset);
+                let vfile = VFile::new(
+                    String::new(), 
+                    short_sector, 
+                    short_offset, 
+                    Vec::new(), 
+                    short_ent.attribute(), 
+                    self.fs.clone(), 
+                    self.block_device.clone()
+                );
+                vfile.remove();
+                offset += DIRENT_SZ;
+            }
+        }
         let len = all_clusters.len();
         self.fs.dealloc_cluster(all_clusters);
-        // println!("deleted {} clusters", len);
         len
     }
 }

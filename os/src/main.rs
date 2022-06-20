@@ -34,7 +34,6 @@ mod timer;
 mod trap;
 
 use spin::{Lazy, RwLock, Mutex};
-
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
 #[allow(unused)]
@@ -74,6 +73,7 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
+    fs::init_rootfs();
     // block_device_test();
     task::add_initproc();
     info!("(Boot Core) Riscv hartid {} run ", hartid);

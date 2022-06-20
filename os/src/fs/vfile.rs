@@ -58,9 +58,17 @@ impl OSFile {
         inner.vfile.remove()
     }
 
+    pub fn delete(&self) {
+        self.inner.lock().vfile.delete();
+    }
+
     pub fn file_size(&self) -> usize {
         let inner = self.inner.lock();
         inner.vfile.get_size() as usize
+    }
+
+    pub fn set_file_size(&self, size: u32) {
+        self.inner.lock().vfile.set_size(size);
     }
 
     pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
@@ -76,6 +84,10 @@ impl OSFile {
     pub fn inode_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.vfile.first_cluster()
+    }
+
+    pub fn set_inode_id(&self, inode_id: u32) {
+        self.inner.lock().vfile.set_first_cluster(inode_id);
     }
 
     pub fn offset(&self) -> usize {
@@ -99,6 +111,13 @@ pub fn list_apps() {
         println!("{}", app);
     }
     println!("**************/")
+}
+
+pub fn init_rootfs(){
+    let _proc = open_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _mounts = open_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
 }
 
 bitflags! {
@@ -176,6 +195,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
     }; // 当前工作路径对应节点
     let (readable, writable) = flags.read_write();
+    // println!("open_file");
 
     let pathv = path2vec(path);
 

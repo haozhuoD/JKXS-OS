@@ -69,6 +69,7 @@ impl FAT32Manager {
                 }
                 start_sector
             });
+        println!("start sector is {}", start_sector);
         set_start_sector(start_sector as usize);
 
         // 读入BPB
@@ -106,6 +107,7 @@ impl FAT32Manager {
         let fat_size = ebr.fat_size();
         let first_fat2_sector = first_fat1_sector + fat_size;
         let fat = FAT::new(first_fat1_sector, first_fat2_sector, fat_size);
+        println!("fat_size: {}", fat_size);
         println!("first_fat1_sector: {}", first_fat1_sector);
         println!("first_fat2_sector: {}", first_fat2_sector);
 
@@ -114,7 +116,13 @@ impl FAT32Manager {
         let bytes_per_sector = bpb.bytes_per_sector as u32;
         let bytes_per_cluster = sectors_per_cluster * bytes_per_sector;
         let root_sector = first_fat1_sector +  bpb.table_count as u32 * fat_size;
-        println!("root_sector: {}", root_sector);
+        let inner = FAT32ManagerInner {
+            bytes_per_sector, 
+            bytes_per_cluster, 
+            sectors_per_cluster, 
+            root_sector,
+        };
+        println!("{:#?}", inner);
         
         // 根目录
         let mut root_dirent = ShortDirEntry::new(
@@ -125,12 +133,7 @@ impl FAT32Manager {
         root_dirent.set_first_cluster(2);
 
         let fat32_manager = Self {
-            inner: FAT32ManagerInner { 
-                bytes_per_sector, 
-                bytes_per_cluster, 
-                sectors_per_cluster, 
-                root_sector,
-            },
+            inner,
             block_device,
             fsinfo: Arc::new(RwLock::new(fsinfo)),
             fat: Arc::new(RwLock::new(fat)),
