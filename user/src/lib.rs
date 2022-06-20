@@ -12,7 +12,10 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use alloc::{vec::Vec, string::{String, ToString}};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
 
@@ -89,29 +92,25 @@ bitflags! {
 }
 
 #[derive(Copy, Clone)]
-pub struct TimeVal{
+pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
 }
 
-impl TimeVal{
-    pub fn new() -> Self{
-        Self{
-            sec:0,
-            usec:0
-        }
+impl TimeVal {
+    pub fn new() -> Self {
+        Self { sec: 0, usec: 0 }
     }
 
-    pub fn add_usec(&mut self, usec:usize){
+    pub fn add_usec(&mut self, usec: usize) {
         self.usec += usec;
-        self.sec += self.usec/1000_000;
+        self.sec += self.usec / 1000_000;
         self.usec %= 1000_000;
     }
 
-    pub fn is_zero(&self) -> bool{
+    pub fn is_zero(&self) -> bool {
         self.sec == 0 && self.usec == 0
     }
-
 }
 
 #[allow(unused)]
@@ -151,7 +150,7 @@ pub fn yield_() -> isize {
 pub fn get_time() -> isize {
     let mut time = TimeVal::new();
     sys_get_time(&mut time);
-    (time.sec*1000 + time.usec/1000) as isize
+    (time.sec * 1000 + time.usec / 1000) as isize
 }
 pub fn getpid() -> isize {
     sys_getpid()
@@ -239,7 +238,11 @@ pub fn readcwd() -> Vec<String> {
             while buf[end_offset] != 0 {
                 end_offset += 1;
             }
-            dirv.push(core::str::from_utf8(&buf[start_offset..end_offset]).unwrap().to_string());
+            dirv.push(
+                core::str::from_utf8(&buf[start_offset..end_offset])
+                    .unwrap()
+                    .to_string(),
+            );
             end_offset = end_offset + dir_size + 1;
             start_offset = end_offset;
         }
@@ -250,8 +253,8 @@ pub fn readcwd() -> Vec<String> {
 pub fn change_cwd(cwd: &str, path: &str) -> String {
     if path.starts_with("/") {
         let mut path = path.trim_end_matches("/\0").to_string();
-        path.push('/');    
-        return path; 
+        path.push('/');
+        return path;
     }
     let mut cwdv: Vec<&str> = cwd.split("/").filter(|x| *x != "").collect();
     let pathv: Vec<&str> = path
@@ -290,7 +293,11 @@ pub fn get_wordlist(abs_path: &str) -> Vec<String> {
             while buf[end_offset] != 0 {
                 end_offset += 1;
             }
-            dirv.push(core::str::from_utf8(&buf[start_offset..end_offset]).unwrap().to_string());
+            dirv.push(
+                core::str::from_utf8(&buf[start_offset..end_offset])
+                    .unwrap()
+                    .to_string(),
+            );
             end_offset = end_offset + dir_size + 1;
             start_offset = end_offset;
         }
@@ -299,7 +306,8 @@ pub fn get_wordlist(abs_path: &str) -> Vec<String> {
 }
 
 pub fn longest_common_prefix(str_vec: &Vec<String>) -> String {
-    str_vec.iter()
+    str_vec
+        .iter()
         .max()
         .unwrap()
         .chars()
@@ -353,5 +361,20 @@ pub fn preliminary_test() {
             let mut exit_code = 0;
             waitpid(pid as usize, &mut exit_code);
         }
-    };
+    }
+}
+
+pub fn busybox_lua_test() {
+    let mut apps = Vec::new();
+    apps.push("./busybox_testcode.sh\0");
+    apps.push("./lua_testcode.sh\0");
+    for app_name in apps {
+        let pid = fork();
+        if pid == 0 {
+            exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
+        } else {
+            let mut exit_code = 0;
+            waitpid(pid as usize, &mut exit_code);
+        }
+    }
 }

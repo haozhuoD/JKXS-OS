@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test,
-    get_wordlist, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown
+    get_wordlist, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown, busybox_lua_test
 };
 
 #[derive(Debug)]
@@ -117,8 +117,14 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 //     shutdown()
 // }
 
+
 #[no_mangle]
 pub fn main() -> i32 {
+    busybox_lua_test();
+    shutdown()
+}
+
+fn interactive_main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
     let mut pos: usize = 0;
