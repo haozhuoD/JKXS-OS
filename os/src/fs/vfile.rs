@@ -136,7 +136,7 @@ bitflags! {
         const _X8 = 1 << 8;
         const TRUNC = 1 << 9;
         const APPEND = 1 << 10;
-        const _X11 = 1 << 11;
+        const NONBLOCK = 1 << 11;
         const _X12 = 1 << 12;
         const _X13 = 1 << 13;
         const _X14 = 1 << 14;

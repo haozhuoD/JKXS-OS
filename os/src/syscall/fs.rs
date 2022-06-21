@@ -150,18 +150,21 @@ pub fn sys_close(fd: usize) -> isize {
     0
 }
 
-pub fn sys_pipe(pipe: *mut u32) -> isize {
+pub fn sys_pipe2(pipe: *mut u32, flags: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
+    let flags = OpenFlags::from_bits(flags).unwrap();
+
     let mut inner = process.acquire_inner_lock();
-    let (pipe_read, pipe_write) = make_pipe();
+    let (pipe_read, pipe_write) = make_pipe(flags);
     let read_fd = inner.alloc_fd(0);
     inner.fd_table[read_fd] = Some(FileClass::Abs(pipe_read));
     let write_fd = inner.alloc_fd(0);
     inner.fd_table[write_fd] = Some(FileClass::Abs(pipe_write));
     *translated_refmut(token, pipe) = read_fd as u32;
     *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd as u32;
-    gdb_println!(SYSCALL_ENABLE, "sys_pipe() = [{}, {}]", read_fd, write_fd);
+
+    gdb_println!(SYSCALL_ENABLE, "sys_pipe2(flags: {:#x?}) = [{}, {}]", flags, read_fd, write_fd);
     0
 }
 

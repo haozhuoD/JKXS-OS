@@ -114,7 +114,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CHDIR => sys_chdir(args[0] as _),
         SYSCALL_OPENAT => sys_open_at(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_CLOSE => sys_close(args[0]),
-        SYSCALL_PIPE2 => sys_pipe(args[0] as _),
+        SYSCALL_PIPE2 => sys_pipe2(args[0] as _, args[1] as u32),
         SYSCALL_GETDENTS64 => sys_getdents64(args[0] as _, args[1] as _, args[2]),
         SYSCALL_LSEEK => sys_lseek(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as _, args[2]),
