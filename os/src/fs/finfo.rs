@@ -140,3 +140,7 @@ pub const S_IRWXO: u32 = 0o0007; //others (not in group) have read, write,and ex
 pub const S_IROTH: u32 = 0o0004; //others have read permission
 pub const S_IWOTH: u32 = 0o0002; //others have write permission
 pub const S_IXOTH: u32 = 0o0001; //others have execute permission
+
+pub const SEEK_SET: usize = 0;
+pub const SEEK_CUR: usize = 1;
+pub const SEEK_END: usize = 2;

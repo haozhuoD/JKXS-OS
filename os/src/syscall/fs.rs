@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, Pollfd, POLLIN
+    OpenFlags, Pollfd, POLLIN, SEEK_SET, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, SEEK_CUR, SEEK_END,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -8,7 +8,6 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
-use crate::syscall::errorno::EEXIST;
 use crate::task::{current_process, current_user_token};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -17,7 +16,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use fat32_fs::DIRENT_SZ;
 
-use super::errorno::{EPERM, ENOENT, EBADF, ENOTDIR, EINVAL};
+use super::errorno::*;
 
 const AT_FDCWD: isize = -100;
 
@@ -443,7 +442,7 @@ fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isi
         offset += DIRENT_SZ;
     }
     userbuf.write(dentry_buf.as_slice());
-    f.seek(offset);
+    f.set_offset(offset);
     nread as isize
 }
 
@@ -686,7 +685,7 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
         match fin {
             FileClass::File(fi) => {
                 if offset as usize != 0 {
-                    fi.seek(*translated_ref(token, offset));
+                    fi.set_offset(*translated_ref(token, offset));
                 };
 
                 fin_inner = fi.clone();
@@ -746,7 +745,9 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                dirfd, path, -EBADF
+                dirfd,
+                path,
+                -EBADF
             );
             return -EBADF;
         }
@@ -755,7 +756,9 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-                    dirfd, path, 0
+                    dirfd,
+                    path,
+                    0
                 );
                 return 0;
             }
@@ -763,7 +766,9 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd, path, -ENOENT
+            dirfd,
+            path,
+            -ENOENT
         );
         return -ENOENT;
     }
@@ -771,14 +776,18 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-            dirfd, path, 0
+            dirfd,
+            path,
+            0
         );
         return 0;
     }
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
-        dirfd, path, -ENOENT
+        dirfd,
+        path,
+        -ENOENT
     );
     return -ENOENT;
 }
@@ -798,7 +807,10 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
-                dirfd, path, flags, -EBADF
+                dirfd,
+                path,
+                flags,
+                -EBADF
             );
             return -EBADF;
         }
@@ -807,7 +819,10 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
-                    dirfd, path, flags, 0
+                    dirfd,
+                    path,
+                    flags,
+                    0
                 );
                 return 0;
             }
@@ -815,7 +830,10 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
-            dirfd, path, flags, -ENOENT
+            dirfd,
+            path,
+            flags,
+            -ENOENT
         );
         return -ENOENT;
     }
@@ -823,14 +841,20 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
-            dirfd, path, flags, 0
+            dirfd,
+            path,
+            flags,
+            0
         );
         return 0;
     }
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
-        dirfd, path, flags, -ENOENT
+        dirfd,
+        path,
+        flags,
+        -ENOENT
     );
     return -ENOENT;
 }
@@ -864,10 +888,16 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
     ret
 }
 
-pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path: *const u8, flags: usize) -> isize {
+pub fn sys_renameat2(
+    old_fd: isize,
+    old_path: *const u8,
+    new_fd: isize,
+    new_path: *const u8,
+    flags: usize,
+) -> isize {
     if flags != 0 {
         return -EINVAL;
-    }   
+    }
     let process = current_process();
     let token = current_user_token();
     let inner = process.acquire_inner_lock();
@@ -898,8 +928,8 @@ pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path
     } else if let Some(tmp_file) = open_file(cwd, old_path.as_str(), OpenFlags::empty()) {
         old_file = tmp_file.clone();
     } else {
-        return -ENOENT;  
-    }  
+        return -ENOENT;
+    }
 
     let open_flags = {
         if old_file.is_dir() {
@@ -930,7 +960,7 @@ pub fn sys_renameat2(old_fd: isize, old_path: *const u8, new_fd: isize, new_path
     } else if let Some(tmp_file) = open_file(cwd, new_path.as_str(), open_flags) {
         new_file = tmp_file.clone();
     } else {
-        return -ENOENT;  
+        return -ENOENT;
     }
     let old_ino = old_file.inode_id();
     let new_ino = new_file.inode_id();
@@ -958,5 +988,42 @@ pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
     } else {
         -EPERM
     };
+    ret
+}
+
+pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
+    let process = current_process();
+    let inner = process.acquire_inner_lock();
+
+    let ret = if let Some(Some(f)) = inner.fd_table.get(fd) {
+        match f {
+            FileClass::File(fi) => {
+                let sz = fi.file_size();
+                let new_off: isize = match whence {
+                    SEEK_SET => offset as _,
+                    SEEK_CUR => (fi.offset() + offset) as _,
+                    SEEK_END => (sz + offset) as _,
+                    _ => -1
+                };
+                if new_off < 0 || new_off > sz as _{
+                    -EINVAL
+                } else {
+                    fi.set_offset(new_off as _) as isize
+                }
+            }
+            FileClass::Abs(_) => -ESPIPE,
+        }
+    } else {
+        -EBADF
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_lseek(fd: {}, offset: {}, whence: {}) = {}",
+        fd,
+        offset,
+        whence,
+        ret
+    );
     ret
 }

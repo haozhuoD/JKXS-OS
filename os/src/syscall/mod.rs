@@ -116,6 +116,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE2 => sys_pipe(args[0] as _),
         SYSCALL_GETDENTS64 => sys_getdents64(args[0] as _, args[1] as _, args[2]),
+        SYSCALL_LSEEK => sys_lseek(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as _, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as _, args[2]),
         SYSCALL_READV => sys_readv(args[0], args[1] as _, args[2]),

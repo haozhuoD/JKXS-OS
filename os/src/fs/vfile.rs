@@ -94,7 +94,7 @@ impl OSFile {
         self.inner.lock().offset
     }
 
-    pub fn seek(&self, offset: usize) -> usize {
+    pub fn set_offset(&self, offset: usize) -> usize {
         self.inner.lock().offset = offset;
         offset
     }
@@ -117,6 +117,8 @@ pub fn init_rootfs(){
     let _proc = open_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _mounts = open_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
     let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _var = open_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _tmp = open_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
 }
 
@@ -207,7 +209,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         }
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
-            vfile.seek(vfile.file_size());
+            vfile.set_offset(vfile.file_size());
         }
         return Some(Arc::new(vfile));
     }
