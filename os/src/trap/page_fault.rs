@@ -24,7 +24,7 @@ pub fn page_fault_handler(process_inner: &mut ProcessInnerLock, vaddr: usize) ->
     let heap_top = process_inner.user_heap_top;
     let mmap_top = process_inner.mmap_area_top;
 
-    debug!("page fault: va = {:#x?}", vaddr);
+    // debug!("page fault: va = {:#x?}", vaddr);
     if vaddr >= heap_base && vaddr < heap_top {
         // println!("[kernel] alloc heap memory {:#x?}", vaddr);
         lazy_alloc_heap_page(process_inner, vaddr)

@@ -655,7 +655,6 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
 
     for i in 0..len / PAGE_SIZE {
         let vpn = VirtPageNum::from(start_vpn + i);
-        debug!("sys_mprotect: vpn = {:#x?}", vpn);
         // 尝试直接改变pte_flags
         if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
             continue;
