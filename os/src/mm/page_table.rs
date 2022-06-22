@@ -109,6 +109,18 @@ impl PageTable {
         }
         result
     }
+    pub fn set_pte_flags(&self, vpn: VirtPageNum, flags: PTEFlags) -> Option<&mut PageTableEntry> {
+        if let Some(pte) = self.find_pte(vpn) {
+            if !pte.is_valid() {
+                return None;
+            }
+            pte.bits = usize::from(pte.ppn()) << 10
+                | (flags | PTEFlags::U | PTEFlags::V | PTEFlags::A | PTEFlags::D).bits() as usize;
+            Some(pte)
+        } else {
+            None
+        }
+    }
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();

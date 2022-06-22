@@ -58,10 +58,13 @@ impl MmapArea {
         new_area
     }
 
+    /// 这里有问题：pte_flags可能被sys_mprotect修改，导致其与self.map_perm不一致.
+    /// fake solution here.
     pub fn map_all(&self, page_table: &mut PageTable) {
         for (vpn, frame) in (&self.data_frames).into_iter() {
             let ppn = frame.ppn;
-            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
+            // let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
+            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap() | PTEFlags::U | PTEFlags::R | PTEFlags::W;
             page_table.map(*vpn, ppn, pte_flags);
         }
     }

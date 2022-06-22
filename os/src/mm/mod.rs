@@ -12,11 +12,7 @@ pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
 pub use mmap::MmapArea;
-use page_table::PTEFlags;
-pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
-};
+pub use page_table::*;
 use riscv::register::satp;
 
 pub fn init() {

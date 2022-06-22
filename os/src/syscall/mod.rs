@@ -155,6 +155,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[4] as _,
             args[5] as _,
         ),
+        SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as _, args[1] as _),
         SYSCALL_WAIT4 => sys_waitpid(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_GETPPID => sys_getppid(),

@@ -2,12 +2,16 @@ use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
 
-use crate::config::aligned_up;
+use crate::config::{aligned_up, PAGE_SIZE};
+use crate::console::{
+    clear_log_buf, read_all_log_buf, read_clear_log_buf, read_log_buf, unread_size, LOG_BUF_LEN,
+};
 use crate::fs::{open_file, OpenFlags};
 use crate::gdb_println;
 use crate::loader::get_usershell_binary;
 use crate::mm::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PTEFlags,
+    UserBuffer, VirtAddr, VirtPageNum,
 };
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
@@ -16,8 +20,8 @@ use crate::task::{
     mark_current_signal_done, pid2process, suspend_current_and_run_next, SigAction,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
+use crate::trap::page_fault_handler;
 use alloc::string::{String, ToString};
-use crate::console::{LOG_BUF_LEN, read_log_buf, read_all_log_buf, read_clear_log_buf, clear_log_buf, unread_size};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::sync_all;
@@ -76,9 +80,31 @@ pub fn sys_getpid() -> isize {
 
 bitflags! {
     pub struct CloneFlags: u32 {
-        const SIGCHLD = 17;
+        const SIGCHLD              = 17;
+        const CLONE_VM             = 0x00000100;
+        const CLONE_FS             = 0x00000200;
+        const CLONE_FILES          = 0x00000400;
+        const CLONE_SIGHAND        = 0x00000800;
+        const CLONE_PIDFD          = 0x00001000;
+        const CLONE_PTRACE         = 0x00002000;
+        const CLONE_VFORK          = 0x00004000;
+        const CLONE_PARENT         = 0x00008000;
+        const CLONE_THREAD         = 0x00010000;
+        const CLONE_NEWNS          = 0x00020000;
+        const CLONE_SYSVSEM        = 0x00040000;
+        const CLONE_SETTLS         = 0x00080000;
+        const CLONE_PARENT_SETTID  = 0x00100000;
         const CLONE_CHILD_CLEARTID = 0x00200000;
-        const CLONE_CHILD_SETTID = 0x01000000;
+        const CLONE_DETACHED       = 0x00400000;
+        const CLONE_UNTRACED       = 0x00800000;
+        const CLONE_CHILD_SETTID   = 0x01000000;
+        const CLONE_NEWCGROUP      = 0x02000000;
+        const CLONE_NEWUTS         = 0x04000000;
+        const CLONE_NEWIPC         = 0x08000000;
+        const CLONE_NEWUSER        = 0x10000000;
+        const CLONE_NEWPID         = 0x20000000;
+        const CLONE_NEWNET         = 0x40000000;
+        const CLONE_IO             = 0x80000000;
     }
 }
 
@@ -513,37 +539,37 @@ pub fn sys_getpgid() -> isize {
 
 #[repr(packed)]
 pub struct Sysinfo {
-    uptime:     isize,
-    loads:      [usize; 3],
-    totalram:   usize,
-    freeram:    usize,
-    sharedram:  usize,
-    bufferram:  usize,
-    totalswap:  usize,
-    freeswap:   usize,
-    procs:      u16,
-    totalhigh:  usize,
-    freehigh:   usize,
-    mem_unit:   u32,
-    _f:         [u8; 20-2*size_of::<usize>()-size_of::<u32>()]
+    uptime: isize,
+    loads: [usize; 3],
+    totalram: usize,
+    freeram: usize,
+    sharedram: usize,
+    bufferram: usize,
+    totalswap: usize,
+    freeswap: usize,
+    procs: u16,
+    totalhigh: usize,
+    freehigh: usize,
+    mem_unit: u32,
+    _f: [u8; 20 - 2 * size_of::<usize>() - size_of::<u32>()],
 }
 
 impl Sysinfo {
-    pub fn new() -> Self{
-        Self { 
-            uptime: 0, 
-            loads: [0; 3], 
-            totalram: 0, 
-            freeram: 0, 
-            sharedram: 0, 
-            bufferram: 0, 
-            totalswap: 0, 
-            freeswap: 0, 
-            procs: 0, 
-            totalhigh: 0, 
-            freehigh: 0, 
-            mem_unit: 0, 
-            _f: [0; 20-2*size_of::<usize>()-size_of::<u32>()] 
+    pub fn new() -> Self {
+        Self {
+            uptime: 0,
+            loads: [0; 3],
+            totalram: 0,
+            freeram: 0,
+            sharedram: 0,
+            bufferram: 0,
+            totalswap: 0,
+            freeswap: 0,
+            procs: 0,
+            totalhigh: 0,
+            freehigh: 0,
+            mem_unit: 0,
+            _f: [0; 20 - 2 * size_of::<usize>() - size_of::<u32>()],
         }
     }
 
@@ -575,7 +601,7 @@ const SYSLOG_ACTION_CLEAR: isize = 5;
 const SYSLOG_ACTION_SIZE_UNREAD: isize = 9;
 const SYSLOG_ACTION_SIZE_BUFFER: isize = 10;
 
-pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize{
+pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize {
     let token = current_user_token();
     let buf_vec = translated_byte_buffer(token, bufp, len);
     let mut userbuf = UserBuffer::new(buf_vec);
@@ -585,26 +611,26 @@ pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize{
             let r_sz = read_log_buf(tmp_buf.as_mut_slice(), len);
             userbuf.write(&tmp_buf[0..r_sz]);
             r_sz as isize
-        },
+        }
         SYSLOG_ACTION_READ_ALL => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_all_log_buf(tmp_buf.as_mut_slice(), len);
             userbuf.write(&tmp_buf[0..r_sz]);
             r_sz as isize
-        },
+        }
         SYSLOG_ACTION_READ_CLEAR => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_clear_log_buf(tmp_buf.as_mut_slice(), len);
             userbuf.write(&tmp_buf[0..r_sz]);
             r_sz as isize
-        },
+        }
         SYSLOG_ACTION_CLEAR => {
             clear_log_buf();
             0
-        },
+        }
         SYSLOG_ACTION_SIZE_UNREAD => unread_size() as isize,
         SYSLOG_ACTION_SIZE_BUFFER => LOG_BUF_LEN as isize,
-        _ => 0
+        _ => 0,
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -615,4 +641,44 @@ pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize{
         ret
     );
     ret
+}
+
+pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
+    if addr % PAGE_SIZE != 0 || len % PAGE_SIZE != 0 {
+        warning!("sys_mprotect: not aligned!");
+        return -EINVAL;
+    }
+    let process = current_process();
+    let mut inner = process.acquire_inner_lock();
+    let start_vpn = addr / PAGE_SIZE;
+    let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap();
+
+    for i in 0..len / PAGE_SIZE {
+        let vpn = VirtPageNum::from(start_vpn + i);
+        debug!("sys_mprotect: vpn = {:#x?}", vpn);
+        // 尝试直接改变pte_flags
+        if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
+            continue;
+        }
+        // failed
+        if page_fault_handler(&mut inner, VirtAddr::from(vpn).into()) == 0 {
+            if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
+                continue;
+            }
+        }
+        panic!("sys_mprotect: No such pte");
+    }
+    unsafe {
+        asm!("sfence.vma");
+        asm!("fence.i");
+    }
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_mprotect(addr: {:#x?}, len: {}, prot: {:#x?}) = {}",
+        addr,
+        len,
+        prot,
+        0
+    );
+    0
 }

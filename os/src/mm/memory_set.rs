@@ -382,6 +382,12 @@ impl MemorySet {
             asm!("sfence.vma");
         }
     }
+
+    /// 设置pte标志位，失败返回-1
+    pub fn set_pte_flags(&self, vpn: VirtPageNum, flags: PTEFlags) -> isize {
+        if self.page_table.set_pte_flags(vpn, flags).is_none() {-1} else {0}
+    }
+
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }

@@ -21,7 +21,7 @@ pub use aux::*;
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::{add_task, pid2process, remove_from_pid2process};
-pub use process::FdTable;
+pub use process::*;
 pub use processor::*;
 pub use signal::*;
 pub use task::{TaskControlBlock, TaskStatus};

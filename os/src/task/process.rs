@@ -41,6 +41,7 @@ pub struct ProcessControlBlockInner {
 }
 
 pub type FdTable = Vec<Option<FileClass>>;
+pub type ProcessInnerLock<'a> = MutexGuard<'a, ProcessControlBlockInner>;
 
 impl ProcessControlBlockInner {
     #[allow(unused)]
@@ -79,7 +80,7 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
-    pub fn acquire_inner_lock(&self) -> MutexGuard<'_, ProcessControlBlockInner> {
+    pub fn acquire_inner_lock(&self) -> ProcessInnerLock {
         self.inner.lock()
     }
 

@@ -5,8 +5,8 @@ use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
-    current_add_signal, current_trap_cx, current_trap_cx_user_va, current_user_token,
-    perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
+    current_add_signal, current_process, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -67,8 +67,9 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::LoadPageFault) => {
             // let is_load = scause.cause() == Trap::Exception(Exception::LoadFault)
             //     || scause.cause() == Trap::Exception(Exception::LoadPageFault);
-            let ret = page_fault_handler(stval);
-            if ret == -1 {
+            let process = current_process();
+            let mut process_inner = process.acquire_inner_lock();
+            if page_fault_handler(&mut process_inner, stval) == -1 {
                 error!(
                     "{:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                     scause.cause(),
@@ -140,5 +141,4 @@ pub fn trap_from_kernel() -> ! {
 }
 
 pub use context::TrapContext;
-
-use self::page_fault::page_fault_handler;
+pub use self::page_fault::*;
