@@ -1008,7 +1008,7 @@ pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
                     SEEK_END => (sz + offset) as _,
                     _ => -1
                 };
-                if new_off < 0 || new_off > sz as _{
+                if new_off < 0 {
                     -EINVAL
                 } else {
                     fi.set_offset(new_off as _) as isize
@@ -1026,6 +1026,36 @@ pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
         fd,
         offset,
         whence,
+        ret
+    );
+    ret
+}
+
+pub fn sys_pread64(fd: usize, buf: *mut u8, count: usize, offset: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.acquire_inner_lock();
+    let ret = if let Some(Some(f)) = inner.fd_table.get(fd) {
+        match f {
+            FileClass::File(fi) => {
+                let old_off = fi.offset();
+                fi.set_offset(offset);
+                let read_cnt = fi.read(UserBuffer::new(translated_byte_buffer(token, buf, count))) as isize;
+                fi.set_offset(old_off);
+                read_cnt
+            }
+            FileClass::Abs(_) => -ESPIPE,
+        }
+    } else {
+        -EBADF
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_pread64(fd: {}, buf: {:#x?}, count: {}, offset: {}) = {}",
+        fd,
+        buf,
+        count,
+        offset,
         ret
     );
     ret

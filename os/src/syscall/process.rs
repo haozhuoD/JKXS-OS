@@ -21,7 +21,7 @@ use crate::task::{
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::sync_all;
@@ -404,6 +404,7 @@ pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
 }
 
 #[repr(packed)]
+#[allow(unused)]
 pub struct Uname {
     sysname: [u8; 65],
     nodename: [u8; 65],
@@ -538,6 +539,7 @@ pub fn sys_getpgid() -> isize {
 }
 
 #[repr(packed)]
+#[allow(unused)]
 pub struct Sysinfo {
     uptime: isize,
     loads: [usize; 3],
