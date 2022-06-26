@@ -33,6 +33,7 @@ const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GRUOP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
+const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_GETITIMER: usize = 102;
 const SYSCALL_SETITIMER: usize = 103;
@@ -131,6 +132,14 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXIT => sys_exit(args[0] as _),
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as _),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as _),
+        SYSCALL_FUTEX => sys_futex(
+            args[0] as _, 
+            args[1], 
+            args[2] as _, 
+            args[3] as _, 
+            args[4] as _, 
+            args[5] as _,
+        ),
         SYSCALL_NANOSLEEP => sys_sleep(args[0] as _),
         SYSCALL_CLOCK_GETTIME => sys_clock_get_time(args[0], args[1] as _),
         SYSCALL_SYSLOG => sys_syslog(args[0] as _, args[1] as _, args[2] as _),
