@@ -138,16 +138,6 @@ pub fn perform_signals_of_current() {
             break;
         }
         let signum = signum_option.unwrap();
-        // 如果信号代表当前进程出错，则exit
-        if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
-            error!("{}", msg);
-            drop(process);
-            unsafe {
-                user_backtrace(current_user_token(), current_trap_cx().x[8]);
-            }
-            exit_current_and_run_next(-(signum as i32), false);
-        };
-
         {
             let mut inner = process.acquire_inner_lock();
             if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
@@ -173,6 +163,12 @@ pub fn perform_signals_of_current() {
                 }
             }
         }
+        // 如果信号代表当前进程出错，则exit
+        if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
+            error!("{}", msg);
+            drop(process);
+            exit_current_and_run_next(-(signum as i32), false);
+        };
     }
 }
 

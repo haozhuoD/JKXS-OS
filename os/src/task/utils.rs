@@ -1,3 +1,4 @@
+#![allow(unused)]
 use crate::{config::USER_STACK_BASE, mm::translated_ref};
 
 const MAX_BACKTRACE_DEPTH: usize = 20;
