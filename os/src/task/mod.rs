@@ -16,6 +16,7 @@ use manager::fetch_task;
 use process::ProcessControlBlock;
 use spin::Lazy;
 use switch::__switch;
+use crate::config::TRAMPOLINE;
 
 pub use aux::*;
 pub use context::TaskContext;
@@ -155,8 +156,9 @@ pub fn perform_signals_of_current() {
                     // 准备跳到signal handler
                     extern "C" {
                         fn __sigreturn();
+                        fn __alltraps();
                     }
-                    trap_cx.x[1] = __sigreturn as usize; // ra
+                    trap_cx.x[1] = __sigreturn as usize - __alltraps as usize + TRAMPOLINE; // ra 
                     trap_cx.x[10] = signum; // a0 (args0 = signum)
                     trap_cx.sepc = sigaction.handler; // sepc
                     return;
