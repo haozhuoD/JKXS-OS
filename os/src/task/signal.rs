@@ -27,7 +27,6 @@ pub struct SigAction {
 
 #[derive(Clone)]
 pub struct SigInfo {
-    pub signal_executing: bool,
     pub pending_signals: VecDeque<usize>,
     pub sigactions: BTreeMap<usize, SigAction>,
 }
@@ -35,7 +34,6 @@ pub struct SigInfo {
 impl SigInfo {
     pub fn new() -> Self {
         Self {
-            signal_executing: false,
             pending_signals: VecDeque::new(),
             sigactions: BTreeMap::new(),
         }

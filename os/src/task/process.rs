@@ -339,7 +339,6 @@ impl ProcessControlBlock {
         // copy signal-info
         let mut new_signal_info = parent.signal_info.clone();
         new_signal_info.pending_signals.clear();
-        new_signal_info.signal_executing = false;
 
         // create child process pcb
         let child = Arc::new(Self {

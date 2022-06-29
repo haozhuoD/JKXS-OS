@@ -124,10 +124,7 @@ pub fn add_initproc() {
 
 pub fn perform_signals_of_current() {
     let process = current_process();
-    // if process.acquire_inner_lock().signal_info.signal_executing {
-    //     //正在执行某个信号
-    //     return;
-    // }
+
     loop {
         // 取出pending的第一个signal
         let signum_option = process
@@ -150,8 +147,6 @@ pub fn perform_signals_of_current() {
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
                     task_inner.push_trap_cx();
-
-                    inner.signal_info.signal_executing = true;
 
                     // 准备跳到signal handler
                     extern "C" {
@@ -178,11 +173,4 @@ pub fn current_add_signal(signum: usize) {
     let process = current_process();
     let mut process_inner = process.acquire_inner_lock();
     process_inner.signal_info.pending_signals.push_back(signum);
-}
-
-pub fn mark_current_signal_done() {
-    current_process()
-        .acquire_inner_lock()
-        .signal_info
-        .signal_executing = false;
 }
