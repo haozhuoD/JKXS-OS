@@ -9,7 +9,8 @@ pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 24;
 pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x8000;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
-pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;
+pub const SIGRETURN_TRAMPOLINE: usize = TRAMPOLINE - PAGE_SIZE;
+pub const TRAP_CONTEXT_BASE: usize = SIGRETURN_TRAMPOLINE - PAGE_SIZE;
 
 /// 进程用户栈基址
 pub const USER_STACK_BASE: usize = 0xf000_0000;

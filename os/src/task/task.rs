@@ -4,6 +4,7 @@ use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
 use alloc::sync::{Arc, Weak};
 
+use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
 
 pub struct TaskControlBlock {
@@ -32,7 +33,7 @@ pub struct TaskControlBlockInner {
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub exit_code: Option<i32>,
-    trap_cx_backup: TrapContext
+    trap_cx_backup: Vec<TrapContext>
 }
 
 impl TaskControlBlockInner {
@@ -45,12 +46,12 @@ impl TaskControlBlockInner {
         self.task_status
     }
 
-    pub fn restore_trap_cx_backup(&self) {
-        *self.get_trap_cx() = self.trap_cx_backup.clone();
+    pub fn pop_trap_cx(&mut self) {
+        *self.get_trap_cx() = self.trap_cx_backup.pop().unwrap();
     }
 
-    pub fn save_trap_cx(&mut self) {
-        self.trap_cx_backup = (*self.get_trap_cx()).clone();
+    pub fn push_trap_cx(&mut self) {
+        self.trap_cx_backup.push((*self.get_trap_cx()).clone());
     }
 }
 
@@ -73,7 +74,7 @@ impl TaskControlBlock {
                 task_cx: TaskContext::goto_trap_return(kstack_top),
                 task_status: TaskStatus::Ready,
                 exit_code: None,
-                trap_cx_backup: TrapContext::empty()
+                trap_cx_backup: Vec::new()
             })),
         }
     }

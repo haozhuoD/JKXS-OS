@@ -37,3 +37,4 @@ LDLIBS += -Os -s -lpthread -lm -lrt
 all:
 	$(CC) $(CFLAGS) signal_test.c -o signal_test
 	riscv64-unknown-elf-objdump -d signal_test > signal.S
+	cp signal_test ../busybox_lua_testsuites

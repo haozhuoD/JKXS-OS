@@ -522,7 +522,7 @@ pub fn sys_sigreturn() -> isize {
     current_task()
         .unwrap()
         .acquire_inner_lock()
-        .restore_trap_cx_backup();
+        .pop_trap_cx();
     mark_current_signal_done();
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;

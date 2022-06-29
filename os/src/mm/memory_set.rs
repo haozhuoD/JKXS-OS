@@ -3,7 +3,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
+use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE, SIGRETURN_TRAMPOLINE};
 use crate::gdb_println;
 use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
@@ -101,6 +101,13 @@ impl MemorySet {
             VirtAddr::from(TRAMPOLINE).into(),
             PhysAddr::from(strampoline as usize).into(),
             PTEFlags::R | PTEFlags::X,
+        );
+    }
+    fn map_sigreturn_trampoline(&mut self) {
+        self.page_table.map(
+            VirtAddr::from(SIGRETURN_TRAMPOLINE).into(),
+            PhysAddr::from(strampoline as usize).into(),
+            PTEFlags::R | PTEFlags::X | PTEFlags::U,
         );
     }
     /// Without kernel stacks.
@@ -202,6 +209,7 @@ impl MemorySet {
         let mut auxv: Vec<AuxHeader> = Vec::new();
         let mut memory_set = Self::new_bare();
         // map trampoline
+        memory_set.map_sigreturn_trampoline();
         memory_set.map_trampoline();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -329,6 +337,7 @@ impl MemorySet {
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
         let mut memory_set = Self::new_bare();
         // map trampoline
+        memory_set.map_sigreturn_trampoline();
         memory_set.map_trampoline();
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {

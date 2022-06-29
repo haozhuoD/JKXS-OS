@@ -10,7 +10,7 @@ mod switch;
 mod task;
 mod utils;
 
-use crate::{loader::get_initproc_binary, task::utils::user_backtrace};
+use crate::{loader::get_initproc_binary, task::utils::user_backtrace, config::SIGRETURN_TRAMPOLINE};
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;
@@ -124,10 +124,10 @@ pub fn add_initproc() {
 
 pub fn perform_signals_of_current() {
     let process = current_process();
-    if process.acquire_inner_lock().signal_info.signal_executing {
-        //正在执行某个信号
-        return;
-    }
+    // if process.acquire_inner_lock().signal_info.signal_executing {
+    //     //正在执行某个信号
+    //     return;
+    // }
     loop {
         // 取出pending的第一个signal
         let signum_option = process
@@ -149,7 +149,7 @@ pub fn perform_signals_of_current() {
                     let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
-                    task_inner.save_trap_cx();
+                    task_inner.push_trap_cx();
 
                     inner.signal_info.signal_executing = true;
 
@@ -158,7 +158,7 @@ pub fn perform_signals_of_current() {
                         fn __sigreturn();
                         fn __alltraps();
                     }
-                    trap_cx.x[1] = __sigreturn as usize - __alltraps as usize + TRAMPOLINE; // ra 
+                    trap_cx.x[1] = __sigreturn as usize - __alltraps as usize + SIGRETURN_TRAMPOLINE; // ra 
                     trap_cx.x[10] = signum; // a0 (args0 = signum)
                     trap_cx.sepc = sigaction.handler; // sepc
                     return;
