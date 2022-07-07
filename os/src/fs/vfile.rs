@@ -203,6 +203,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
 
     // 节点是否存在？
     if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
+        // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
             return do_create_file(cur_vfile, pathv, flags);
@@ -216,6 +217,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
 
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
+        // println!("don't exist");
         return do_create_file(cur_vfile, pathv, flags);
     }
     None

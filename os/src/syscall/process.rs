@@ -474,13 +474,6 @@ pub fn sys_sigaction(
 ) -> isize {
     // todo: 暂不支持sa_flags
     // todo: 支持SIGIGNORE
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) ................",
-        signum,
-        sigaction,
-        old_sigaction
-    );
     let token = current_user_token();
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
