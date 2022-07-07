@@ -1,6 +1,9 @@
 use alloc::{collections::{BTreeMap, VecDeque}, string::String};
 use spin::Lazy;
 
+pub const SIG_DFL: usize = 0 ;
+pub const SIG_IGN: usize = 1 ;
+
 pub const SIGINT: usize = 2;
 pub const SIGILL: usize = 4; 
 pub const SIGABRT: usize = 6;
@@ -19,6 +22,7 @@ pub const SIGNAL_ERRORS: Lazy<BTreeMap<usize, String>> = Lazy::new(|| {
 
 #[repr(C)]
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct SigAction {
     pub handler: usize,
     pub sigaction: usize,

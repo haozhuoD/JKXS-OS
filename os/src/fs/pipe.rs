@@ -174,4 +174,34 @@ impl File for Pipe {
             }
         }
     }
+    fn read_blocking(&self) -> bool{
+        if self.readable() {
+            if self.nonblock {
+                return false;
+            }else {
+                let ring_buffer = self.buffer.lock();
+                if ring_buffer.available_read() == 0{
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+        false
+    }
+    fn write_blocking(&self)->bool{
+        if self.writable() {
+            if self.nonblock {
+                return false;
+            }else {
+                let ring_buffer = self.buffer.lock();
+                if ring_buffer.available_write() == 0{
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+        false
+    }
 }

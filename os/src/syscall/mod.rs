@@ -126,6 +126,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PREAD64 => sys_pread64(args[0], args[1] as _, args[2], args[3]),
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2] as _, args[3]),
         SYSCALL_PPOLL => sys_ppoll(args[0] as _, args[1], args[2] as _),
+        SYSCALL_PSELECT6=>sys_pselect(args[0] as _, args[1] as _, args[2] as _,args[3] as _,args[4] as _, ),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_FSTAT => sys_fstat(args[0] as _, args[1] as _),
         SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _),

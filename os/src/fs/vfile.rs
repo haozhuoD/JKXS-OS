@@ -252,6 +252,12 @@ impl File for OSFile {
         }
         total_write_size
     }
+    fn read_blocking(&self) -> bool{
+        false
+    }
+    fn write_blocking(&self)->bool{
+        false
+    }
 }
 
 pub fn path2vec(path: &str) -> Vec<&str> {

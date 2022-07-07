@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction,
+    pid2process, suspend_current_and_run_next, SigAction,SIG_DFL,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -474,6 +474,13 @@ pub fn sys_sigaction(
 ) -> isize {
     // todo: 暂不支持sa_flags
     // todo: 支持SIGIGNORE
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) ................",
+        signum,
+        sigaction,
+        old_sigaction
+    );
     let token = current_user_token();
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
@@ -491,15 +498,26 @@ pub fn sys_sigaction(
         return -EINVAL;
     }
 
-    // 如果旧的sigaction存在，则将它保存到指定位置
-    if let Some(old) = inner.signal_info.sigactions.get(&signum) {
-        if old_sigaction as usize != 0 {
-            *translated_refmut(token, old_sigaction) = (*old).clone();
-        }
-    }
+    // let sigact = translated_refmut(token, sigaction as *mut SigAction);
 
-    // 在pcb中注册给定的signaction
+    // 当sigaction存在时， 在pcb中注册给定的signaction 
     if sigaction as usize != 0 {
+        // 如果旧的sigaction存在，则将它保存到指定位置.否则置为 SIG_DFL
+        if let Some(old) = inner.signal_info.sigactions.get(&signum) {
+            if old_sigaction as usize != 0 {
+                // println!("arg old_sigaction !=0  ");
+                *translated_refmut(token, old_sigaction) = (*old).clone();
+            }
+        }else{
+            if old_sigaction as usize != 0 {
+                let sigact_old = translated_refmut(token, old_sigaction);
+                sigact_old.handler = SIG_DFL;
+                sigact_old.sigaction = 0;
+                sigact_old.mask = 0;
+            }
+        }
+
+        //在pcb中注册给定的signaction
         inner
             .signal_info
             .sigactions
@@ -510,7 +528,7 @@ pub fn sys_sigaction(
         SYSCALL_ENABLE,
         "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) = {}",
         signum,
-        sigaction,
+        sigaction,// sigact,
         old_sigaction,
         0
     );
