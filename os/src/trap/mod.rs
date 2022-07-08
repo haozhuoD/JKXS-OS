@@ -6,7 +6,7 @@ use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
     current_add_signal, current_process, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
+    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,current_pid,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -71,7 +71,8 @@ pub fn trap_handler() -> ! {
             let mut process_inner = process.acquire_inner_lock();
             if page_fault_handler(&mut process_inner, stval) == -1 {
                 error!(
-                    "{:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    "[pid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    current_pid(),
                     scause.cause(),
                     stval,
                     current_trap_cx().sepc,

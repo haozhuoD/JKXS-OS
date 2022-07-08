@@ -18,6 +18,8 @@ pub trait File: Send + Sync {
     fn writable(&self) -> bool;
     fn read(&self, buf: UserBuffer) -> usize;
     fn write(&self, buf: UserBuffer) -> usize;
+    fn read_blocking(&self) -> bool;
+    fn write_blocking(&self)->bool;
 }
 
 pub use finfo::*;

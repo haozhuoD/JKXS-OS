@@ -3,6 +3,7 @@
 #![allow(non_camel_case_types)]
 
 use fat32_fs::{ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
+use core::ops::Range;
 
 #[repr(C)]
 pub struct Kstat {
@@ -144,3 +145,88 @@ pub const S_IXOTH: u32 = 0o0001; //others have execute permission
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
 pub const SEEK_END: usize = 2;
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct TimeSpec {
+    pub tv_sec : i64 ,       /* seconds */
+    pub tv_nsec : i64         /* nanoseconds */
+}
+
+// #define FD_SETSIZE 256
+// pub const FD_SETSIZE: usize = 128;
+// typedef struct { uint32_t fd32[FD_SETSIZE/32]; } fd_set;
+pub type FdSet = u128;
+
+pub trait BitOpt {
+    // length() 方法是一个静态方法,用于返回bit的长度
+    fn length() -> usize;
+    // get_bit() 方法用于获取size位的值,可以使用bool类型表示1和0
+    fn u128_get_bit(&self, size: usize) -> bool;
+    // get_bits() 方法用于获取指定范围的位,使用Range表示一个范围,例如2..5表示2(含2)到5(不包括5)的范围
+    // (1..5) = Range{ start: 1, end: 5 }
+    fn u128_get_bits(&self, range: Range<usize>) -> Self;
+    // set_bit() 方法用于设置指定的位
+    fn u128_set_bit(&mut self, bit: usize, value: bool) -> &mut Self;
+    // set_bits 方法用于设置指定范围的位
+    fn u128_set_bits(&mut self, range: Range<usize>, value: Self) -> &mut Self;
+    // clear_all 方法用于清零
+    fn u128_clear_all(&mut self) -> &mut Self;
+}
+
+impl BitOpt for u128 {
+    fn length() -> usize {
+        ::core::mem::size_of::<Self>() as usize * 8
+    }
+
+    fn u128_get_bit(&self, size: usize) -> bool {
+        assert!(size < Self::length());
+        (*self & (1 << size)) != 0
+    }
+
+    fn u128_set_bit(&mut self, bit: usize, value: bool) -> &mut Self {
+        assert!(bit < Self::length());
+        let mask = 1 << bit;
+        // 如果要把某一位置1使用或运算
+        if value {
+            *self |= mask;
+        } else { // 要把某一位置0进行和运算(需要取反)
+            *self &= !(mask);
+        }
+        self
+    }
+
+    fn u128_get_bits(&self, range: Range<usize>) -> Self {
+        assert!(range.start < Self::length());
+        assert!(range.end <= Self::length());
+        assert!(range.end > range.start);
+      
+        let shift_bits = Self::length() - range.end;
+        let bits = *self << shift_bits >> shift_bits;
+      
+        bits >> range.start
+    }
+
+    fn u128_set_bits(&mut self, range: Range<usize>, value: Self) -> &mut Self {
+        let length = Self::length();
+            assert!(range.start < length);
+            assert!(range.end <= length);
+            assert!(range.start < range.end);
+            assert!(value << (length - (range.end - range.start)) >>
+                  (length - (range.end - range.start)) == value,
+                  "value does not fit into bit range");
+      
+            let mask: Self = !(!0 << (length - range.end) >>
+                              (length - range.end) >>
+                              range.start << range.start);
+      
+            *self = (*self & mask) | (value << range.start);
+      
+            self
+      }
+
+    fn u128_clear_all(&mut self) -> &mut Self{
+        *self=0;
+        self
+    }
+}
