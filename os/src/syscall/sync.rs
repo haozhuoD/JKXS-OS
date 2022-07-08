@@ -92,12 +92,22 @@ pub fn sys_futex(
     let cmd = futex_op & FUTEX_CMD_MASK;
     let token = current_user_token();
     let t;
+    gdb_println!(
+        SYSCALL_ENABLE, 
+        "*****sys_futex(uaddr: {:#x?}, futex_op: {:x?}, val: {:x?}, timeout: {:#x?}, uaddr2: {:#x?}, val3: {:x?}) = ?", 
+        uaddr, 
+        futex_op,
+        val,
+        timeout,
+        uaddr2,
+        val3,
+    );
     if timeout as usize != 0 {
         let sec = *translated_ref(token, timeout);
         let usec = *translated_ref(token, unsafe { timeout.add(1) });
         t = sec as usize * USEC_PER_SEC + usec as usize;
     } else {
-        t = !0;
+        t = usize::MAX; // inf
     }
     if futex_op & FUTEX_PRIVATE_FLAG == 0 {
         flags |= FLAGS_SHARED;
@@ -148,7 +158,7 @@ fn futex_wait(
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
     let uval = translated_ref(token, uaddr);  // Need to be atomic
-    println!("uval: {:x?}, val: {:x?}", uval, val);
+    println!("futex_wait: uval: {:x?}, val: {:x?}, timeout: {}", uval, val, timeout);
     if *uval != val {
         drop(fq_lock);
         fq.waiters_dec();
