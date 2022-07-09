@@ -58,6 +58,8 @@ const SYSCALL_GETGID: usize = 176;
 const SYSCALL_GETEGID: usize = 177;
 const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SYSINFO: usize = 179;
+const SYS_SENDTO: usize = 206;
+const SYS_RECVFROM: usize = 207;
 const SYSCALL_SBRK: usize = 213;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
@@ -77,10 +79,12 @@ mod errorno;
 mod fs;
 mod process;
 mod sync;
+mod net;
 
 use fs::*;
 use process::*;
 use sync::*;
+use net::*;
 
 use crate::{
     gdb_println,
@@ -183,6 +187,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),
+        SYS_SENDTO => sys_sendto(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
+        SYS_RECVFROM => sys_recvfrom(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

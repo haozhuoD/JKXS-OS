@@ -23,6 +23,6 @@ pub trait File: Send + Sync {
 }
 
 pub use finfo::*;
-pub use pipe::{make_pipe, Pipe};
+pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
 pub use vfile::{list_apps, init_rootfs, open_file, path2vec, OSFile, OpenFlags};
