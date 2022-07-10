@@ -8,6 +8,7 @@ use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE};
 use crate::multicore::get_hartid;
+use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
@@ -319,7 +320,7 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn fork(self: &Arc<Self>, _flags: u32, stack: usize) -> Arc<Self> {
+    pub fn fork(self: &Arc<Self>, flags: CloneFlags, stack: usize, newtls: usize) -> Arc<Self> {
         let mut parent = self.acquire_inner_lock();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
@@ -388,7 +389,12 @@ impl ProcessControlBlock {
         if stack != 0 {
             trap_cx.set_sp(stack);
         }
+
         trap_cx.x[10] = 0;
+        if flags.contains(CloneFlags::CLONE_SETTLS) {
+            trap_cx.x[4] = newtls;
+        }
+
         drop(task_inner);
         insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler

@@ -112,18 +112,19 @@ pub fn sys_clone(
     flags: u32,
     child_stack: *const u8,
     ptid: usize,
-    ctid: usize,
+    ctid: *mut u32,
     newtls: usize,
 ) -> isize {
     let current_process = current_process();
-    let new_process = current_process.fork(flags, child_stack as usize);
-    let new_pid = new_process.getpid();
     let flags = CloneFlags::from_bits(flags).unwrap();
-    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid != 0 {
+    let new_process = current_process.fork(flags, child_stack as usize, newtls);
+    let new_pid = new_process.getpid();
+
+    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid as usize != 0 {
         *translated_refmut(
             new_process.acquire_inner_lock().get_user_token(),
-            ctid as *mut i32,
-        ) = new_pid as i32;
+            ctid,
+        ) = new_pid as u32;
     }
     // // modify trap context of new_task, because it returns immediately after switching
     // let new_process_inner = new_process.inner_exclusive_access();
