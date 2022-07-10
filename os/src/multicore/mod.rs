@@ -1,4 +1,4 @@
-use crate::sbi::{sbi_hart_start,sbi_get_hart_status,sbi_send_ipi};
+use crate::sbi::{sbi_hart_start, sbi_get_hart_status};
 
 #[inline(always)]
 pub fn get_hartid() -> usize {

@@ -10,17 +10,16 @@ mod switch;
 mod task;
 mod utils;
 
-use crate::{loader::get_initproc_binary, task::utils::user_backtrace, config::SIGRETURN_TRAMPOLINE};
+use crate::{loader::get_initproc_binary, config::SIGRETURN_TRAMPOLINE};
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;
 use spin::Lazy;
 use switch::__switch;
-use crate::config::TRAMPOLINE;
 
 pub use aux::*;
 pub use context::TaskContext;
-pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
+pub use id::{kstack_alloc, tid_alloc, KernelStack, TidHandle};
 pub use manager::{add_task, pid2process, remove_from_pid2process};
 pub use process::*;
 pub use processor::*;
@@ -66,7 +65,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let task = take_current_task().unwrap();
     let mut task_inner = task.acquire_inner_lock();
     let process = task.process.upgrade().unwrap();
-    let tid = task_inner.res.as_ref().unwrap().tid;
+    let tid = task_inner.res.as_ref().unwrap().tid.0;
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
@@ -76,7 +75,7 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     drop(task);
     // however, if this is the main thread of current process
     // the process should terminate at once
-    if tid == 0 || is_exit_group {
+    if tid == process.pid || is_exit_group {
         remove_from_pid2process(process.getpid());
         let mut initproc_inner = INITPROC.acquire_inner_lock();
         let mut process_inner = process.acquire_inner_lock();
@@ -137,7 +136,7 @@ pub fn perform_signals_of_current() {
         }
         let signum = signum_option.unwrap();
         {
-            let mut inner = process.acquire_inner_lock();
+            let inner = process.acquire_inner_lock();
             if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
                 let sigaction = sigaction.clone();
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备

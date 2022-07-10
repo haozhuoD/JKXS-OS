@@ -50,7 +50,6 @@ pub fn sys_exit_group(exit_code: i32) -> ! {
         exit_code
     );
     exit_current_and_run_next(exit_code, true);
-    panic!("Unreachable in sys_exit!");
 }
 
 pub fn sys_yield() -> isize {
@@ -393,8 +392,9 @@ pub fn sys_times(time: *mut usize) -> isize {
 
 pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
     let token = current_user_token();
-    *translated_refmut(token, ptr) = current_process().pid.0;
-    let ret = current_process().pid.0 as isize;
+    let task_inner = current_task().unwrap().acquire_inner_lock();
+    *translated_refmut(token, ptr) = task_inner.gettid();
+    let ret = current_process().pid as isize;
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_set_tid_address(ptr: {:#x?}) = {}",

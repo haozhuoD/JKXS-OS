@@ -949,7 +949,7 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
         //write fs set 直接当中的返回可用fd
         if wfds as usize != 0 {
             let write_fds = translated_refmut(token, wfds);
-            let mut select_wfd = write_fds;
+            let select_wfd = write_fds;
 
             for i in 0..nfds as usize {
                 if select_wfd.u128_get_bit(i) {

@@ -1,8 +1,6 @@
-use super::id::RecycleAllocator;
 use super::manager::insert_into_pid2process;
 use super::signal::SigInfo;
 use super::add_task;
-use super::{pid_alloc, PidHandle};
 use super::TaskControlBlock;
 use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -20,7 +18,7 @@ use spin::{Mutex, MutexGuard};
 
 pub struct ProcessControlBlock {
     // immutable
-    pub pid: PidHandle,
+    pub pid: usize,
     // mutable
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
@@ -34,7 +32,6 @@ pub struct ProcessControlBlockInner {
     pub fd_table: FdTable,
     pub signal_info: SigInfo,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
-    pub task_res_allocator: RecycleAllocator,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
     pub user_heap_top: usize,
@@ -63,14 +60,6 @@ impl ProcessControlBlockInner {
         }
     }
 
-    pub fn alloc_tid(&mut self) -> usize {
-        self.task_res_allocator.alloc()
-    }
-
-    pub fn dealloc_tid(&mut self, tid: usize) {
-        self.task_res_allocator.dealloc(tid)
-    }
-
     pub fn thread_count(&self) -> usize {
         self.tasks.len()
     }
@@ -89,9 +78,8 @@ impl ProcessControlBlock {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
-        let pid_handle = pid_alloc();
         let process = Arc::new(Self {
-            pid: pid_handle,
+            pid: 0,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
                 is_zombie: false,
                 memory_set,
@@ -108,7 +96,6 @@ impl ProcessControlBlock {
                 ],
                 signal_info: SigInfo::new(),
                 tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
@@ -137,8 +124,10 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
+        process.pid = task_inner.gettid();
         process_inner.tasks.push(Some(Arc::clone(&task)));
         drop(process_inner);
+    
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
@@ -326,8 +315,6 @@ impl ProcessControlBlock {
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         // 复制trapframe等内存区域均在这里
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
-        // alloc a pid
-        let pid = pid_alloc();
         // copy fd table
         let mut new_fd_table = Vec::new();
         for fd in parent.fd_table.iter() {
@@ -343,7 +330,7 @@ impl ProcessControlBlock {
 
         // create child process pcb
         let child = Arc::new(Self {
-            pid,
+            pid: 0,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
                 is_zombie: false,
                 memory_set,
@@ -353,7 +340,6 @@ impl ProcessControlBlock {
                 fd_table: new_fd_table,
                 signal_info: new_signal_info,
                 tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
@@ -383,6 +369,8 @@ impl ProcessControlBlock {
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
         let task_inner = task.acquire_inner_lock();
+        child.pid = task_inner.gettid();
+    
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         // sys_fork return value ...
@@ -442,6 +430,6 @@ impl ProcessControlBlock {
     }
 
     pub fn getpid(&self) -> usize {
-        self.pid.0
+        self.pid
     }
 }

@@ -53,6 +53,10 @@ impl TaskControlBlockInner {
     pub fn push_trap_cx(&mut self) {
         self.trap_cx_backup.push((*self.get_trap_cx()).clone());
     }
+
+    pub fn gettid(&self) -> usize {
+        self.res.unwrap().tid.0
+    }
 }
 
 impl TaskControlBlock {
