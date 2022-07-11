@@ -17,13 +17,11 @@ use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
-    // immutable
-    pub pid: usize,
-    // mutable
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub struct ProcessControlBlockInner {
+    pub pid: usize,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -79,8 +77,8 @@ impl ProcessControlBlock {
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
         let process = Arc::new(Self {
-            pid: 0,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: None,
@@ -106,6 +104,7 @@ impl ProcessControlBlock {
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&process),
             ustack_base,
+            -1,
             true,
         ));
         // prepare trap_cx of main thread
@@ -113,7 +112,7 @@ impl ProcessControlBlock {
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
-        drop(task_inner);
+
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             ustack_top,
@@ -124,8 +123,10 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
-        process.pid = task_inner.gettid();
+        process_inner.pid = task_inner.gettid();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+
+        drop(task_inner);
         drop(process_inner);
     
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
@@ -330,8 +331,8 @@ impl ProcessControlBlock {
 
         // create child process pcb
         let child = Arc::new(Self {
-            pid: 0,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
@@ -348,7 +349,6 @@ impl ProcessControlBlock {
         });
         // add child
         parent.children.push(Arc::clone(&child));
-
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&child),
@@ -359,18 +359,18 @@ impl ProcessControlBlock {
                 .as_ref()
                 .unwrap()
                 .ustack_base(),
+            -1,
             // here we do not allocate trap_cx or ustack again
             // but mention that we allocate a new kstack here
             false,
         ));
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
+        let task_inner = task.acquire_inner_lock();
+        child_inner.pid = task_inner.gettid();
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
-        let task_inner = task.acquire_inner_lock();
-        child.pid = task_inner.gettid();
-    
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         // sys_fork return value ...
@@ -430,6 +430,6 @@ impl ProcessControlBlock {
     }
 
     pub fn getpid(&self) -> usize {
-        self.pid
+        self.acquire_inner_lock().pid
     }
 }

@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction,SIG_DFL,
+    pid2process, suspend_current_and_run_next, SigAction,SIG_DFL, current_tid,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -46,7 +46,7 @@ pub fn sys_exit(exit_code: i32) -> ! {
 pub fn sys_exit_group(exit_code: i32) -> ! {
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_exit_group(exit_code: {} ) = ?",
+        "sys_exit_group(exit_code: {}) = ?",
         exit_code
     );
     exit_current_and_run_next(exit_code, true);
@@ -229,12 +229,12 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
             {
                 found = false;
             }
-
             // child process exists
             if found {
                 let pair = inner.children.iter().enumerate().find(|(_, p)| {
                     // ++++ temporarily access child PCB exclusively
-                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p.getpid())
+                    let p_pid = p.getpid();
+                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p_pid)
                     // ++++ release child PCB
                 });
                 if let Some((idx, _)) = pair {
@@ -392,16 +392,17 @@ pub fn sys_times(time: *mut usize) -> isize {
 
 pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
     let token = current_user_token();
-    let task_inner = current_task().unwrap().acquire_inner_lock();
+    let task = current_task().unwrap();
+    let task_inner = task.acquire_inner_lock();
     *translated_refmut(token, ptr) = task_inner.gettid();
-    let ret = current_process().pid as isize;
+    let ret = task_inner.gettid();
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_set_tid_address(ptr: {:#x?}) = {}",
         ptr,
         ret
     );
-    ret
+    ret as isize
 }
 
 #[repr(packed)]

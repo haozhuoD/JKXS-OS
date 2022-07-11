@@ -52,11 +52,11 @@ pub fn tid_alloc() -> TidHandle {
     TidHandle(TID_ALLOCATOR.write().alloc())
 }
 
-impl Drop for TidHandle {
-    fn drop(&mut self) {
-        TID_ALLOCATOR.write().dealloc(self.0);
-    }
-}
+// impl Drop for TidHandle {
+//     fn drop(&mut self) {
+//         TID_ALLOCATOR.write().dealloc(self.0);
+//     }
+// }
 
 /// Return (bottom, top) of a kernel stack in kernel space.
 pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
@@ -116,27 +116,32 @@ impl KernelStack {
 
 pub struct TaskUserRes {
     pub tid: TidHandle,
+    pub rel_tid: usize,     // 相对主线程的tid值（主线程为0，其余的为1, 2, 3, ...)
     pub ustack_base: usize,
     pub process: Weak<ProcessControlBlock>,
 }
 
-fn trap_cx_bottom_from_tid(tid: usize) -> usize {
-    TRAP_CONTEXT_BASE - tid * PAGE_SIZE
+fn trap_cx_bottom_from_tid(rel_tid: usize) -> usize {
+    // debug!("trap_cx_bottom_from_tid: rel_tid = {}", rel_tid);
+    TRAP_CONTEXT_BASE - rel_tid * PAGE_SIZE
 }
 
-fn ustack_bottom_from_tid(ustack_base: usize, tid: usize) -> usize {
-    ustack_base + tid * (PAGE_SIZE + USER_STACK_SIZE)
+fn ustack_bottom_from_tid(ustack_base: usize, rel_tid: usize) -> usize {
+    ustack_base + rel_tid * (PAGE_SIZE + USER_STACK_SIZE)
 }
 
 impl TaskUserRes {
     pub fn new(
         process: Arc<ProcessControlBlock>,
         ustack_base: usize,
+        pid: isize,
         alloc_user_res: bool,
     ) -> Self {
         let tid = tid_alloc();
+        let rel_tid = if pid < 0 {0} else {tid.0 - pid as usize};
         let task_user_res = Self {
             tid,
+            rel_tid,
             ustack_base,
             process: Arc::downgrade(&process),
         };
@@ -150,7 +155,7 @@ impl TaskUserRes {
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.acquire_inner_lock();
         // alloc user stack
-        let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid.0);
+        let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.rel_tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE;
         gdb_println!(
             MAPPING_ENABLE,
@@ -165,7 +170,7 @@ impl TaskUserRes {
             MapPermission::R | MapPermission::W | MapPermission::U,
         );
         // alloc trap_cx
-        let trap_cx_bottom = trap_cx_bottom_from_tid(self.tid.0);
+        let trap_cx_bottom = trap_cx_bottom_from_tid(self.rel_tid);
         let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
         gdb_println!(
             MAPPING_ENABLE,
@@ -185,25 +190,25 @@ impl TaskUserRes {
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.acquire_inner_lock();
         // dealloc ustack manually
-        let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.tid.0).into();
+        let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.rel_tid).into();
         process_inner
             .memory_set
             .remove_area_with_start_vpn(ustack_bottom_va.into());
         // dealloc trap_cx manually
-        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.tid.0).into();
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.rel_tid).into();
         process_inner
             .memory_set
             .remove_area_with_start_vpn(trap_cx_bottom_va.into());
     }
 
     pub fn trap_cx_user_va(&self) -> usize {
-        trap_cx_bottom_from_tid(self.tid.0)
+        trap_cx_bottom_from_tid(self.rel_tid)
     }
 
     pub fn trap_cx_ppn(&self) -> PhysPageNum {
         let process = self.process.upgrade().unwrap();
         let process_inner = process.acquire_inner_lock();
-        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.tid.0).into();
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.rel_tid).into();
         process_inner
             .memory_set
             .translate(trap_cx_bottom_va.into())
@@ -216,16 +221,12 @@ impl TaskUserRes {
     }
 
     pub fn ustack_top(&self) -> usize {
-        ustack_bottom_from_tid(self.ustack_base, self.tid.0) + USER_STACK_SIZE
-    }
-
-    pub fn dealloc_tid(&self) {
+        ustack_bottom_from_tid(self.ustack_base, self.rel_tid) + USER_STACK_SIZE
     }
 }
 
 impl Drop for TaskUserRes {
     fn drop(&mut self) {
-        self.dealloc_tid();
         self.dealloc_user_res();
     }
 }

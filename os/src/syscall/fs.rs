@@ -569,7 +569,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
     }
 
     let ret = {
-        if let Some(file) = &mut inner.fd_table[fd] {
+        if let Some(_file) = &mut inner.fd_table[fd] {
             match cmd {
                 F_DUPFD_CLOEXEC | F_DUPFD => {
                     let new_fd = inner.alloc_fd(arg);
@@ -909,7 +909,7 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
         if rfds as usize !=0 {
             let read_fds = translated_refmut(token, rfds);
             // let rfd_clone = read_fds.clone(); // debug
-            let mut select_rfd = read_fds;
+            let select_rfd = read_fds;
             
             // select_rfd.u128_set_bit(0,true);
             // //debug

@@ -38,6 +38,7 @@ pub struct TaskControlBlockInner {
 
 impl TaskControlBlockInner {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
+        // debug!("trap_cx_ppn = {:#x?}", self.trap_cx_ppn);
         self.trap_cx_ppn.get_mut()
     }
 
@@ -55,17 +56,23 @@ impl TaskControlBlockInner {
     }
 
     pub fn gettid(&self) -> usize {
-        self.res.unwrap().tid.0
+        self.res.as_ref().unwrap().tid.0
+    }
+
+    pub fn get_relative_tid(&self) -> usize {
+        self.res.as_ref().unwrap().rel_tid
     }
 }
 
 impl TaskControlBlock {
+    /// pid == -1 means that the main thread is being created.
     pub fn new(
         process: Arc<ProcessControlBlock>,
         ustack_base: usize,
+        pid: isize,
         alloc_user_res: bool,
     ) -> Self {
-        let res = TaskUserRes::new(Arc::clone(&process), ustack_base, alloc_user_res);
+        let res = TaskUserRes::new(Arc::clone(&process), ustack_base, pid, alloc_user_res);
         let trap_cx_ppn = res.trap_cx_ppn();
         let kstack = kstack_alloc();
         let kstack_top = kstack.get_top();
