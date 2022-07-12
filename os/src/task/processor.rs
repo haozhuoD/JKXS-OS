@@ -148,10 +148,10 @@ pub fn run_tasks() {
             let mut task_inner = task.acquire_inner_lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            *(PROCESSORS[get_hartid()].tid.write()) = task_inner.gettid();
             drop(task_inner);
             // release coming task TCB manually
             // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().getpid());
-            *(PROCESSORS[get_hartid()].tid.write()) = task.process.upgrade().unwrap().getpid();
             processor.current = Some(task);
 
             // release processor manually

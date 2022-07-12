@@ -157,7 +157,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETTID => sys_getpid(),
         SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_CLONE => sys_clone(args[0] as _, args[1] as _, args[2], args[3] as _, args[4]),
+        SYSCALL_CLONE => sys_clone(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4]),
         SYSCALL_EXECVE => sys_exec(args[0] as _, args[1] as _),
         SYSCALL_MMAP => sys_mmap(
             args[0] as _,

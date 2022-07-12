@@ -76,7 +76,7 @@ const FUTEX_CMD_MASK: usize = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
 const FLAGS_SHARED: usize = 1;
 const FLAGS_CLOCKRT: usize = 2;
 
-pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<u32, FutexQueue>>> = 
+pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<usize, FutexQueue>>> = 
     Lazy::new(|| RwLock::new(BTreeMap::new()));
 
 // Simple implementation
@@ -119,8 +119,8 @@ pub fn sys_futex(
         }
     }
     let ret = match cmd {
-        FUTEX_WAIT => futex_wait(uaddr, val, t),
-        FUTEX_WAKE => futex_wake(uaddr, val),
+        FUTEX_WAIT => futex_wait(uaddr as usize, val, t),
+        FUTEX_WAKE => futex_wake(uaddr as usize, val),
         _ => -1,
     };
     if ret < 0 {
@@ -141,29 +141,29 @@ pub fn sys_futex(
 }
 
 fn futex_wait(
-    uaddr: *const u32,
+    uaddr: usize,
     val: u32,
     timeout: usize,
 ) -> isize {
     // futex_wait_setup
-    let flag = FUTEX_QUEUE.read().contains_key(&val);
+    let flag = FUTEX_QUEUE.read().contains_key(&uaddr);
     let mut fq_writer = FUTEX_QUEUE.write();
     let fq = if flag {
-        fq_writer.get(&val).unwrap()
+        fq_writer.get(&uaddr).unwrap()
     } else {
-        fq_writer.insert(val, FutexQueue::new());
-        fq_writer.get(&val).unwrap()
+        fq_writer.insert(uaddr, FutexQueue::new());
+        fq_writer.get(&uaddr).unwrap()
     };
     fq.waiters_inc();
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
-    let uval = translated_ref(token, uaddr);  // Need to be atomic
+    let uval = translated_ref(token, uaddr as *const u32);  // Need to be atomic
     println!("futex_wait: uval: {:x?}, val: {:x?}, timeout: {}", uval, val, timeout);
     if *uval != val {
         drop(fq_lock);
         fq.waiters_dec();
         if fq.waiters() == 0 {
-            fq_writer.remove(&val);
+            fq_writer.remove(&uaddr);
         }
         drop(fq_writer);
         return -EAGAIN;
@@ -182,34 +182,33 @@ fn futex_wait(
 
     // unqueue_me
     let mut fq_writer = FUTEX_QUEUE.write();
-    if let Some(fq) = fq_writer.get(&val) {
+    if let Some(fq) = fq_writer.get(&uaddr) {
         let len = fq.chain.read().len();
         let mut fq_lock = fq.chain.write();
-        (0..len).for_each(|i| {
+        for i in 0..len {
             if Arc::ptr_eq(&fq_lock[i], &q) {
                 fq_lock.remove(i);
+                break;
             }
-        });
+        }
         drop(fq_lock);
         fq.waiters_dec();
         if fq.waiters() == 0 {
-            fq_writer.remove(&val);
+            fq_writer.remove(&uaddr);
         }
     }
     return 0;
 }
 
 fn futex_wake(
-    uaddr: *const u32,
+    uaddr: usize,
     nr_wake: u32,
 ) -> isize {
-    let token = current_user_token();
-    let uval = translated_ref(token, uaddr);
-    if !FUTEX_QUEUE.read().contains_key(uval) {
+    if !FUTEX_QUEUE.read().contains_key(&uaddr) {
         return 0;
     }
     let mut fq_writer = FUTEX_QUEUE.write();
-    let fq = fq_writer.get(uval).unwrap();
+    let fq = fq_writer.get(&uaddr).unwrap();
     let mut fq_lock = fq.chain.write();
     let waiters = fq.waiters();
     if waiters == 0 {
@@ -224,7 +223,7 @@ fn futex_wake(
     drop(fq_lock);
     // todo: wake up
     if fq.waiters() == 0 {
-        fq_writer.remove(uval);
+        fq_writer.remove(&uaddr);
     }
     return nr_wake as isize;
 }

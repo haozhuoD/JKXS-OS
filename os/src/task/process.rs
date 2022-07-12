@@ -1,6 +1,6 @@
+use super::add_task;
 use super::manager::insert_into_pid2process;
 use super::signal::SigInfo;
-use super::add_task;
 use super::TaskControlBlock;
 use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -33,7 +33,7 @@ pub struct ProcessControlBlockInner {
     pub cwd: String,
     pub user_heap_base: usize, // user heap
     pub user_heap_top: usize,
-    pub mmap_area_top: usize,  // mmap area
+    pub mmap_area_top: usize, // mmap area
 }
 
 pub type FdTable = Vec<Option<FileClass>>;
@@ -128,7 +128,7 @@ impl ProcessControlBlock {
 
         drop(task_inner);
         drop(process_inner);
-    
+
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
@@ -314,7 +314,8 @@ impl ProcessControlBlock {
         let mut parent = self.acquire_inner_lock();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
-        // 复制trapframe等内存区域均在这里
+        // 复制trap_cx和ustack等内存区域均在这里
+        // 因此后面不需要再allow_user_res了
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
         // copy fd table
         let mut new_fd_table = Vec::new();
@@ -388,6 +389,64 @@ impl ProcessControlBlock {
         // add this thread to scheduler
         add_task(task);
         child
+    }
+
+    pub fn clone_thread(
+        self: &Arc<Self>,
+        parent_task: Arc<TaskControlBlock>,
+        flags: CloneFlags,
+        stack: usize,
+        newtls: usize,
+    ) -> Arc<TaskControlBlock> {
+        let mut pid = self.acquire_inner_lock().pid;
+        // only the main thread can create a sub-thread
+        assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0); 
+        // create main thread of child process
+        let task = Arc::new(TaskControlBlock::new(
+            Arc::clone(self),
+            parent_task
+                .acquire_inner_lock()
+                .res
+                .as_ref()
+                .unwrap()
+                .ustack_base(),
+            pid as isize,
+            // mention that we allocate a new kstack / ustack / trap_cx here
+            true,
+        ));
+
+        // attach task to process
+        let mut process_inner = self.acquire_inner_lock();
+        let task_inner = task.acquire_inner_lock();
+        let task_rel_tid = task_inner.get_relative_tid();
+        let tasks = &mut process_inner.tasks;
+
+        while tasks.len() < task_rel_tid + 1 {
+            tasks.push(None);
+        }
+        tasks[task_rel_tid] = Some(Arc::clone(&task));
+        let trap_cx = task_inner.get_trap_cx();
+
+        // copy trap_cx from the parent thread
+        *trap_cx = *parent_task.acquire_inner_lock().get_trap_cx();
+
+        // modify kstack_top in trap_cx of this thread
+        trap_cx.kernel_sp = task.kstack.get_top();
+        // sys_fork return value ...
+        if stack != 0 {
+            trap_cx.set_sp(stack);
+        }
+        trap_cx.x[10] = 0;
+        if flags.contains(CloneFlags::CLONE_SETTLS) {
+            trap_cx.x[4] = newtls;
+        }
+
+        drop(task_inner);
+        // add this thread to scheduler
+        add_task(Arc::clone(&task));
+
+        task
+        // child
     }
 
     /// 插入一个mmap区域（此时尚未实际分配数据页），并更新进程mmap顶部位置

@@ -16,8 +16,8 @@ use crate::mm::{
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
-    current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction,SIG_DFL, current_tid,
+    current_process, current_task, current_tid, current_user_token, exit_current_and_run_next,
+    is_signal_valid, pid2process, suspend_current_and_run_next, SigAction, SIG_DFL,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -110,28 +110,29 @@ bitflags! {
 pub fn sys_clone(
     flags: u32,
     child_stack: *const u8,
-    ptid: usize,
+    ptid: *mut u32,
     ctid: *mut u32,
     newtls: usize,
 ) -> isize {
     let current_process = current_process();
     let flags = CloneFlags::from_bits(flags).unwrap();
-    let new_process = current_process.fork(flags, child_stack as usize, newtls);
-    let new_pid = new_process.getpid();
 
-    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid as usize != 0 {
-        *translated_refmut(
-            new_process.acquire_inner_lock().get_user_token(),
-            ctid,
-        ) = new_pid as u32;
-    }
-    // // modify trap context of new_task, because it returns immediately after switching
-    // let new_process_inner = new_process.inner_exclusive_access();
-    // let task = new_process_inner.tasks[0].as_ref().unwrap();
-    // let trap_cx = task.inner_exclusive_access().get_trap_cx();
-    // // we do not have to move to next instruction since we have done it before
-    // // for child process, fork returns 0
-    // trap_cx.x[10] = 0;
+    let ret = if flags.contains(CloneFlags::CLONE_THREAD) {
+        // create a thread here
+        let task = current_task().unwrap();
+        let new_task = current_process.clone_thread(task, flags, child_stack as usize, newtls);
+        let new_task_inner = new_task.acquire_inner_lock();
+        let new_tid = new_task_inner.gettid();
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid as usize != 0 {
+            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid) =
+            new_tid as u32;
+        }
+        new_tid
+    } else {
+        let new_process = current_process.fork(flags, child_stack as usize, newtls);
+        let new_pid = new_process.getpid();
+        new_pid
+    };
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_clone(flags: {:#x?}, child_stack: {:#x?}, ptid: {:#x?}, ctid: {:#x?}, newtls: {:#x?}) = {}",
@@ -140,13 +141,13 @@ pub fn sys_clone(
         ptid,
         ctid,
         newtls,
-        new_pid
+        ret
     );
     unsafe {
         asm!("sfence.vma");
         asm!("fence.i");
     }
-    new_pid as isize
+    ret as isize
 }
 
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
@@ -495,7 +496,7 @@ pub fn sys_sigaction(
 
     // let sigact = translated_refmut(token, sigaction as *mut SigAction);
 
-    // 当sigaction存在时， 在pcb中注册给定的signaction 
+    // 当sigaction存在时， 在pcb中注册给定的signaction
     if sigaction as usize != 0 {
         // 如果旧的sigaction存在，则将它保存到指定位置.否则置为 SIG_DFL
         if let Some(old) = inner.signal_info.sigactions.get(&signum) {
@@ -503,7 +504,7 @@ pub fn sys_sigaction(
                 // println!("arg old_sigaction !=0  ");
                 *translated_refmut(token, old_sigaction) = (*old).clone();
             }
-        }else{
+        } else {
             if old_sigaction as usize != 0 {
                 let sigact_old = translated_refmut(token, old_sigaction);
                 sigact_old.handler = SIG_DFL;
@@ -523,7 +524,7 @@ pub fn sys_sigaction(
         SYSCALL_ENABLE,
         "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) = {}",
         signum,
-        sigaction,// sigact,
+        sigaction, // sigact,
         old_sigaction,
         0
     );
@@ -532,10 +533,7 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     // 恢复之前保存的trap_cx
-    current_task()
-        .unwrap()
-        .acquire_inner_lock()
-        .pop_trap_cx();
+    current_task().unwrap().acquire_inner_lock().pop_trap_cx();
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }
