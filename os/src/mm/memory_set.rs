@@ -208,9 +208,10 @@ impl MemorySet {
     /// load libc.so(elf) to DYNAMIC_LINKER
     /// return value 0: erro,   other: ld入口地址
     pub fn load_dl(&mut self) -> usize {
-        let ld = String::from("libc.so"); //libc.so
-        let cwd = String::from("/");
-        if let Some(app_vfile) = open_file(cwd.as_str(), ld.as_str(), OpenFlags::RDONLY) {
+        // let ld = String::from("libc.so"); //libc.so
+        // let cwd = String::from("/");
+        // if let Some(app_vfile) = open_file(cwd.as_str(), ld.as_str(), OpenFlags::RDONLY) {
+        if let Some(app_vfile) = open_file("/", "libc.so", OpenFlags::RDONLY) {
             let all_data = app_vfile.read_all();
             let elf_data =  all_data.as_slice();
             let elf = xmas_elf::ElfFile::new(elf_data).unwrap();

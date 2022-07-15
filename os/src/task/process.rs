@@ -422,7 +422,14 @@ impl ProcessControlBlock {
         let end_vpn = VirtAddr::from(start + len).floor();
         let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
         let mmap_flags = MmapFlags::from_bits(flags).unwrap();
-        let mmap_fdone = inner.fd_table[fd as usize].clone();
+        // TODO
+        let mmap_fdone: crate::mm::FdOne ;// = inner.fd_table[fd as usize].clone();
+        if fd == -1 {
+            // 转发到fd2, 标准错误输出
+            mmap_fdone = inner.fd_table[2].clone();
+        }else {
+            mmap_fdone = inner.fd_table[fd as usize].clone();
+        }
         let fixed = mmap_flags.contains(MmapFlags::MAP_FIXED);
         // println!("mmap_flags: {:#?} , flags: 0x{:x}",mmap_flags,flags);
 
