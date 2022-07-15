@@ -52,14 +52,31 @@ pub fn suspend_current_and_run_next() {
     schedule(task_cx_ptr);
 }
 
-// pub fn block_current_and_run_next() {
-//     let task = take_current_task().unwrap();
-//     let mut task_inner = task.inner_exclusive_access();
-//     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-//     task_inner.task_status = TaskStatus::Blocking;
-//     drop(task_inner);
-//     schedule(task_cx_ptr);
-// }
+pub fn block_current_and_run_next() {
+    // There must be an application running.
+    // 将原来的take_current改为current_task，也就是说blocking之后，task仍然保留在processor中
+    let task = current_task().unwrap();
+
+    // ---- access current TCB exclusively
+    let mut task_inner = task.acquire_inner_lock();
+    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+    // Change status to Ready
+    task_inner.task_status = TaskStatus::Blocking;
+    drop(task_inner);
+    drop(task);
+
+    // jump to scheduling cycle
+    schedule(task_cx_ptr);
+}
+
+/// 需要保证该task目前没有上锁
+pub fn unblock_task(task: Arc<TaskControlBlock>) {
+    let mut task_inner = task.acquire_inner_lock();
+    assert!(task_inner.task_status == TaskStatus::Blocking);
+    task_inner.task_status = TaskStatus::Ready;
+    drop(task_inner);
+    add_task(task);
+}
 
 pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let task = take_current_task().unwrap();

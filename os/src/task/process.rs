@@ -398,7 +398,7 @@ impl ProcessControlBlock {
         stack: usize,
         newtls: usize,
     ) -> Arc<TaskControlBlock> {
-        let mut pid = self.acquire_inner_lock().pid;
+        let pid = self.acquire_inner_lock().pid;
         // only the main thread can create a sub-thread
         assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0); 
         // create main thread of child process

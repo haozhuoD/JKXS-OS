@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Lazy, RwLock};
@@ -8,7 +8,7 @@ use crate::mm::translated_ref;
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 // use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
-use crate::task::{current_user_token, suspend_current_and_run_next, TaskControlBlock, current_task};
+use crate::task::{current_user_token, suspend_current_and_run_next, TaskControlBlock, current_task, block_current_and_run_next, unblock_task};
 use crate::timer::{get_time_us, USEC_PER_SEC};
 
 use super::errorno::{EPERM, EAGAIN};
@@ -32,14 +32,14 @@ pub fn sys_sleep(req: *mut u64) -> isize {
 pub struct FutexQueue {
     waiters: RwLock<usize>,
     // chain: RwLock<Vec<FutexQ>>,
-    chain: RwLock<Vec<Arc<TaskControlBlock>>>,
+    chain: RwLock<VecDeque<Arc<TaskControlBlock>>>,
 }
 
 impl FutexQueue {
     pub fn new() -> Self {
         Self { 
             waiters: RwLock::new(0), 
-            chain: RwLock::new(Vec::new())
+            chain: RwLock::new(VecDeque::new())
         }
     }
     pub fn waiters(&self) -> usize {
@@ -91,7 +91,6 @@ pub fn sys_futex(
     let mut flags = 0;
     let cmd = futex_op & FUTEX_CMD_MASK;
     let token = current_user_token();
-    let t;
     gdb_println!(
         SYSCALL_ENABLE, 
         "*****sys_futex(uaddr: {:#x?}, futex_op: {:x?}, val: {:x?}, timeout: {:#x?}, uaddr2: {:#x?}, val3: {:x?}) = ?", 
@@ -102,13 +101,6 @@ pub fn sys_futex(
         uaddr2,
         val3,
     );
-    if timeout as usize != 0 {
-        let sec = *translated_ref(token, timeout);
-        let usec = *translated_ref(token, unsafe { timeout.add(1) });
-        t = sec as usize * USEC_PER_SEC + usec as usize;
-    } else {
-        t = usize::MAX; // inf
-    }
     if futex_op & FUTEX_PRIVATE_FLAG == 0 {
         flags |= FLAGS_SHARED;
         panic!("Todo: mmap shared!");
@@ -119,7 +111,16 @@ pub fn sys_futex(
         }
     }
     let ret = match cmd {
-        FUTEX_WAIT => futex_wait(uaddr as usize, val, t),
+        FUTEX_WAIT => {
+            let t = if timeout as usize != 0 {
+                let sec = *translated_ref(token, timeout);
+                let usec = *translated_ref(token, unsafe { timeout.add(1) });
+                sec as usize * USEC_PER_SEC + usec as usize
+            } else {
+                usize::MAX // inf
+            };
+            futex_wait(uaddr as usize, val, t)
+        },
         FUTEX_WAKE => futex_wake(uaddr as usize, val),
         _ => -1,
     };
@@ -158,7 +159,7 @@ fn futex_wait(
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
     let uval = translated_ref(token, uaddr as *const u32);  // Need to be atomic
-    println!("futex_wait: uval: {:x?}, val: {:x?}, timeout: {}", uval, val, timeout);
+    debug!("futex_wait: uval: {:x?}, val: {:x?}, timeout: {}", uval, val, timeout);
     if *uval != val {
         drop(fq_lock);
         fq.waiters_dec();
@@ -172,31 +173,34 @@ fn futex_wait(
     // futex_wait_queue_me
     let task = current_task().unwrap();
     let q = task.clone();
-    fq_lock.push(q.clone());
+    fq_lock.push_back(q.clone());
     drop(fq_lock);
     drop(fq_writer);
-    let start_time = get_time_us();
-    while get_time_us() - start_time < timeout {
-        suspend_current_and_run_next();
-    }
 
-    // unqueue_me
-    let mut fq_writer = FUTEX_QUEUE.write();
-    if let Some(fq) = fq_writer.get(&uaddr) {
-        let len = fq.chain.read().len();
-        let mut fq_lock = fq.chain.write();
-        for i in 0..len {
-            if Arc::ptr_eq(&fq_lock[i], &q) {
-                fq_lock.remove(i);
-                break;
-            }
-        }
-        drop(fq_lock);
-        fq.waiters_dec();
-        if fq.waiters() == 0 {
-            fq_writer.remove(&uaddr);
-        }
-    }
+    // warning: Auto waking-up has not been implemented yet
+    block_current_and_run_next();
+    // let start_time = get_time_us();
+    // while get_time_us() - start_time < timeout {
+    //     suspend_current_and_run_next();
+    // }
+
+    // // unqueue_me
+    // let mut fq_writer = FUTEX_QUEUE.write();
+    // if let Some(fq) = fq_writer.get(&uaddr) {
+    //     let len = fq.chain.read().len();
+    //     let mut fq_lock = fq.chain.write();
+    //     for i in 0..len {
+    //         if Arc::ptr_eq(&fq_lock[i], &q) {
+    //             fq_lock.remove(i);
+    //             break;
+    //         }
+    //     }
+    //     drop(fq_lock);
+    //     fq.waiters_dec();
+    //     if fq.waiters() == 0 {
+    //         fq_writer.remove(&uaddr);
+    //     }
+    // }
     return 0;
 }
 
@@ -204,6 +208,7 @@ fn futex_wake(
     uaddr: usize,
     nr_wake: u32,
 ) -> isize {
+    debug!("****futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
     if !FUTEX_QUEUE.read().contains_key(&uaddr) {
         return 0;
     }
@@ -215,15 +220,23 @@ fn futex_wake(
         return 0;
     }
     let nr_wake = nr_wake.min(waiters as u32);
-    (0..nr_wake as usize).for_each(|i| {
+    debug!("futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
+
+    let mut wakeup_queue = Vec::new();
+    (0..nr_wake as usize).for_each(|_| {
         // 加入唤醒队列中，但需要等到释放完锁之后才能唤醒
-        fq_lock.remove(i);
+        let task = fq_lock.pop_front().unwrap();
+        wakeup_queue.push(task);
         fq.waiters_dec();
     });
     drop(fq_lock);
-    // todo: wake up
+
     if fq.waiters() == 0 {
         fq_writer.remove(&uaddr);
+    }
+
+    for task in wakeup_queue.into_iter() {
+        unblock_task(task);
     }
     return nr_wake as isize;
 }

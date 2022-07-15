@@ -139,9 +139,13 @@ pub fn run_tasks() {
         
 
         // 核不绑定任务  √
-        if let Some(last_task) = processor.take_current() {    
-            add_task(last_task);
+        if let Some(last_task) = processor.take_current() {
+            // Do not enqueue blocking tasks!
+            if last_task.acquire_inner_lock().task_status == TaskStatus::Ready {
+                add_task(last_task);
+            }
         }
+
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
