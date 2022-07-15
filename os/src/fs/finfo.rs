@@ -2,8 +2,8 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
-use fat32_fs::{ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
 use core::ops::Range;
+use fat32_fs::{ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
 
 #[repr(C)]
 pub struct Kstat {
@@ -115,7 +115,6 @@ pub const POLLNVAL: u16 = 0x020;
 pub const POLLRDNORM: u16 = 0x040;
 pub const POLLRDBAND: u16 = 0x080;
 
-
 pub const S_IFMT: u32 = 0o170000; //bit mask for the file type bit field
 pub const S_IFREG: u32 = 0o100000; //regular file
 pub const S_IFBLK: u32 = 0o060000; //block device
@@ -149,8 +148,8 @@ pub const SEEK_END: usize = 2;
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeSpec {
-    pub tv_sec : i64 ,       /* seconds */
-    pub tv_nsec : i64         /* nanoseconds */
+    pub tv_sec: i64,  /* seconds */
+    pub tv_nsec: i64, /* nanoseconds */
 }
 
 // #define FD_SETSIZE 256
@@ -190,7 +189,8 @@ impl BitOpt for u128 {
         // 如果要把某一位置1使用或运算
         if value {
             *self |= mask;
-        } else { // 要把某一位置0进行和运算(需要取反)
+        } else {
+            // 要把某一位置0进行和运算(需要取反)
             *self &= !(mask);
         }
         self
@@ -200,33 +200,34 @@ impl BitOpt for u128 {
         assert!(range.start < Self::length());
         assert!(range.end <= Self::length());
         assert!(range.end > range.start);
-      
+
         let shift_bits = Self::length() - range.end;
         let bits = *self << shift_bits >> shift_bits;
-      
+
         bits >> range.start
     }
 
     fn u128_set_bits(&mut self, range: Range<usize>, value: Self) -> &mut Self {
         let length = Self::length();
-            assert!(range.start < length);
-            assert!(range.end <= length);
-            assert!(range.start < range.end);
-            assert!(value << (length - (range.end - range.start)) >>
-                  (length - (range.end - range.start)) == value,
-                  "value does not fit into bit range");
-      
-            let mask: Self = !(!0 << (length - range.end) >>
-                              (length - range.end) >>
-                              range.start << range.start);
-      
-            *self = (*self & mask) | (value << range.start);
-      
-            self
-      }
+        assert!(range.start < length);
+        assert!(range.end <= length);
+        assert!(range.start < range.end);
+        assert!(
+            value << (length - (range.end - range.start)) >> (length - (range.end - range.start))
+                == value,
+            "value does not fit into bit range"
+        );
 
-    fn u128_clear_all(&mut self) -> &mut Self{
-        *self=0;
+        let mask: Self =
+            !(!0 << (length - range.end) >> (length - range.end) >> range.start << range.start);
+
+        *self = (*self & mask) | (value << range.start);
+
+        self
+    }
+
+    fn u128_clear_all(&mut self) -> &mut Self {
+        *self = 0;
         self
     }
 }

@@ -400,7 +400,7 @@ impl ProcessControlBlock {
     ) -> Arc<TaskControlBlock> {
         let pid = self.acquire_inner_lock().pid;
         // only the main thread can create a sub-thread
-        assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0); 
+        assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0);
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(self),

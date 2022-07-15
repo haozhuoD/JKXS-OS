@@ -1,4 +1,4 @@
-use crate::sbi::{sbi_hart_start, sbi_get_hart_status};
+use crate::sbi::{sbi_get_hart_status, sbi_hart_start};
 
 #[inline(always)]
 pub fn get_hartid() -> usize {
@@ -35,7 +35,10 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
     for i in hart_min..=hart_max {
         if i != boot_hartid {
             let hart_status = sbi_get_hart_status(i);
-            debug!("Wakeup other cores, hartid: {} status:{}", i, hart_status as isize);
+            debug!(
+                "Wakeup other cores, hartid: {} status:{}",
+                i, hart_status as isize
+            );
             let ret = sbi_hart_start(i, skernel as usize, 0);
             // while sbi_hart_start(i, skernel as usize, 0)!=0 {
 
@@ -49,7 +52,10 @@ pub fn wakeup_other_cores(boot_hartid: usize) {
             //     // println!("hartid: {}  ipi_ret: {} ", i, ipi_ret);
             // }
             if ret as isize == -6 {
-                println!("sbi_hart_start hart:{} is already started  ret: {}  ", i, ret as isize);
+                println!(
+                    "sbi_hart_start hart:{} is already started  ret: {}  ",
+                    i, ret as isize
+                );
             }
             // println!("sbi_hart_start hartid: {}  ret: {}", i, ret as isize);
         }

@@ -5,8 +5,8 @@ use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
 use crate::syscall::syscall;
 use crate::task::{
-    current_add_signal, current_process, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,current_tid,
+    current_add_signal, current_process, current_tid, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -141,5 +141,5 @@ pub fn trap_from_kernel() -> ! {
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 
-pub use context::TrapContext;
 pub use self::page_fault::*;
+pub use context::TrapContext;

@@ -18,10 +18,9 @@ pub fn usleep(n: usize) {
     time_sleep(freq.0 as usize * n / 1000000);
 }
 
-#[cfg(feature = "board_fu740")] 
+#[cfg(feature = "board_fu740")]
 pub fn core_freq(n: usize) -> usize {
     // let freq = peripherals.PRCI.get_coreclk();
     // freq.0
     0
 }
-

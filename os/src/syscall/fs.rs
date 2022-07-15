@@ -1,7 +1,7 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, Pollfd, POLLIN, SEEK_SET, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, SEEK_CUR, SEEK_END,
-    FdSet,TimeSpec, BitOpt,
+    make_pipe, open_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
+    OSFile, OpenFlags, Pollfd, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFDIR, S_IFREG,
+    S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -9,7 +9,7 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
-use crate::task::{current_process, current_user_token,suspend_current_and_run_next};
+use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -165,7 +165,13 @@ pub fn sys_pipe2(pipe: *mut u32, flags: u32) -> isize {
     *translated_refmut(token, pipe) = read_fd as u32;
     *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd as u32;
 
-    gdb_println!(SYSCALL_ENABLE, "sys_pipe2(flags: {:#x?}) = [{}, {}]", flags, read_fd, write_fd);
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_pipe2(flags: {:#x?}) = [{}, {}]",
+        flags,
+        read_fd,
+        write_fd
+    );
     0
 }
 
@@ -896,21 +902,27 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
 // todo: 实现计时返回
 // timesoec 为0.0 轮询一遍返回结果  erro fd_set 永远清零
 // 否则 轮询fdset ,线程切换. 直到fdset 中有可用fd返回 . erro fd_set 永远清零
-pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut FdSet , timeout: *mut TimeSpec) -> isize {
+pub fn sys_pselect(
+    nfds: i64,
+    rfds: *mut FdSet,
+    wfds: *mut FdSet,
+    efds: *mut FdSet,
+    timeout: *mut TimeSpec,
+) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.acquire_inner_lock();
     let mut ret = 0isize;
 
     let time = translated_refmut(token, timeout);
-    if time.tv_sec==0 && time.tv_nsec==0{
+    if time.tv_sec == 0 && time.tv_nsec == 0 {
         ////pselect非阻塞处理 todo todo
         // 处理 read fd set
-        if rfds as usize !=0 {
+        if rfds as usize != 0 {
             let read_fds = translated_refmut(token, rfds);
             // let rfd_clone = read_fds.clone(); // debug
             let select_rfd = read_fds;
-            
+
             // select_rfd.u128_set_bit(0,true);
             // //debug
             // println!(" debug select_rfd: {}    rfd_clone: {} ",select_rfd,rfd_clone);
@@ -919,32 +931,33 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
                 //read fs set 直接当中的返回可用fd
                 // let Some(file) = &inner.fd_table[fd]
                 if select_rfd.u128_get_bit(i) {
-                    if let Some(f) = inner.fd_table.get(i) {   
+                    if let Some(f) = inner.fd_table.get(i) {
                         if f.is_some() {
-                            if let Some(file) = &inner.fd_table[i]{
+                            if let Some(file) = &inner.fd_table[i] {
                                 let f: Arc<dyn File + Send + Sync>;
                                 match file {
                                     FileClass::File(fi) => f = fi.clone(),
                                     FileClass::Abs(fi) => f = fi.clone(),
                                 }
-                                if f.read_blocking() {//fd 不可用
-                                    select_rfd.u128_set_bit(i,false);
-                                    continue ;
+                                if f.read_blocking() {
+                                    //fd 不可用
+                                    select_rfd.u128_set_bit(i, false);
+                                    continue;
                                 }
-                                ret +=1;
+                                ret += 1;
                             }
                         }
                     }
                 }
-                
+
                 // //debug
                 // if i==5 {
                 //     select_rfd.u128_set_bit(i,false);
                 //     ret -=1;
-                // }    
+                // }
             }
         }
-        
+
         // 处理 write fd set
         //write fs set 直接当中的返回可用fd
         if wfds as usize != 0 {
@@ -955,26 +968,27 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
                 if select_wfd.u128_get_bit(i) {
                     if let Some(f) = inner.fd_table.get(i) {
                         if f.is_some() {
-                            if let Some(file) = &inner.fd_table[i]{
+                            if let Some(file) = &inner.fd_table[i] {
                                 let f: Arc<dyn File + Send + Sync>;
                                 match file {
                                     FileClass::File(fi) => f = fi.clone(),
                                     FileClass::Abs(fi) => f = fi.clone(),
                                 }
-                                if f.write_blocking() {//fd 不可用
-                                    select_wfd.u128_set_bit(i,false);
-                                    continue ;
-                                } 
-                                ret +=1;
+                                if f.write_blocking() {
+                                    //fd 不可用
+                                    select_wfd.u128_set_bit(i, false);
+                                    continue;
+                                }
+                                ret += 1;
                             }
                         }
-                    }   
+                    }
                 }
             }
         }
 
         // 简单直接把erro fd set 清零
-        if efds as usize != 0{
+        if efds as usize != 0 {
             let erro_fds = translated_refmut(token, efds);
             erro_fds.u128_clear_all();
         }
@@ -989,33 +1003,32 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
             time,
             ret
         );
-        
-    }else  {
+    } else {
         //pselect阻塞处理 todo erro fd set 处理
         drop(inner);
         // 内核保存一份 read_fds
         let rfd_clone: u128;
-        if rfds as usize !=0 {
+        if rfds as usize != 0 {
             let read_fds = translated_refmut(token, rfds);
-            rfd_clone = read_fds.clone(); 
-        }else {
+            rfd_clone = read_fds.clone();
+        } else {
             rfd_clone = 0;
         }
         // 内核保存一份 write_fds
-        let wfd_clone: u128 ;
-        if wfds as usize !=0 {
+        let wfd_clone: u128;
+        if wfds as usize != 0 {
             let write_fds = translated_refmut(token, wfds);
-            wfd_clone = write_fds.clone(); 
-        }else{
-            wfd_clone=0;
+            wfd_clone = write_fds.clone();
+        } else {
+            wfd_clone = 0;
         }
         // 简单直接把erro fd set 清零
-        if efds as usize != 0{
+        if efds as usize != 0 {
             let erro_fds = translated_refmut(token, efds);
             erro_fds.u128_clear_all();
         }
 
-        loop{
+        loop {
             let inner = process.acquire_inner_lock();
             let mut ret = 0isize;
 
@@ -1026,53 +1039,55 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
                     if rfd_clone.u128_get_bit(i) {
                         if let Some(f) = inner.fd_table.get(i) {
                             if f.is_some() {
-                                if let Some(file) = &inner.fd_table[i]{
+                                if let Some(file) = &inner.fd_table[i] {
                                     let f: Arc<dyn File + Send + Sync>;
                                     match file {
                                         FileClass::File(fi) => f = fi.clone(),
                                         FileClass::Abs(fi) => f = fi.clone(),
                                     }
                                     if !f.readable() {
-                                        return -1;          //可能是错的
+                                        return -1; //可能是错的
                                     }
-                                    if f.read_blocking() {//fd 不可用
-                                        read_fds.u128_set_bit(i,false);
-                                        continue ;
+                                    if f.read_blocking() {
+                                        //fd 不可用
+                                        read_fds.u128_set_bit(i, false);
+                                        continue;
                                     }
-                                    read_fds.u128_set_bit(i,true);
-                                    ret +=1;
+                                    read_fds.u128_set_bit(i, true);
+                                    ret += 1;
                                 }
                             }
-                        }   
+                        }
                     }
                 }
             }
 
             //处理write fd set
-            if wfd_clone !=0 {
+            if wfd_clone != 0 {
                 let write_fds = translated_refmut(token, wfds);
                 for i in 0..nfds as usize {
                     if wfd_clone.u128_get_bit(i) {
-                        if let Some(f) = inner.fd_table.get(i) {  
+                        if let Some(f) = inner.fd_table.get(i) {
                             if f.is_some() {
-                                if let Some(file) = &inner.fd_table[i]{
+                                if let Some(file) = &inner.fd_table[i] {
                                     let f: Arc<dyn File + Send + Sync>;
                                     match file {
                                         FileClass::File(fi) => f = fi.clone(),
                                         FileClass::Abs(fi) => f = fi.clone(),
                                     }
                                     if !f.writable() {
-                                        return -1;          //可能是错的
+                                        return -1; //可能是错的
                                     }
-                                    if f.write_blocking() {//fd 不可用
-                                        write_fds.u128_set_bit(i,false);
-                                        continue ;
+                                    if f.write_blocking() {
+                                        //fd 不可用
+                                        write_fds.u128_set_bit(i, false);
+                                        continue;
                                     }
-                                    write_fds.u128_set_bit(i,true);
-                                    ret +=1;
+                                    write_fds.u128_set_bit(i, true);
+                                    ret += 1;
                                 }
                             }
-                        }   
+                        }
                     }
                 }
             }
@@ -1089,7 +1104,7 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
                 // );
                 drop(inner);
                 suspend_current_and_run_next();
-            }else{
+            } else {
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_pselect(nfds: {:#x?}, rfds = {:x?}, wfds = {:x?}, efds = {:x?}, timeout: {:x?}) = {}",
@@ -1100,9 +1115,8 @@ pub fn sys_pselect(nfds: i64, rfds: *mut FdSet , wfds: *mut FdSet , efds: *mut F
                     time,
                     ret
                 );
-                break ;
+                break;
             }
-            
         }
     }
     ret
@@ -1223,7 +1237,7 @@ pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
                     SEEK_SET => offset as _,
                     SEEK_CUR => (fi.offset() + offset) as _,
                     SEEK_END => (sz + offset) as _,
-                    _ => -1
+                    _ => -1,
                 };
                 if new_off < 0 {
                     -EINVAL
@@ -1257,7 +1271,8 @@ pub fn sys_pread64(fd: usize, buf: *mut u8, count: usize, offset: usize) -> isiz
             FileClass::File(fi) => {
                 let old_off = fi.offset();
                 fi.set_offset(offset);
-                let read_cnt = fi.read(UserBuffer::new(translated_byte_buffer(token, buf, count))) as isize;
+                let read_cnt =
+                    fi.read(UserBuffer::new(translated_byte_buffer(token, buf, count))) as isize;
                 fi.set_offset(old_off);
                 read_cnt
             }

@@ -113,12 +113,12 @@ pub fn list_apps() {
     println!("**************/")
 }
 
-pub fn init_rootfs(){
-    let _proc = open_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _mounts = open_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
-    let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
-    let _var = open_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _tmp = open_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+pub fn init_rootfs() {
+    let _proc = open_file("/", "proc", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _mounts = open_file("/proc", "mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _meminfo = open_file("/proc", "meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _var = open_file("/", "var", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _tmp = open_file("/", "tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
     // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
 }
 
@@ -254,10 +254,10 @@ impl File for OSFile {
         }
         total_write_size
     }
-    fn read_blocking(&self) -> bool{
+    fn read_blocking(&self) -> bool {
         false
     }
-    fn write_blocking(&self)->bool{
+    fn write_blocking(&self) -> bool {
         false
     }
 }

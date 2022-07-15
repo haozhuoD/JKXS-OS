@@ -33,7 +33,7 @@ pub struct TaskControlBlockInner {
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub exit_code: Option<i32>,
-    trap_cx_backup: Vec<TrapContext>
+    trap_cx_backup: Vec<TrapContext>,
 }
 
 impl TaskControlBlockInner {
@@ -85,7 +85,7 @@ impl TaskControlBlock {
                 task_cx: TaskContext::goto_trap_return(kstack_top),
                 task_status: TaskStatus::Ready,
                 exit_code: None,
-                trap_cx_backup: Vec::new()
+                trap_cx_backup: Vec::new(),
             })),
         }
     }

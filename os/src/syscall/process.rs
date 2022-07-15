@@ -16,8 +16,8 @@ use crate::mm::{
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
-    current_process, current_task, current_tid, current_user_token, exit_current_and_run_next,
-    is_signal_valid, pid2process, suspend_current_and_run_next, SigAction, SIG_DFL,
+    current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
+    pid2process, suspend_current_and_run_next, SigAction, SIG_DFL,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -125,7 +125,7 @@ pub fn sys_clone(
         let new_tid = new_task_inner.gettid();
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid as usize != 0 {
             *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid) =
-            new_tid as u32;
+                new_tid as u32;
         }
         new_tid
     } else {

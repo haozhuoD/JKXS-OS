@@ -136,7 +136,6 @@ pub fn run_tasks() {
         //             }
         //         }
         // }
-        
 
         // 核不绑定任务  √
         if let Some(last_task) = processor.take_current() {
@@ -191,10 +190,7 @@ pub fn current_user_token() -> usize {
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task()
-        .unwrap()
-        .acquire_inner_lock()
-        .get_trap_cx()
+    current_task().unwrap().acquire_inner_lock().get_trap_cx()
 }
 
 pub fn current_trap_cx_user_va() -> usize {

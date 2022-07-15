@@ -8,10 +8,13 @@ use crate::mm::translated_ref;
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 // use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
-use crate::task::{current_user_token, suspend_current_and_run_next, TaskControlBlock, current_task, block_current_and_run_next, unblock_task};
+use crate::task::{
+    block_current_and_run_next, current_task, current_user_token, suspend_current_and_run_next,
+    unblock_task, TaskControlBlock,
+};
 use crate::timer::{get_time_us, USEC_PER_SEC};
 
-use super::errorno::{EPERM, EAGAIN};
+use super::errorno::{EAGAIN, EPERM};
 
 pub fn sys_sleep(req: *mut u64) -> isize {
     let token = current_user_token();
@@ -37,9 +40,9 @@ pub struct FutexQueue {
 
 impl FutexQueue {
     pub fn new() -> Self {
-        Self { 
-            waiters: RwLock::new(0), 
-            chain: RwLock::new(VecDeque::new())
+        Self {
+            waiters: RwLock::new(0),
+            chain: RwLock::new(VecDeque::new()),
         }
     }
     pub fn waiters(&self) -> usize {
@@ -61,8 +64,8 @@ impl FutexQueue {
 
 // impl FutexQ {
 //     pub fn new(task: Arc<TaskControlBlock>) -> Self {
-//         Self { 
-//             task 
+//         Self {
+//             task
 //         }
 //     }
 // }
@@ -76,7 +79,7 @@ const FUTEX_CMD_MASK: usize = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
 const FLAGS_SHARED: usize = 1;
 const FLAGS_CLOCKRT: usize = 2;
 
-pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<usize, FutexQueue>>> = 
+pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<usize, FutexQueue>>> =
     Lazy::new(|| RwLock::new(BTreeMap::new()));
 
 // Simple implementation
@@ -86,7 +89,7 @@ pub fn sys_futex(
     val: u32,
     timeout: *const u64,
     uaddr2: *const u32,
-    val3: u32
+    val3: u32,
 ) -> isize {
     let mut flags = 0;
     let cmd = futex_op & FUTEX_CMD_MASK;
@@ -107,7 +110,7 @@ pub fn sys_futex(
     }
     if futex_op & FUTEX_CLOCK_REALTIME != 0 {
         if cmd != FUTEX_WAIT {
-            return -EPERM;  // ENOSYS
+            return -EPERM; // ENOSYS
         }
     }
     let ret = match cmd {
@@ -120,7 +123,7 @@ pub fn sys_futex(
                 usize::MAX // inf
             };
             futex_wait(uaddr as usize, val, t)
-        },
+        }
         FUTEX_WAKE => futex_wake(uaddr as usize, val),
         _ => -1,
     };
@@ -141,11 +144,7 @@ pub fn sys_futex(
     return ret;
 }
 
-fn futex_wait(
-    uaddr: usize,
-    val: u32,
-    timeout: usize,
-) -> isize {
+fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     // futex_wait_setup
     let flag = FUTEX_QUEUE.read().contains_key(&uaddr);
     let mut fq_writer = FUTEX_QUEUE.write();
@@ -158,8 +157,11 @@ fn futex_wait(
     fq.waiters_inc();
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
-    let uval = translated_ref(token, uaddr as *const u32);  // Need to be atomic
-    debug!("futex_wait: uval: {:x?}, val: {:x?}, timeout: {}", uval, val, timeout);
+    let uval = translated_ref(token, uaddr as *const u32); // Need to be atomic
+    debug!(
+        "futex_wait: uval: {:x?}, val: {:x?}, timeout: {}",
+        uval, val, timeout
+    );
     if *uval != val {
         drop(fq_lock);
         fq.waiters_dec();
@@ -204,11 +206,11 @@ fn futex_wait(
     return 0;
 }
 
-fn futex_wake(
-    uaddr: usize,
-    nr_wake: u32,
-) -> isize {
-    debug!("****futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
+fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
+    debug!(
+        "****futex_wake: uaddr: {:x?}, nr_wake: {:x?}",
+        uaddr, nr_wake
+    );
     if !FUTEX_QUEUE.read().contains_key(&uaddr) {
         return 0;
     }

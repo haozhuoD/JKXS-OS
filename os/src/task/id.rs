@@ -116,7 +116,7 @@ impl KernelStack {
 
 pub struct TaskUserRes {
     pub tid: TidHandle,
-    pub rel_tid: usize,     // 相对主线程的tid值（主线程为0，其余的为1, 2, 3, ...)
+    pub rel_tid: usize, // 相对主线程的tid值（主线程为0，其余的为1, 2, 3, ...)
     pub ustack_base: usize,
     pub process: Weak<ProcessControlBlock>,
 }
@@ -138,7 +138,7 @@ impl TaskUserRes {
         alloc_user_res: bool,
     ) -> Self {
         let tid = tid_alloc();
-        let rel_tid = if pid < 0 {0} else {tid.0 - pid as usize};
+        let rel_tid = if pid < 0 { 0 } else { tid.0 - pid as usize };
         let task_user_res = Self {
             tid,
             rel_tid,
@@ -190,7 +190,8 @@ impl TaskUserRes {
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.acquire_inner_lock();
         // dealloc ustack manually
-        let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.rel_tid).into();
+        let ustack_bottom_va: VirtAddr =
+            ustack_bottom_from_tid(self.ustack_base, self.rel_tid).into();
         process_inner
             .memory_set
             .remove_area_with_start_vpn(ustack_bottom_va.into());

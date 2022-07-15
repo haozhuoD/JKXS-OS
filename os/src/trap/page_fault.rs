@@ -3,7 +3,9 @@ use crate::{config::MMAP_BASE, mm::VirtAddr, task::ProcessInnerLock};
 fn lazy_alloc_mmap_page(process_inner: &mut ProcessInnerLock, vaddr: usize) -> isize {
     let vpn = VirtAddr::from(vaddr).floor();
     let fd_table = process_inner.fd_table.clone();
-    process_inner.memory_set.insert_mmap_dataframe(vpn, fd_table)
+    process_inner
+        .memory_set
+        .insert_mmap_dataframe(vpn, fd_table)
 }
 
 fn lazy_alloc_heap_page(process_inner: &mut ProcessInnerLock, vaddr: usize) -> isize {

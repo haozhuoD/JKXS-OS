@@ -63,5 +63,3 @@ pub fn sbi_hart_start(hartid: usize, start_addr: usize, a1: usize) -> usize {
 pub fn sbi_get_hart_status(hartid: usize) -> usize {
     sbi_call(SBI_HSM_EXT, HSM_HART_GET_STATUS_FUNID, [hartid, 0, 0]).0
 }
-
-

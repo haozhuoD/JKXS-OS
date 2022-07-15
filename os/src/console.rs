@@ -32,12 +32,12 @@ pub fn lock_console_and_print(args: fmt::Arguments) {
 
 pub const LOG_BUF_LEN: usize = 4096;
 pub struct LogBufInner {
-    pub empty:  bool,  // The same values of head and tail mean that the log_buf is either empty or full
+    pub empty: bool, // The same values of head and tail mean that the log_buf is either empty or full
     pub clear_empty: bool,
-    pub clear_head: usize,  // the head after the last clear command 
-    pub head:   usize,
-    pub tail:   usize,
-    pub inner:  [u8; LOG_BUF_LEN]
+    pub clear_head: usize, // the head after the last clear command
+    pub head: usize,
+    pub tail: usize,
+    pub inner: [u8; LOG_BUF_LEN],
 }
 
 impl LogBufInner {
@@ -49,9 +49,9 @@ impl LogBufInner {
         let r1_len = LOG_BUF_LEN - head;
         if r1_len < r_len {
             buf[0..r1_len].copy_from_slice(&self.inner[head..LOG_BUF_LEN]);
-            buf[r1_len..r_len].copy_from_slice(&self.inner[0..r_len-r1_len]);
+            buf[r1_len..r_len].copy_from_slice(&self.inner[0..r_len - r1_len]);
         } else {
-            buf[0..r_len].copy_from_slice(&self.inner[head..head+r_len]);
+            buf[0..r_len].copy_from_slice(&self.inner[head..head + r_len]);
         }
         // update
         self.head = (head + r_len) % LOG_BUF_LEN;
@@ -72,10 +72,10 @@ impl LogBufInner {
         let clear_head = self.clear_head;
         let r_len = self.unclear_size().min(len);
         if tail > r_len {
-            buf[0..r_len].copy_from_slice(&self.inner[tail-r_len..tail]);
+            buf[0..r_len].copy_from_slice(&self.inner[tail - r_len..tail]);
         } else {
             let r1_len = r_len - tail;
-            buf[0..r1_len].copy_from_slice(&self.inner[LOG_BUF_LEN-r1_len..LOG_BUF_LEN]);
+            buf[0..r1_len].copy_from_slice(&self.inner[LOG_BUF_LEN - r1_len..LOG_BUF_LEN]);
             buf[r1_len..r_len].copy_from_slice(&self.inner[0..tail]);
         }
         // clear
@@ -148,10 +148,10 @@ impl Write for LogBufInner {
             let w1_len = LOG_BUF_LEN - tail;
             if w1_len < w_len {
                 &self.inner[tail..LOG_BUF_LEN].copy_from_slice(&buf[0..w1_len]);
-                &self.inner[0..w_len-w1_len].copy_from_slice(&buf[w1_len..w_len]);
+                &self.inner[0..w_len - w1_len].copy_from_slice(&buf[w1_len..w_len]);
             } else {
-                &self.inner[tail..tail+w_len].copy_from_slice(&buf[0..w_len]);
-            }   
+                &self.inner[tail..tail + w_len].copy_from_slice(&buf[0..w_len]);
+            }
             // update tail
             self.tail = (tail + w_len) % LOG_BUF_LEN;
         }
@@ -159,16 +159,16 @@ impl Write for LogBufInner {
     }
 }
 
-pub static LOG_BUF: Lazy<RwLock<LogBufInner>> = Lazy::new(|| RwLock::new(
-    LogBufInner {
-        empty: true, 
+pub static LOG_BUF: Lazy<RwLock<LogBufInner>> = Lazy::new(|| {
+    RwLock::new(LogBufInner {
+        empty: true,
         clear_empty: true,
         clear_head: 0,
         head: 0,
         tail: 0,
-        inner: [0; LOG_BUF_LEN] 
-    }
-));
+        inner: [0; LOG_BUF_LEN],
+    })
+});
 
 // ======================== console ========================
 
@@ -191,73 +191,69 @@ macro_rules! println {
     }
 }
 
-
 // ======================== color constants ========================
-const FG_BLACK      :u8 = 30;
-const FG_RED        :u8 = 31;
-const FG_GREEN      :u8 = 32;
-const FG_YELLOW     :u8 = 33;
-const FG_BLUE       :u8 = 34;
-const FG_MAGENTA    :u8 = 35;
-const FG_CYAN       :u8 = 36;
-const FG_WHITE      :u8 = 37;
+const FG_BLACK: u8 = 30;
+const FG_RED: u8 = 31;
+const FG_GREEN: u8 = 32;
+const FG_YELLOW: u8 = 33;
+const FG_BLUE: u8 = 34;
+const FG_MAGENTA: u8 = 35;
+const FG_CYAN: u8 = 36;
+const FG_WHITE: u8 = 37;
 
-const FG_B_BLACK    :u8 = 90;
-const FG_B_RED      :u8 = 91;
-const FG_B_GREEN    :u8 = 92;
-const FG_B_YELLOW   :u8 = 93;
-const FG_B_BLUE     :u8 = 94;
-const FG_B_MAGENTA  :u8 = 95;
-const FG_B_CYAN     :u8 = 96;
-const FG_B_WHITE    :u8 = 97;
+const FG_B_BLACK: u8 = 90;
+const FG_B_RED: u8 = 91;
+const FG_B_GREEN: u8 = 92;
+const FG_B_YELLOW: u8 = 93;
+const FG_B_BLUE: u8 = 94;
+const FG_B_MAGENTA: u8 = 95;
+const FG_B_CYAN: u8 = 96;
+const FG_B_WHITE: u8 = 97;
 
-const FG_DEFAULT    :u8 = 39;
+const FG_DEFAULT: u8 = 39;
 
-const BG_BLACK      :u8 = 40;
-const BG_RED        :u8 = 41;
-const BG_GREEN      :u8 = 42;
-const BG_YELLOW     :u8 = 43;
-const BG_BLUE       :u8 = 44;
-const BG_MAGENTA    :u8 = 45;
-const BG_CYAN       :u8 = 46;
-const BG_WHITE      :u8 = 47;
+const BG_BLACK: u8 = 40;
+const BG_RED: u8 = 41;
+const BG_GREEN: u8 = 42;
+const BG_YELLOW: u8 = 43;
+const BG_BLUE: u8 = 44;
+const BG_MAGENTA: u8 = 45;
+const BG_CYAN: u8 = 46;
+const BG_WHITE: u8 = 47;
 
-const BG_B_BLACK    :u8 = 100;
-const BG_B_RED      :u8 = 101;
-const BG_B_GREEN    :u8 = 102;
-const BG_B_YELLOW   :u8 = 103;
-const BG_B_BLUE     :u8 = 104;
-const BG_B_MAGENTA  :u8 = 105;
-const BG_B_CYAN     :u8 = 106;
-const BG_B_WHITE    :u8 = 107;
+const BG_B_BLACK: u8 = 100;
+const BG_B_RED: u8 = 101;
+const BG_B_GREEN: u8 = 102;
+const BG_B_YELLOW: u8 = 103;
+const BG_B_BLUE: u8 = 104;
+const BG_B_MAGENTA: u8 = 105;
+const BG_B_CYAN: u8 = 106;
+const BG_B_WHITE: u8 = 107;
 
-const BG_DEFAULT    :u8 = 49;
+const BG_DEFAULT: u8 = 49;
 
 // ======================== log ========================
 
 /// kernel output log level
-#[derive(PartialOrd)]
-#[derive(PartialEq)]
-#[derive(Copy)]
-#[derive(Clone)]
+#[derive(PartialOrd, PartialEq, Copy, Clone)]
 pub enum LogLevel {
     Verbose = 0,
-    Debug   = 1,
-    Info    = 2,
+    Debug = 1,
+    Info = 2,
     Warning = 3,
-    Error   = 4,
-    Fatal   = 5,
+    Error = 4,
+    Fatal = 5,
 }
 
 impl fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> { 
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> {
         let s = match *self {
-            LogLevel::Verbose   => "[VERBOSE]",
-            LogLevel::Debug     => "[ DEBUG ]",
-            LogLevel::Info      => "[ INFO ]",
-            LogLevel::Warning   => "[WARNING]",
-            LogLevel::Error     => "[ ERROR ]",
-            LogLevel::Fatal     => "[ FATAL ]"
+            LogLevel::Verbose => "[VERBOSE]",
+            LogLevel::Debug => "[ DEBUG ]",
+            LogLevel::Info => "[ INFO ]",
+            LogLevel::Warning => "[WARNING]",
+            LogLevel::Error => "[ ERROR ]",
+            LogLevel::Fatal => "[ FATAL ]",
         };
         f.write_str(s)
     }
@@ -266,12 +262,12 @@ impl fmt::Display for LogLevel {
 /// Set console color according to the log level
 pub fn set_log_color(ll: LogLevel) {
     match ll {
-        LogLevel::Verbose   => set_color(FG_B_BLACK,    BG_DEFAULT),
-        LogLevel::Debug     => set_color(FG_DEFAULT,    BG_DEFAULT),
-        LogLevel::Info      => set_color(FG_B_GREEN,    BG_DEFAULT),
-        LogLevel::Warning   => set_color(FG_B_YELLOW,   BG_DEFAULT),
-        LogLevel::Error     => set_color(FG_B_RED,      BG_DEFAULT),
-        LogLevel::Fatal     => set_color(FG_BLACK,      BG_B_RED  )
+        LogLevel::Verbose => set_color(FG_B_BLACK, BG_DEFAULT),
+        LogLevel::Debug => set_color(FG_DEFAULT, BG_DEFAULT),
+        LogLevel::Info => set_color(FG_B_GREEN, BG_DEFAULT),
+        LogLevel::Warning => set_color(FG_B_YELLOW, BG_DEFAULT),
+        LogLevel::Error => set_color(FG_B_RED, BG_DEFAULT),
+        LogLevel::Fatal => set_color(FG_BLACK, BG_B_RED),
     }
 }
 
@@ -303,16 +299,21 @@ fn min_log_level() -> LogLevel {
     }
 }
 
-
 /// Print log info, alongside with log level, source file and line number.  
 /// *Don't call this function. Use marcos instead.*
 pub fn log(log_level: LogLevel, args: fmt::Arguments, file: &'static str, line: u32) {
     if log_level >= min_log_level() {
         let lock = CONSOLE.write();
         set_log_color(log_level);
-        print(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line, args));
+        print(format_args!(
+            "{} {:#?} @ {:#?} : {:#?} \n",
+            log_level, file, line, args
+        ));
         reset_color();
-        LOG_BUF.write().write_fmt(format_args!("{} {:#?} @ {:#?} : {:#?} \n", log_level, file, line, args));
+        LOG_BUF.write().write_fmt(format_args!(
+            "{} {:#?} @ {:#?} : {:#?} \n",
+            log_level, file, line, args
+        ));
     }
 }
 
@@ -328,7 +329,6 @@ macro_rules! verbose {
     };
 }
 
-
 /// Print log info, alongside with log level, source file and line number. Will not print if the log level is lower then the min_log_level.
 /// # Examples
 /// ```
@@ -340,7 +340,6 @@ macro_rules! debug {
         $crate::console::log(crate::console::LogLevel::Debug, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
-
 
 /// Print log info, alongside with log level, source file and line number. Will not print if the log level is lower then the min_log_level.
 /// # Examples
@@ -354,7 +353,6 @@ macro_rules! info {
     };
 }
 
-
 /// Print log info, alongside with log level, source file and line number. Will not print if the log level is lower then the min_log_level.
 /// # Examples
 /// ```
@@ -366,7 +364,6 @@ macro_rules! warning {
         $crate::console::log(crate::console::LogLevel::Warning, format_args!($fmt $(, $($arg)+)?), file!(), line!())
     };
 }
-
 
 /// Print log info, alongside with log level, source file and line number. Will not print if the log level is lower then the min_log_level.
 /// # Examples
@@ -380,7 +377,6 @@ macro_rules! error {
     };
 }
 
-
 /// Print log info, alongside with log level, source file and line number. Will not print if the log level is lower then the min_log_level.
 /// # Examples
 /// ```
@@ -393,13 +389,12 @@ macro_rules! fatal {
     };
 }
 
-
 /// Print log info, alongside with log level, source file and line number.  
 /// *Don't call this function. Use marcos instead.*
 pub fn monitor_log(args: fmt::Arguments) {
     //可以在这里设置monitor打印的颜色
     let lock = CONSOLE.write();
-    set_color(FG_B_MAGENTA,    BG_DEFAULT);
+    set_color(FG_B_MAGENTA, BG_DEFAULT);
     let tid = current_tid();
     print(format_args!("[syscall tid={}] : {:#?}", tid, args));
     // print(args);
