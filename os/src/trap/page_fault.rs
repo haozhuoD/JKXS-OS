@@ -2,8 +2,8 @@ use crate::{config::MMAP_BASE, mm::VirtAddr, task::ProcessInnerLock};
 
 fn lazy_alloc_mmap_page(process_inner: &mut ProcessInnerLock, vaddr: usize) -> isize {
     let vpn = VirtAddr::from(vaddr).floor();
-    let fd_table = process_inner.fd_table.clone();
-    process_inner.memory_set.insert_mmap_dataframe(vpn, fd_table)
+    process_inner.memory_set
+        .insert_mmap_dataframe(vpn)
 }
 
 fn lazy_alloc_heap_page(process_inner: &mut ProcessInnerLock, vaddr: usize) -> isize {
@@ -26,10 +26,10 @@ pub fn page_fault_handler(process_inner: &mut ProcessInnerLock, vaddr: usize) ->
 
     // debug!("page fault: va = {:#x?}", vaddr);
     if vaddr >= heap_base && vaddr < heap_top {
-        // println!("[kernel] alloc heap memory {:#x?}", vaddr);
+        // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
         lazy_alloc_heap_page(process_inner, vaddr)
     } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
-        // println!("[kernel] alloc mmap memory {:#x?}", vaddr);
+        // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
         lazy_alloc_mmap_page(process_inner, vaddr)
     } else {
         -1

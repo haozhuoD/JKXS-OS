@@ -3,9 +3,9 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE, SIGRETURN_TRAMPOLINE};
+use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE, SIGRETURN_TRAMPOLINE, DYNAMIC_LINKER};
 use crate::gdb_println;
-use crate::monitor::{MAPPING_ENABLE, QEMU};
+use crate::monitor::{MAPPING_ENABLE, QEMU, SYSCALL_ENABLE};
 use crate::task::{
     AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
@@ -15,6 +15,8 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use riscv::register::satp;
 use spin::{Lazy, RwLock};
+use alloc::string::String;
+use crate::fs::{open_file, OpenFlags};
 
 extern "C" {
     fn stext();
@@ -39,10 +41,10 @@ pub fn kernel_token() -> usize {
 }
 
 pub struct MemorySet {
-    page_table: PageTable,
+    pub page_table: PageTable,
     areas: Vec<MapArea>,
     heap_frames: BTreeMap<VirtPageNum, FrameTracker>,
-    mmap_areas: Vec<MmapArea>,
+    pub mmap_areas: Vec<MmapArea>,
 }
 
 impl MemorySet {
@@ -203,9 +205,65 @@ impl MemorySet {
         debug!("mapping done");
         memory_set
     }
+    /// load libc.so(elf) to DYNAMIC_LINKER
+    /// return value 0: erro,   other: ld入口地址
+    pub fn load_dl(&mut self) -> usize {
+        let ld = String::from("libc.so"); //libc.so
+        let cwd = String::from("/");
+        if let Some(app_vfile) = open_file(cwd.as_str(), ld.as_str(), OpenFlags::RDONLY) {
+            let all_data = app_vfile.read_all();
+            let elf_data =  all_data.as_slice();
+            let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+            let elf_header = elf.header;
+            let magic = elf_header.pt1.magic;
+            assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf-dl !");
+            let ph_count = elf_header.pt2.ph_count();
+
+            for i in 0..ph_count {
+                let ph = elf.program_header(i).unwrap();
+                let start_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize).into();
+                // let start_va: VirtAddr = (ph.virtual_addr() as usize).into(); // virtual_addr 应该是0
+                let end_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize + ph.mem_size() as usize).into();
+
+                if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                    // println!("[load_dl] start_va:{:#?},   end_va: {:#?} ", start_va, end_va);
+                    let mut map_perm = MapPermission::U;
+                    let ph_flags = ph.flags();
+                    if ph_flags.is_read() {
+                        map_perm |= MapPermission::R;
+                    }
+                    if ph_flags.is_write() {
+                        map_perm |= MapPermission::W;
+                    }
+                    if ph_flags.is_execute() {
+                        map_perm |= MapPermission::X;
+                    }
+                    let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+                    // max_end_vpn = map_area.vpn_range.get_end();
+                    self.push(
+                        map_area,
+                        Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                        start_va.page_offset(),
+                    );  
+
+                    // gdb_println!(
+                    //     SYSCALL_ENABLE,
+                    //     "[load_dl] va[0x{:X} - 0x{:X}] Framed",
+                    //     start_va.0,
+                    //     end_va.0
+                    // );
+                }
+                
+            }
+            return elf_header.pt2.entry_point() as usize;
+        } else {
+            error!("[execve load_dl] dynamic load dl false");
+            return 0;
+        }
+    }
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
+    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>){
         let mut auxv: Vec<AuxHeader> = Vec::new();
         let mut memory_set = Self::new_bare();
         // map trampoline
@@ -218,6 +276,13 @@ impl MemorySet {
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirtPageNum(0);
+        let mut at_base = 0usize;
+            
+        // println!("[from_elf] program_header-2 : type is {:#?} ",ph.get_type().unwrap());
+        // run other programs
+
+        // todo fun load_dl()
+
 
         auxv.push(AuxHeader {
             aux_type: AT_PHENT,
@@ -231,10 +296,49 @@ impl MemorySet {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
-        auxv.push(AuxHeader {
-            aux_type: AT_BASE,
-            value: 0 as usize,
-        });
+
+        // todo is_dynamic = 1;
+        // .interp: 2 第二个
+        // .strtab: ph_count-2 倒数第二个
+        // TODO 通过方法寻找？ 可读性更高？
+        let dl_sec = elf.program_header(1).unwrap();
+        if dl_sec.get_type().unwrap() == xmas_elf::program::Type::Interp {
+            at_base = memory_set.load_dl();
+            if at_base!=0 {
+                // error!("load_dl finish !");
+                auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: DYNAMIC_LINKER as usize,
+                });
+                // println!("chech_addr : {:X} ",at_base);
+                // check
+                // if let Some(chech_addr) = memory_set.page_table.translate_va(DYNAMIC_LINKER.into()){
+                //     println!("chech_addr : {:?} ",chech_addr);
+                // }else {
+                //     error!("check no pass");
+                // }
+
+                at_base += DYNAMIC_LINKER ;
+            }else{
+                error!("dynamic linker error !");
+                return (
+                    memory_set,
+                    0,
+                    0,
+                    0,
+                    auxv,
+                );
+            }
+            
+        }else{
+            auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: 0 as usize,
+            });
+            at_base = 0;
+        }
+        
+
         auxv.push(AuxHeader {
             aux_type: AT_FLAGS,
             value: 0 as usize,
@@ -284,11 +388,17 @@ impl MemorySet {
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
+            // println!("[from_elf] program_header-{:#?} : type is {:#?} ", i, ph.get_type().unwrap());
+            // println!("[from_elf] virtual_addr : {:X},  mem_size is {:X} ", ph.virtual_addr(), ph.mem_size());
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                // println!(" +++ [from_elf] program_header-{:#?} : type is {:#?} ", i, ph.get_type().unwrap());
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
+                if head_va==0 {
+                    head_va = start_va.0;
+                }
                 if ph_flags.is_read() {
                     map_perm |= MapPermission::R;
                 }
@@ -311,25 +421,33 @@ impl MemorySet {
                     start_va.0,
                     end_va.0
                 );
-
-                if start_va.aligned() {
-                    head_va = start_va.0;
-                }
             }
         }
 
         let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        // println!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,
         });
+
+        let entry:usize;
+        if at_base == 0 {
+            // 静态链接程序
+            entry = elf.header.pt2.entry_point() as usize;
+        }else {
+            entry = at_base;
+        }
+
+        // println!("[from_elf] elf entry : {:X} ",elf.header.pt2.entry_point() as usize);
 
         let max_end_va: VirtAddr = max_end_vpn.into();
         let user_heap_base: usize = max_end_va.into();
         (
             memory_set,
             USER_STACK_BASE,
-            elf.header.pt2.entry_point() as usize,
+            // elf.header.pt2.entry_point() as usize,
+            entry,
             user_heap_base,
             auxv,
         )
@@ -418,10 +536,10 @@ impl MemorySet {
     }
 
     /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
-    pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum, fd_table: FdTable) -> isize {
+    pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum) -> isize {
         for mmap_area in self.mmap_areas.iter_mut() {
             if vpn >= mmap_area.start_vpn && vpn < mmap_area.end_vpn {
-                return mmap_area.map_one(&mut self.page_table, fd_table, vpn);
+                return mmap_area.map_one(&mut self.page_table, vpn);
             }
         }
         // if failed
