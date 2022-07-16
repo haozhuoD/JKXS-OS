@@ -7,13 +7,13 @@ use spin::Lazy;
 pub const SIG_DFL: usize = 0;
 pub const SIG_IGN: usize = 1;
 
-pub const SIGINT: usize = 2;
-pub const SIGILL: usize = 4;
-pub const SIGABRT: usize = 6;
-pub const SIGFPE: usize = 8;
-pub const SIGSEGV: usize = 11;
+pub const SIGINT: u32 = 2;
+pub const SIGILL: u32 = 4;
+pub const SIGABRT: u32 = 6;
+pub const SIGFPE: u32 = 8;
+pub const SIGSEGV: u32 = 11;
 
-pub const SIGNAL_ERRORS: Lazy<BTreeMap<usize, String>> = Lazy::new(|| {
+pub const SIGNAL_ERRORS: Lazy<BTreeMap<u32, String>> = Lazy::new(|| {
     let mut set_ = BTreeMap::new();
     set_.insert(SIGINT, String::from("Killed, SIGINT=2"));
     set_.insert(SIGILL, String::from("Illegal Instruction, SIGILL=4"));
@@ -34,21 +34,6 @@ pub struct SigAction {
     pub mask: u64,
 }
 
-#[derive(Clone)]
-pub struct SigInfo {
-    pub pending_signals: VecDeque<usize>,
-    pub sigactions: BTreeMap<usize, SigAction>,
-}
-
-impl SigInfo {
-    pub fn new() -> Self {
-        Self {
-            pending_signals: VecDeque::new(),
-            sigactions: BTreeMap::new(),
-        }
-    }
-}
-
-pub fn is_signal_valid(signum: usize) -> bool {
+pub fn is_signal_valid(signum: u32) -> bool {
     signum >= 1 && signum < 64
 }

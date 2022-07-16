@@ -1,7 +1,8 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, insert_into_tid2task};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
+use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
 
 use alloc::vec::Vec;
@@ -33,6 +34,7 @@ pub struct TaskControlBlockInner {
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub exit_code: Option<i32>,
+    pub pending_signals: VecDeque<u32>,
     trap_cx_backup: Vec<TrapContext>,
 }
 
@@ -85,6 +87,7 @@ impl TaskControlBlock {
                 task_cx: TaskContext::goto_trap_return(kstack_top),
                 task_status: TaskStatus::Ready,
                 exit_code: None,
+                pending_signals: VecDeque::new(),
                 trap_cx_backup: Vec::new(),
             })),
         }

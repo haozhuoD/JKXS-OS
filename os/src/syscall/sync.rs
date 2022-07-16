@@ -157,12 +157,12 @@ fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     fq.waiters_inc();
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
-    let uval = translated_ref(token, uaddr as *const u32); // Need to be atomic
+    let uval = translated_ref(token, uaddr as *const u32);
     debug!(
         "futex_wait: uval: {:x?}, val: {:x?}, timeout: {}",
         uval, val, timeout
     );
-    if *uval != val {
+    if *uval != val { // Need to be atomic
         drop(fq_lock);
         fq.waiters_dec();
         if fq.waiters() == 0 {

@@ -71,7 +71,7 @@ pub fn trap_handler() -> ! {
             let mut process_inner = process.acquire_inner_lock();
             if page_fault_handler(&mut process_inner, stval) == -1 {
                 error!(
-                    "[pid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                     current_tid(),
                     scause.cause(),
                     stval,

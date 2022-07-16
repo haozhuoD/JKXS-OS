@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction, SIG_DFL,
+    pid2process, suspend_current_and_run_next, tid2task, SigAction, SIG_DFL,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -26,7 +26,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::sync_all;
 
-use super::errorno::{EINVAL, EPERM};
+use super::errorno::{EINVAL, EPERM, ESRCH};
 
 pub fn sys_shutdown() -> ! {
     sync_all();
@@ -282,26 +282,39 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
     }
 }
 
-pub fn sys_kill(pid: usize, signum: u32) -> isize {
-    let signum = signum as usize;
-    let ret = if let Some(process) = pid2process(pid) {
+fn do_tkill(tid: usize, signum: u32) -> isize {
+    if let Some(task) = tid2task(tid) {
         if is_signal_valid(signum) {
-            process
-                .acquire_inner_lock()
-                .signal_info
-                .pending_signals
-                .push_back(signum);
+            task.acquire_inner_lock().pending_signals.push_back(signum);
             0
         } else {
-            -EPERM
+            -EINVAL
         }
     } else {
-        -EPERM
-    };
+        -ESRCH
+    }
+}
+
+pub fn sys_kill(pid: usize, signum: u32) -> isize {
+    let ret = do_tkill(pid, signum);
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_kill(pid: {}, signal: {:#x?}) = {}",
+        "sys_kill(pid: {}, signum: {}) = {}",
         pid,
+        signum,
+        ret
+    );
+    ret
+}
+
+pub fn sys_tkill(tid: usize, signum: u32) -> isize {
+    let ret = do_tkill(tid, signum);
+    // let ret = 0;
+    // warning!("tkill disabled...");
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_tkill(tid: {}, signum: {}) = {}",
+        tid,
         signum,
         ret
     );
@@ -471,7 +484,7 @@ pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize {
 }
 
 pub fn sys_sigaction(
-    signum: usize,
+    signum: u32,
     sigaction: *const SigAction,
     old_sigaction: *mut SigAction,
 ) -> isize {
@@ -499,7 +512,7 @@ pub fn sys_sigaction(
     // 当sigaction存在时， 在pcb中注册给定的signaction
     if sigaction as usize != 0 {
         // 如果旧的sigaction存在，则将它保存到指定位置.否则置为 SIG_DFL
-        if let Some(old) = inner.signal_info.sigactions.get(&signum) {
+        if let Some(old) = inner.sigactions.get(&signum) {
             if old_sigaction as usize != 0 {
                 // println!("arg old_sigaction !=0  ");
                 *translated_refmut(token, old_sigaction) = (*old).clone();
@@ -515,7 +528,6 @@ pub fn sys_sigaction(
 
         //在pcb中注册给定的signaction
         inner
-            .signal_info
             .sigactions
             .insert(signum, (*translated_ref(token, sigaction)).clone());
     }

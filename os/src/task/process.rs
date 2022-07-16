@@ -1,6 +1,5 @@
-use super::add_task;
+use super::{add_task, SigAction, insert_into_tid2task};
 use super::manager::insert_into_pid2process;
-use super::signal::SigInfo;
 use super::TaskControlBlock;
 use crate::config::{is_aligned, MMAP_BASE};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -9,6 +8,7 @@ use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -28,7 +28,7 @@ pub struct ProcessControlBlockInner {
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
     pub fd_table: FdTable,
-    pub signal_info: SigInfo,
+    pub sigactions: BTreeMap<u32, SigAction>,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
@@ -92,7 +92,7 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                signal_info: SigInfo::new(),
+                sigactions: BTreeMap::new(),
                 tasks: Vec::new(),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
@@ -107,8 +107,11 @@ impl ProcessControlBlock {
             -1,
             true,
         ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
+
         // prepare trap_cx of main thread
         let task_inner = task.acquire_inner_lock();
+
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
@@ -326,9 +329,6 @@ impl ProcessControlBlock {
                 new_fd_table.push(None);
             }
         }
-        // copy signal-info
-        let mut new_signal_info = parent.signal_info.clone();
-        new_signal_info.pending_signals.clear();
 
         // create child process pcb
         let child = Arc::new(Self {
@@ -340,7 +340,7 @@ impl ProcessControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
-                signal_info: new_signal_info,
+                sigactions: parent.sigactions.clone(),
                 tasks: Vec::new(),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
@@ -365,6 +365,8 @@ impl ProcessControlBlock {
             // but mention that we allocate a new kstack here
             false,
         ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
+
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
         let task_inner = task.acquire_inner_lock();
@@ -414,6 +416,7 @@ impl ProcessControlBlock {
             // mention that we allocate a new kstack / ustack / trap_cx here
             true,
         ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
 
         // attach task to process
         let mut process_inner = self.acquire_inner_lock();

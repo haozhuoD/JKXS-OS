@@ -20,7 +20,7 @@ use switch::__switch;
 pub use aux::*;
 pub use context::TaskContext;
 pub use id::{kstack_alloc, tid_alloc, KernelStack, TidHandle};
-pub use manager::{add_task, pid2process, remove_from_pid2process};
+pub use manager::*;
 pub use process::*;
 pub use processor::*;
 pub use signal::*;
@@ -83,9 +83,13 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let mut task_inner = task.acquire_inner_lock();
     let process = task.process.upgrade().unwrap();
     let rel_tid = task_inner.get_relative_tid();
+
+    remove_from_tid2task(task_inner.gettid());
+
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
+
     // here we do not remove the thread since we are still using the kstack
     // it will be deallocated when sys_waittid is called
     drop(task_inner);
@@ -139,13 +143,13 @@ pub fn add_initproc() {
 }
 
 pub fn perform_signals_of_current() {
+    let task = current_task().unwrap();
     let process = current_process();
 
     loop {
         // 取出pending的第一个signal
-        let signum_option = process
+        let signum_option = task
             .acquire_inner_lock()
-            .signal_info
             .pending_signals
             .pop_front();
         if signum_option.is_none() {
@@ -154,7 +158,7 @@ pub fn perform_signals_of_current() {
         let signum = signum_option.unwrap();
         {
             let inner = process.acquire_inner_lock();
-            if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
+            if let Some(sigaction) = inner.sigactions.get(&signum).clone() {
                 let sigaction = sigaction.clone();
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备
                 if sigaction.handler != SIG_DFL && sigaction.handler != SIG_IGN {
@@ -171,7 +175,7 @@ pub fn perform_signals_of_current() {
                     }
                     trap_cx.x[1] =
                         __sigreturn as usize - __alltraps as usize + SIGRETURN_TRAMPOLINE; // ra
-                    trap_cx.x[10] = signum; // a0 (args0 = signum)
+                    trap_cx.x[10] = signum as usize; // a0 (args0 = signum)
                     trap_cx.sepc = sigaction.handler; // sepc
                     return;
                 }
@@ -198,8 +202,8 @@ pub fn perform_signals_of_current() {
     }
 }
 
-pub fn current_add_signal(signum: usize) {
-    let process = current_process();
-    let mut process_inner = process.acquire_inner_lock();
-    process_inner.signal_info.pending_signals.push_back(signum);
+pub fn current_add_signal(signum: u32) {
+    let task = current_task().unwrap();
+    let mut task_inner = task.acquire_inner_lock();
+    task_inner.pending_signals.push_back(signum);
 }
