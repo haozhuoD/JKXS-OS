@@ -10,7 +10,13 @@ mod switch;
 mod task;
 mod utils;
 
-use crate::{config::SIGRETURN_TRAMPOLINE, loader::get_initproc_binary};
+use core::mem::size_of;
+
+use crate::{
+    config::SIGRETURN_TRAMPOLINE,
+    loader::get_initproc_binary,
+    mm::{translated_byte_buffer, translated_refmut, UserBuffer},
+};
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;
@@ -148,20 +154,18 @@ pub fn perform_signals_of_current() {
 
     loop {
         // 取出pending的第一个signal
-        let signum_option = task
-            .acquire_inner_lock()
-            .pending_signals
-            .pop_front();
+        let signum_option = task.acquire_inner_lock().pending_signals.pop_front();
         if signum_option.is_none() {
             break;
         }
         let signum = signum_option.unwrap();
         {
             let inner = process.acquire_inner_lock();
-            if let Some(sigaction) = inner.sigactions.get(&signum).clone() {
-                let sigaction = sigaction.clone();
+            if let Some(sigaction) = inner.sigactions.get(&signum) {
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备
-                if sigaction.handler != SIG_DFL && sigaction.handler != SIG_IGN {
+                let handler = sigaction.sa_handler;
+                let token = inner.get_user_token();
+                if sigaction.sa_handler != SIG_DFL && sigaction.sa_handler != SIG_IGN {
                     let task = current_task().unwrap();
                     let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
@@ -176,17 +180,29 @@ pub fn perform_signals_of_current() {
                     trap_cx.x[1] =
                         __sigreturn as usize - __alltraps as usize + SIGRETURN_TRAMPOLINE; // ra
                     trap_cx.x[10] = signum as usize; // a0 (args0 = signum)
-                    trap_cx.sepc = sigaction.handler; // sepc
+
+                    if sigaction.sa_flags.contains(SAFlags::SA_SIGINFO) {
+                        trap_cx.x[2] -= size_of::<UContext>(); // sp -= sizeof(ucontext)
+                        trap_cx.x[12] = trap_cx.x[2];          // a2  = sp
+                        let mut userbuf = UserBuffer::new(translated_byte_buffer(
+                            token,
+                            trap_cx.x[2] as *const u8,
+                            size_of::<UContext>(),
+                        ));
+                        userbuf.write(UContext::new().as_bytes()); // copy ucontext to userspace
+                    }
+
+                    trap_cx.sepc = handler; // sepc = handler
                     return;
                 }
-                if sigaction.handler == SIG_DFL {
+                if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
                     // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
                     drop(inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);
                 }
-                if sigaction.handler == SIG_IGN {
+                if sigaction.sa_handler == SIG_IGN {
                     //SIG_IGN 忽略
                     // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_IGN ignore process",current_pid(),signum);
                     return;

@@ -1,5 +1,5 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, insert_into_tid2task};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;

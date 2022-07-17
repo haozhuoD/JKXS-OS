@@ -507,8 +507,6 @@ pub fn sys_sigaction(
         return -EINVAL;
     }
 
-    // let sigact = translated_refmut(token, sigaction as *mut SigAction);
-
     // 当sigaction存在时， 在pcb中注册给定的signaction
     if sigaction as usize != 0 {
         // 如果旧的sigaction存在，则将它保存到指定位置.否则置为 SIG_DFL
@@ -520,9 +518,9 @@ pub fn sys_sigaction(
         } else {
             if old_sigaction as usize != 0 {
                 let sigact_old = translated_refmut(token, old_sigaction);
-                sigact_old.handler = SIG_DFL;
-                sigact_old.sigaction = 0;
-                sigact_old.mask = 0;
+                sigact_old.sa_handler = SIG_DFL;
+                sigact_old.sa_sigaction = 0;
+                sigact_old.sa_mask = 0;
             }
         }
 
