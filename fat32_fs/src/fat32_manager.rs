@@ -299,3 +299,87 @@ impl Drop for FAT32Manager {
         self.sync_fsinfo();
     }
 }
+
+// timeconv
+const DAYS_DELTA: u64 = 365 * 10 + 2;  // 1970-1980
+const SECS_PER_MIN: u64 = 60;
+const SECS_PER_HOUR: u64 = 60 * 60;
+const SECS_PER_DAY: u64 = SECS_PER_HOUR * 24;
+const YDAY: [[u64; 13]; 2] = [
+	[0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365],  // Normal years
+	[0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366],  // Leap years
+];
+
+fn isleap(year: &i64) -> i64 {
+	if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+		1
+	} else {
+		0
+	}
+}
+
+fn math_div(a: i64, b: i64) -> i64 {
+	a / b - (a % b < 0) as i64
+}
+
+fn leaps_between(y1: i64, y2: i64) -> i64 {
+	let leaps1 = math_div(y1-1, 4) - math_div(y1-1, 100)
+		+ math_div(y1-1, 400);
+	let leaps2 = math_div(y2-1, 4) - math_div(y2-1, 100)
+		+ math_div(y2-1, 400);
+	leaps2 - leaps1
+}
+
+pub fn unix2fat_time64(time: u64) -> (u16, u16) {
+	let mut days = (time / SECS_PER_DAY) as i64;
+	let mut rem = time - days as u64 * SECS_PER_DAY;
+	let hour = rem / SECS_PER_HOUR;
+	rem = rem % SECS_PER_HOUR;
+	let min = rem / SECS_PER_MIN;
+	let sec = (rem % SECS_PER_MIN) >> 1;
+	let mut y = 1970;
+	while (days as i64) < 0  || days >= (isleap(&y)+365) {
+		let yg = y + math_div(days, 365);
+		days = days - (yg - y) * 365 - leaps_between(y, yg);
+		y = yg;
+	}
+    // unsupported
+    if y < 1980 {
+        return (0, 0);
+    }
+	let ip = YDAY[isleap(&y) as usize];
+	let mut month: u64 = 11;
+	let mut days = days as u64;
+	while days < ip[month as usize] {
+		month -= 1;
+	}
+	days = days - ip[month as usize] + 1;
+	month += 1;
+	y -= 1980;
+	let time = (hour << 11 | min << 5 | sec) as u16;
+	let date = ((y as u64) << 9 | month << 5| days) as u16;
+	(date, time)
+}
+
+pub fn fat2unix_time64(date: u16, time: u16) -> u64 {
+    if date == 0 && time == 0 {
+        return 0;
+    }
+    let year = (date >> 9) as u64;
+    let month = ((date >> 5) & 0xf) as u64;
+    let day = ((date & 0x1f) - 1) as u64;
+    let mut leap_day = (year + 3) / 4;
+    if year > 120 {  // 2100 isn't leap year
+        leap_day -= 1;
+    }
+    if isleap(&(year as i64)) == 1 && month > 2 {
+        leap_day += 1;
+    }
+    let time = time as u64;
+    let mut sec = (time & 0x1f) << 1;
+    sec += ((time >> 5) & 0x3f) * SECS_PER_MIN;
+    sec += (time >> 11) * SECS_PER_HOUR;
+    sec += (year * 365 + leap_day + YDAY[0][(month-1) as usize] 
+        + day + DAYS_DELTA) * SECS_PER_DAY;
+    sec
+}

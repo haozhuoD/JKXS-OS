@@ -133,7 +133,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PSELECT6=>sys_pselect(args[0] as _, args[1] as _, args[2] as _,args[3] as _,args[4] as _, ),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_FSTAT => sys_fstat(args[0] as _, args[1] as _),
-        SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2], args[3] as _),
+        SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_EXIT => sys_exit(args[0] as _),
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as _),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as _),

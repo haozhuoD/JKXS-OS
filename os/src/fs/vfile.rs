@@ -98,6 +98,26 @@ impl OSFile {
         self.inner.lock().offset = offset;
         offset
     }
+
+    pub fn name(&self) -> String {
+        self.inner.lock().vfile.get_name()
+    }
+
+    pub fn set_modification_time(&self, mtime: u64) {
+        self.inner.lock().vfile.set_modification_time(mtime);
+    }
+
+    pub fn modification_time(&self) -> u64 {
+        self.inner.lock().vfile.modification_time()
+    }
+
+    pub fn set_accessed_time(&self, atime: u64) {
+        self.inner.lock().vfile.set_accessed_time(atime);
+    }
+
+    pub fn accessed_time(&self) -> u64 {
+        self.inner.lock().vfile.accessed_time()
+    }
 }
 
 pub static ROOT_VFILE: Lazy<Arc<VFile>> = Lazy::new(|| {
@@ -119,6 +139,10 @@ pub fn init_rootfs(){
     let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
     let _var = open_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _tmp = open_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _dev = open_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _null = open_file("/dev", "null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _zero = open_file("/dev", "zero", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
+    let _invalid = open_file("/dev/null", "invalid", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
     // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
 }
 
