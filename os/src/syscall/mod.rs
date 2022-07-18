@@ -81,10 +81,10 @@ mod process;
 mod sync;
 mod net;
 
-use fs::*;
-use process::*;
-use sync::*;
-use net::*;
+pub use fs::*;
+pub use process::*;
+pub use sync::*;
+pub use net::*;
 
 use crate::{
     gdb_println,
