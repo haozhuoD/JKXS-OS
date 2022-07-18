@@ -1,7 +1,7 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
     OpenFlags, Pollfd, POLLIN, SEEK_SET, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, SEEK_CUR, SEEK_END,
-    FdSet,TimeSpec, BitOpt,
+    FdSet,TimeSpec, BitOpt, S_IFCHR,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -10,6 +10,7 @@ use crate::mm::{
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::task::{current_process, current_user_token,suspend_current_and_run_next};
+use crate::timer::{get_time_ns, NSEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -20,6 +21,8 @@ use fat32_fs::DIRENT_SZ;
 use super::errorno::*;
 
 const AT_FDCWD: isize = -100;
+const UTIME_NOW: i64 = (1 << 30) - 1;
+const UTIME_OMIT: i64 = (1 << 30) - 2;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -210,7 +213,9 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
 fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
     let mut kstat = Kstat::new();
     kstat.st_mode = {
-        if f.is_dir() {
+        if f.name() == "null" {
+            S_IFCHR
+        } else if f.is_dir() {
             S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
         } else {
             S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
@@ -218,6 +223,9 @@ fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
     };
     kstat.st_ino = f.inode_id() as u64;
     kstat.st_size = f.file_size() as i64;
+    kstat.st_atime_sec = f.accessed_time() as i64;
+    kstat.st_mtime_sec = f.modification_time() as i64;
+    println!("kstat_mtime:{}", kstat.st_mtime_sec);
     userbuf.write(kstat.as_bytes());
     0
 }
@@ -734,11 +742,15 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
     }
 }
 
-pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize) -> isize {
+pub fn sys_utimensat(dirfd: isize, ppath: *const u8, times: *const TimeSpec, _flags: isize) -> isize {
     let process = current_process();
     let token = current_user_token();
     let inner = process.acquire_inner_lock();
-    let path = translated_str(token, path);
+    let path = if ppath as usize != 0 {
+        translated_str(token, ppath)
+    } else {
+        String::from(".")
+    };
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
     if path.starts_with("/") {
@@ -756,7 +768,8 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
             return -EBADF;
         }
         if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
-            if let Some(_) = osfile.find(path.as_str(), OpenFlags::empty()) {
+            if let Some(f) = osfile.find(path.as_str(), OpenFlags::empty()) {
+                do_utimensat(f, times, token);
                 gdb_println!(
                     SYSCALL_ENABLE,
                     "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
@@ -776,7 +789,8 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         );
         return -ENOENT;
     }
-    if let Some(_) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
+    if let Some(f) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
+        do_utimensat(f, times, token);
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
@@ -794,6 +808,28 @@ pub fn sys_utimensat(dirfd: isize, path: *const u8, _times: usize, _flags: isize
         -ENOENT
     );
     return -ENOENT;
+}
+
+fn do_utimensat(file: Arc<OSFile>, times: *const TimeSpec, token: usize) {
+    let curtime = (get_time_ns() / NSEC_PER_SEC) as u64;
+    if times as usize == 0 {
+        file.set_accessed_time(curtime);
+        file.set_modification_time(curtime);
+    } else {
+        let atime_ts = translated_ref(token, times);
+        match atime_ts.tv_nsec {
+            UTIME_NOW => file.set_accessed_time(curtime),
+            UTIME_OMIT => (),
+            _ => file.set_accessed_time(atime_ts.tv_sec as u64),
+        };
+        let mtime_ts = translated_ref(token, unsafe { times.add(1) });
+        println!("mtime: {}, {}, curtime: {}", mtime_ts.tv_sec, mtime_ts.tv_nsec, curtime);
+        match mtime_ts.tv_nsec {
+            UTIME_NOW => file.set_modification_time(curtime),
+            UTIME_OMIT => (),
+            _ => file.set_modification_time(mtime_ts.tv_sec as u64),
+        };
+    }
 }
 
 pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) -> isize {

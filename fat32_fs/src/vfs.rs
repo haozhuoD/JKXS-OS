@@ -1,3 +1,4 @@
+use crate::println;
 use super::{
     BlockDevice,
     fat32_manager::*,
@@ -41,8 +42,8 @@ impl VFile {
         }
     }
 
-    pub fn get_name(&self) -> &str {
-        self.name.as_str()
+    pub fn get_name(&self) -> String {
+        self.name.clone()
     }
 
     pub fn get_attribute(&self) -> u8 {
@@ -548,8 +549,8 @@ impl VFile {
     pub fn stat(&self) -> (i64, i64, i64, i64, u64) {
         self.read_short_dirent(|short_ent| {
             let (_, _, _, _, _, _, ctime) = short_ent.get_creation_time();
-            let (_, _, _, _, _, _, atime) = short_ent.get_accessed_time();
-            let (_, _, _, _, _, _, mtime) = short_ent.get_modification_time();
+            let atime = self.accessed_time();
+            let mtime = self.modification_time();
             let mut size = short_ent.get_size();
             let first_cluster = short_ent.first_cluster();
             if self.is_dir() {
@@ -580,16 +581,33 @@ impl VFile {
         })
     }
 
-    pub fn accessed_time(&self) -> (u32,u32,u32,u32,u32,u32,u64) {
-        self.read_short_dirent(|short_ent| {
+    pub fn accessed_time(&self) -> u64 {
+        let (date, time) = self.read_short_dirent(|short_ent| {
             short_ent.get_accessed_time()
-        })
+        });
+        fat2unix_time64(date, time)
     }
 
-    pub fn modification_time(&self) -> (u32,u32,u32,u32,u32,u32,u64) {
-        self.read_short_dirent(|short_ent| {
+    pub fn set_accessed_time(&self, atime: u64) {
+        let (date, _) = unix2fat_time64(atime);
+        self.modify_short_dirent(|short_ent| {
+            short_ent.set_accessed_time(date)
+        });  
+    }
+
+    pub fn modification_time(&self) -> u64 {
+        let (date, time) = self.read_short_dirent(|short_ent| {
             short_ent.get_modification_time()
-        })
+        });
+        fat2unix_time64(date, time)
+    }
+
+    pub fn set_modification_time(&self, mtime: u64) {
+        let (date, time) = unix2fat_time64(mtime);
+        println!("mtime:{}, date:{}, time:{}", mtime, date, time);
+        self.modify_short_dirent(|short_ent| {
+            short_ent.set_modification_time(date, time)
+        });
     }
 
     // 删除目录项，不清理fat表

@@ -7,18 +7,37 @@ use core::ops::Range;
 
 #[repr(C)]
 pub struct Kstat {
+    // st_dev: u64,      /* ID of device containing file */
+    // pub st_ino: u64,  /* VFile number */
+    // pub st_mode: u32, /* File type and mode */
+    // st_nlink: u32,    /* Number of hard links */
+    // st_uid: u32,
+    // st_gid: u32,
+    // st_blksize: u32,
+    // st_blocks: u64,
+    // pub st_size: i64,
+    // pub st_atime_sec: i64,
+    // st_atime_nsec: i64,
+    // pub st_mtime_sec: i64,
+    // st_mtime_nsec: i64,
+    // st_ctime_sec: i64,
+    // st_ctime_nsec: i64,
+
     st_dev: u64,      /* ID of device containing file */
     pub st_ino: u64,  /* VFile number */
     pub st_mode: u32, /* File type and mode */
     st_nlink: u32,    /* Number of hard links */
     st_uid: u32,
     st_gid: u32,
-    st_blksize: u32,
-    st_blocks: u64,
+    st_rdev: u64,
+    _pad: u64,
     pub st_size: i64,
-    st_atime_sec: i64,
+    st_blksize: u32,
+    _pad2: u32,
+    st_blocks: u64,
+    pub st_atime_sec: i64,
     st_atime_nsec: i64,
-    st_mtime_sec: i64,
+    pub st_mtime_sec: i64,
     st_mtime_nsec: i64,
     st_ctime_sec: i64,
     st_ctime_nsec: i64,
@@ -26,6 +45,23 @@ pub struct Kstat {
 
 impl Kstat {
     pub fn new() -> Self {
+        // Self {
+        //     st_dev: 0,   /* ID of device containing file */
+        //     st_ino: 0,   /* VFile number */
+        //     st_mode: 0,  /* File type and mode */
+        //     st_nlink: 1, /* Number of hard links */
+        //     st_uid: 0,
+        //     st_gid: 0,
+        //     st_blksize: 0,
+        //     st_blocks: 0,
+        //     st_size: 0,
+        //     st_atime_sec: 0,
+        //     st_atime_nsec: 0,
+        //     st_mtime_sec: 0,
+        //     st_mtime_nsec: 0,
+        //     st_ctime_sec: 0,
+        //     st_ctime_nsec: 0,
+        // }
         Self {
             st_dev: 0,   /* ID of device containing file */
             st_ino: 0,   /* VFile number */
@@ -33,9 +69,12 @@ impl Kstat {
             st_nlink: 1, /* Number of hard links */
             st_uid: 0,
             st_gid: 0,
-            st_blksize: 0,
-            st_blocks: 0,
+            st_rdev: 0,
+            _pad: 0,
             st_size: 0,
+            st_blksize: 0,
+            _pad2: 0,
+            st_blocks: 0,
             st_atime_sec: 0,
             st_atime_nsec: 0,
             st_mtime_sec: 0,

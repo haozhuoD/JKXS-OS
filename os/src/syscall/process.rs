@@ -171,7 +171,10 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     // run usershell
     if cwd == "/" && path == "user_shell" {
         let process = current_process();
-        process.exec(get_usershell_binary(), args_vec);
+        let exec_ret = process.exec(get_usershell_binary(), args_vec);
+        if exec_ret!=0 {
+            return -1;
+        }
         unsafe {
             asm!("sfence.vma");
             asm!("fence.i");
@@ -198,7 +201,10 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             args_vec,
             argc
         );
-        process.exec(all_data.as_slice(), args_vec);
+        let exec_ret = process.exec(all_data.as_slice(), args_vec);
+        if exec_ret!=0 {
+            return -1;
+        }
         unsafe {
             asm!("sfence.vma");
             asm!("fence.i");
@@ -336,15 +342,27 @@ pub fn sys_mmap(
     fd: isize,
     offset: usize,
 ) -> isize {
-    // if start != 0 {
-    //     unimplemented!();
-    // }
-    // 如果start != 0，也当start = 0处理
-    let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
+    // let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
+    let start:usize;
+    //若起始地址不为0，选择相信传入的起始地址。不做检查
+    if _start != 0 {
+        start = aligned_up(_start);
+    }else {
+        start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
+    }
     let aligned_len = aligned_up(len);
-
     let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-    gdb_println!(SYSCALL_ENABLE, "sys_mmap(aligned_start: {:#x?}, aligned_len: {}, prot: {:x?}, flags: {:x?}, fd: {}, offset: {} ) = {:#x?}", start, aligned_len, prot, flags, fd, offset, ret);
+
+    gdb_println!(SYSCALL_ENABLE, 
+        "sys_mmap(aligned_start: {:#x?}, aligned_len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
+        start , // start,
+        aligned_len,// aligned_len, 
+        prot, 
+        flags, 
+        fd, 
+        offset, 
+        ret
+    );
     ret
 }
 
