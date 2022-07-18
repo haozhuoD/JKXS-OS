@@ -71,7 +71,7 @@ pub fn trap_handler() -> ! {
             let mut process_inner = process.acquire_inner_lock();
             if page_fault_handler(&mut process_inner, stval) == -1 {
                 error!(
-                    "[pid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    "[pid={}] {:?} in application, bad addr(stval) = {:#x}, bad instruction(sepc) = {:#x}, kernel killed it.",
                     current_pid(),
                     scause.cause(),
                     stval,
@@ -89,6 +89,17 @@ pub fn trap_handler() -> ! {
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
+            error!(
+                "[pid={}] {:?} in application, bad addr(stval) = {:#x}, bad instruction(sepc) = {:#x}, kernel killed it.",
+                current_pid(),
+                scause.cause(),
+                stval,
+                current_trap_cx().sepc,
+            );
+            let cx = current_trap_cx();
+            for (i, v) in cx.x.iter().enumerate() {
+                debug!("x[{}] = {:#x?}", i, v);
+            }
             current_add_signal(SIGILL);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {

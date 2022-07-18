@@ -11,7 +11,7 @@ use core::arch::asm;
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-pub use mmap::MmapArea;
+pub use mmap::{MmapArea, MmapFlags, FdOne};
 pub use page_table::*;
 use riscv::register::satp;
 

@@ -4,9 +4,9 @@ use super::signal::SigInfo;
 use super::add_task;
 use super::{pid_alloc, PidHandle};
 use super::TaskControlBlock;
-use crate::config::{is_aligned, MMAP_BASE};
+use crate::config::{is_aligned, MMAP_BASE, PAGE_SIZE};
 use crate::fs::{FileClass, Stdin, Stdout};
-use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE};
+use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE, MmapFlags};
 use crate::multicore::get_hartid;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
@@ -145,11 +145,14 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) -> isize {
         assert_eq!(self.acquire_inner_lock().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
             MemorySet::from_elf(elf_data);
+        if (ustack_base==0) && (entry_point==0) && (uheap_base==0) {
+            return -1;
+        }
         let new_token = memory_set.token();
         // substitute memory_set
         self.acquire_inner_lock().memory_set = memory_set;
@@ -186,6 +189,7 @@ impl ProcessControlBlock {
         env.push(String::from("LOGNAME=root"));
         env.push(String::from("HOME=/"));
         env.push(String::from("PATH=/"));
+        env.push(String::from("LD_LIBRARY_PATH=/"));
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;
 
@@ -316,6 +320,7 @@ impl ProcessControlBlock {
         trap_cx.x[12] = envp_base;
         trap_cx.x[13] = auxv_base;
         *task_inner.get_trap_cx() = trap_cx;
+        0
     }
 
     /// Only support processes with a single thread.
@@ -407,24 +412,188 @@ impl ProcessControlBlock {
         offset: usize,
     ) -> isize {
         // `flags` field unimplemented
+        // 目前mmap区域只能不断向上增长，无回收重整内存
+        // 目前不检查fd是否合法
         assert!(is_aligned(start) && is_aligned(len));
         let mut inner = self.acquire_inner_lock();
-        assert_eq!(start, inner.mmap_area_top);
+        // assert_eq!(start, inner.mmap_area_top);
 
         let start_vpn = VirtAddr::from(start).floor();
         let end_vpn = VirtAddr::from(start + len).floor();
         let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
+        let mmap_flags = MmapFlags::from_bits(flags).unwrap();
+        // TODO
+        let mmap_fdone: crate::mm::FdOne ;// = inner.fd_table[fd as usize].clone();
+        if fd == -1 {
+            // 转发到fd2, 标准错误输出
+            mmap_fdone = inner.fd_table[2].clone();
+        }else {
+            mmap_fdone = inner.fd_table[fd as usize].clone();
+        }
+        let fixed = mmap_flags.contains(MmapFlags::MAP_FIXED);
+        // println!("mmap_flags: {:#?} , flags: 0x{:x}",mmap_flags,flags);
 
-        inner.memory_set.push_mmap_area(MmapArea::new(
-            start_vpn,
-            end_vpn,
-            map_perm,
-            flags,
-            fd as usize,
-            offset,
-        ));
-        inner.mmap_area_top = VirtAddr::from(end_vpn).0;
+        if !fixed { // 一般情况mmap,注意，此处不判断fd是否有效
+            inner.memory_set.push_mmap_area(MmapArea::new(
+                start_vpn,
+                end_vpn,
+                map_perm,
+                flags,
+                mmap_fdone,
+                fd as usize,
+                offset,
+            ));
+        } else {   // fixed 区域
+            //TODO 可能有部分区间重叠情况考虑不到位
+            // println!("fixed handle start ...");
+            // println!("[new mmap in] start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
+            // let mut collision = false;
+            let mut old_perm = MapPermission::U;
+            let mut old_start = VirtAddr::from(0).floor();
+            let mut old_end = VirtAddr::from(0).floor();
+            let mut old_flags= 0usize;
+            let mut old_fdone =mmap_fdone.clone();
+            let mut old_fd= 0usize;
+            let mut old_offset = 0usize;
+            loop {
+                let mut loop_flag = true;
+                // let mut index = 0;
+                // for (i,mmap_area) in inner.memory_set.mmap_areas.iter().enumerate(){
+                for mmap_area in inner.memory_set.mmap_areas.iter(){
+                    // 在此处提取old_area相关信息
+                    // 1                  1          
+                    // fix area        |----- - -    
+                    // old area           |----|     
+                    // 3                    3               
+                    // fix area          |-- - - -        
+                    // old area        |-----|  
+                    if (start_vpn < mmap_area.start_vpn && end_vpn > mmap_area.start_vpn) 
+                            ||(start_vpn >= mmap_area.start_vpn && start_vpn < mmap_area.end_vpn) {
+                        // index = i;
+                        old_perm = mmap_area.map_perm;
+                        old_start= mmap_area.start_vpn;
+                        old_end = mmap_area.end_vpn;
+                        old_flags= mmap_area.flags;
+                        old_offset = mmap_area.offset;
+                        old_fdone = mmap_area.fd_one.clone();
+                        old_fd = mmap_area.fd;
+                        loop_flag = false;
+                        // collision = true;
+                    }            
+                }
 
+                if loop_flag {
+                    // println!("break ...");
+                    break;
+                }
+                // println!("fixed handle real start ...");
+                inner.memory_set.remove_mmap_area_with_start_vpn(old_start);
+                // fix area        |-----|   
+                // old area           |----| 
+                if start_vpn <= old_start && end_vpn > old_start && end_vpn < old_end {
+                    // println!("fixed situation 1");
+                    let u_old_start: usize = old_start.into();
+                    // 向上取整页
+                    old_offset = old_offset + ( (len+start- u_old_start +PAGE_SIZE -1) / PAGE_SIZE )*PAGE_SIZE; 
+                    old_start = VirtAddr::from(start + len).ceil();
+                    // println!("[part-1]fixed situation 1  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
+                    // println!("[part-2]fixed situation 1  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
+                    inner.memory_set.push_mmap_area(MmapArea::new(
+                        old_start,
+                        old_end ,
+                        old_perm  ,
+                        old_flags,
+                        old_fdone.clone(),
+                        old_fd,
+                        old_offset,
+                    ));
+                }else 
+                // fix area        |----------|   
+                // old area           |----| 
+                // 刚好完全覆盖的情况也在此处
+                if start_vpn <= old_start && end_vpn >= old_end {
+                    // println!("fixed situation 2");
+                    // println!("[part-2]fixed situation 2  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
+                    
+                }else
+                // fix area          |--|        
+                // old area        |-----|   
+                if start_vpn >= old_start && end_vpn <= old_end {
+                    // println!("fixed situation 3");
+                    if end_vpn != old_end{
+                        // 向上取整页
+                        let u_old_start: usize = old_start.into();
+                        let part3_offset = old_offset+( (len+start-u_old_start +PAGE_SIZE -1) / PAGE_SIZE )*PAGE_SIZE; 
+                        let part3_start = VirtAddr::from(start + len).ceil();
+                        let part3_end= old_end;
+                        let part3_perm = old_perm;
+                        let part3_flags= old_flags;
+                        let part3_fd= old_fd;
+                        // println!("[part-3]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",part3_start,part3_end);
+                        inner.memory_set.push_mmap_area(MmapArea::new(
+                            part3_start,
+                            part3_end,
+                            part3_perm,
+                            part3_flags,
+                            old_fdone.clone(),
+                            part3_fd,
+                            part3_offset,
+                        ));
+                    } 
+                
+                    // println!("[part-2]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);      
+                    if start_vpn != old_start {
+                        // 原区域作为第一段
+                        old_end = VirtAddr::from(start+PAGE_SIZE-1).floor();
+                        // println!("[part-1]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
+                        inner.memory_set.push_mmap_area(MmapArea::new(
+                            old_start,
+                            old_end ,
+                            old_perm  ,
+                            old_flags,
+                            old_fdone.clone(),
+                            old_fd,
+                            old_offset,
+                        ));
+                    }                    
+                }else
+                // fix area          |-------|        
+                // old area        |-----|  
+                if start_vpn > old_start && end_vpn > old_end {
+                    // println!("fixed situation 4");
+                    // 原区域作为第一段
+                    old_end = VirtAddr::from(start+PAGE_SIZE-1).floor();
+                    // println!("[part-1]fixed situation 4  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
+                    // println!("[part-2]fixed situation 4  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
+                    inner.memory_set.push_mmap_area(MmapArea::new(
+                        old_start,
+                        old_end ,
+                        old_perm  ,
+                        old_flags,
+                        old_fdone.clone(),
+                        old_fd,
+                        old_offset,
+                    ));   
+                }
+            }
+            inner.memory_set.push_mmap_area(MmapArea::new(
+                start_vpn,
+                end_vpn,
+                map_perm,
+                flags,
+                mmap_fdone,
+                fd as usize,
+                offset,
+            ));
+            // if !collision {
+            //     println!("[mmap-fixed handle] no collision start_vpn:{:#?}  end_vpn:{:#?}  perm :{:#?}",start_vpn,end_vpn,map_perm);
+            // }
+        }
+        // 维护最高mmap区域地址值
+        if inner.mmap_area_top < VirtAddr::from(end_vpn).0{
+            inner.mmap_area_top = VirtAddr::from(end_vpn).0;
+        }
+        
         start as isize
     }
 
