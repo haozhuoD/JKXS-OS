@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, tid2task, SigAction, SIG_DFL,
+    suspend_current_and_run_next, tid2task, SigAction, SIG_DFL, UContext, MContext,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -543,7 +543,21 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     // 恢复之前保存的trap_cx
-    current_task().unwrap().acquire_inner_lock().pop_trap_cx();
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let mut task_inner = task.acquire_inner_lock();
+
+    let trap_cx = task_inner.get_trap_cx();
+    let mc_pc_ptr = trap_cx.x[2] + size_of::<UContext>() - size_of::<MContext>();
+    let mc_pc = *translated_ref(token, mc_pc_ptr as *mut usize);
+    debug!("sigreturn: sp = {:#x?}, mc_pc_ptr = {:#x?}", trap_cx.x[2], mc_pc_ptr);
+    debug!("sigreturn: mc_pc = {:#x?}", mc_pc);
+
+    drop(trap_cx);
+
+    task_inner.pop_trap_cx();
+    task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
+
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }
