@@ -16,6 +16,8 @@ pub struct OSFile {
 
 pub struct OSFileInner {
     offset: usize,
+    atime: u64,
+    mtime: u64,
     vfile: Arc<VFile>,
 }
 
@@ -24,7 +26,7 @@ impl OSFile {
         Self {
             readable,
             writable,
-            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, vfile })),
+            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, atime: 0, mtime: 0, vfile })),
         }
     }
 
@@ -104,19 +106,23 @@ impl OSFile {
     }
 
     pub fn set_modification_time(&self, mtime: u64) {
-        self.inner.lock().vfile.set_modification_time(mtime);
+        // self.inner.lock().vfile.set_modification_time(mtime);
+        self.inner.lock().mtime = mtime;
     }
 
     pub fn modification_time(&self) -> u64 {
-        self.inner.lock().vfile.modification_time()
+        // self.inner.lock().vfile.modification_time()
+        self.inner.lock().mtime
     }
 
     pub fn set_accessed_time(&self, atime: u64) {
-        self.inner.lock().vfile.set_accessed_time(atime);
+        // self.inner.lock().vfile.set_accessed_time(atime);
+        self.inner.lock().atime = atime;
     }
 
     pub fn accessed_time(&self) -> u64 {
-        self.inner.lock().vfile.accessed_time()
+        // self.inner.lock().vfile.accessed_time()
+        self.inner.lock().atime
     }
 }
 
