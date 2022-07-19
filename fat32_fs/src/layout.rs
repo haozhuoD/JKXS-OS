@@ -1,5 +1,5 @@
 
-use crate::CacheMode;
+use crate::{CacheMode};
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -246,7 +246,7 @@ impl ShortDirEntry {
 	}
 
 	pub fn is_valid(&self) -> bool {
-		self.name[0] != 0xE5
+		self.name[0] != 0xE5 && self.name[0] != 0x00
 	}
 
 	pub fn is_deleted(&self) -> bool {
