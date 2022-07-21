@@ -31,3 +31,6 @@ min_log_level_fatal = []
 board_qemu = []
 board_fu740 = []
 local_fu740 = ["board_fu740","min_log_level_debug"]
+
+[profile.release]
+lto = "off"
