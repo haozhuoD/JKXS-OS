@@ -36,6 +36,7 @@ pub struct TaskControlBlockInner {
     pub exit_code: Option<i32>,
     pub pending_signals: VecDeque<u32>,
     trap_cx_backup: Vec<TrapContext>,
+    pub clear_child_tid: Option<ClearChildTid>,
 }
 
 impl TaskControlBlockInner {
@@ -55,6 +56,10 @@ impl TaskControlBlockInner {
 
     pub fn push_trap_cx(&mut self) {
         self.trap_cx_backup.push((*self.get_trap_cx()).clone());
+    }
+
+    pub fn is_signaling(&self) -> bool {
+        !self.trap_cx_backup.is_empty()
     }
 
     pub fn gettid(&self) -> usize {
@@ -89,6 +94,7 @@ impl TaskControlBlock {
                 exit_code: None,
                 pending_signals: VecDeque::new(),
                 trap_cx_backup: Vec::new(),
+                clear_child_tid: None,
             })),
         }
     }
@@ -99,4 +105,10 @@ pub enum TaskStatus {
     Ready,
     Running,
     Blocking,
+}
+
+#[derive(Debug)]
+pub struct ClearChildTid {
+    pub ctid: u32,
+    pub addr: usize,
 }

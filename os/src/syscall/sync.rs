@@ -104,10 +104,10 @@ pub fn sys_futex(
         uaddr2,
         val3,
     );
-    if futex_op & FUTEX_PRIVATE_FLAG == 0 {
-        flags |= FLAGS_SHARED;
-        panic!("Todo: mmap shared!");
-    }
+    // if futex_op & FUTEX_PRIVATE_FLAG == 0 {
+    //     flags |= FLAGS_SHARED;
+    //     panic!("Todo: mmap shared!");
+    // }
     if futex_op & FUTEX_CLOCK_REALTIME != 0 {
         if cmd != FUTEX_WAIT {
             return -EPERM; // ENOSYS
@@ -144,7 +144,7 @@ pub fn sys_futex(
     return ret;
 }
 
-fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
+pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     // futex_wait_setup
     let flag = FUTEX_QUEUE.read().contains_key(&uaddr);
     let mut fq_writer = FUTEX_QUEUE.write();
@@ -158,10 +158,10 @@ fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
     let uval = translated_ref(token, uaddr as *const u32);
-    debug!(
-        "futex_wait: uval: {:x?}, val: {:x?}, timeout: {}",
-        uval, val, timeout
-    );
+    // debug!(
+    //     "futex_wait: uval: {:x?}, val: {:x?}, timeout: {}",
+    //     uval, val, timeout
+    // );
     if *uval != val { // Need to be atomic
         drop(fq_lock);
         fq.waiters_dec();
@@ -206,11 +206,11 @@ fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     return 0;
 }
 
-fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
-    debug!(
-        "****futex_wake: uaddr: {:x?}, nr_wake: {:x?}",
-        uaddr, nr_wake
-    );
+pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
+    // debug!(
+    //     "****futex_wake: uaddr: {:x?}, nr_wake: {:x?}",
+    //     uaddr, nr_wake
+    // );
     if !FUTEX_QUEUE.read().contains_key(&uaddr) {
         return 0;
     }
@@ -222,7 +222,7 @@ fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
         return 0;
     }
     let nr_wake = nr_wake.min(waiters as u32);
-    debug!("futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
+    // debug!("futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
 
     let mut wakeup_queue = Vec::new();
     (0..nr_wake as usize).for_each(|_| {

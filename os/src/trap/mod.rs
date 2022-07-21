@@ -3,7 +3,7 @@ mod page_fault;
 
 use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
-use crate::syscall::syscall;
+use crate::syscall::{syscall, SYSCALL_SIGRETURN};
 use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx, current_trap_cx_user_va,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
@@ -45,12 +45,17 @@ pub fn trap_handler() -> ! {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
+    let mut is_sigreturn = false;
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
+            // debug!("syscall sepc = {:#x?}", cx.sepc);
             cx.sepc += 4;
             // get system call return value
+            if cx.x[17] == SYSCALL_SIGRETURN {
+                is_sigreturn = true;
+            }
             let result = syscall(
                 cx.x[17],
                 [cx.x[10], cx.x[11], cx.x[12], cx.x[13], cx.x[14], cx.x[15]],
@@ -104,7 +109,9 @@ pub fn trap_handler() -> ! {
         }
     }
     // 处理当前进程的信号
-    perform_signals_of_current();
+    if !is_sigreturn {
+        perform_signals_of_current();
+    }
     trap_return();
 }
 

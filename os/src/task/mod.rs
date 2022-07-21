@@ -15,7 +15,7 @@ use core::mem::size_of;
 use crate::{
     config::SIGRETURN_TRAMPOLINE,
     loader::get_initproc_binary,
-    mm::{translated_byte_buffer, translated_refmut, UserBuffer},
+    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake,
 };
 use alloc::sync::Arc;
 use manager::fetch_task;
@@ -30,7 +30,7 @@ pub use manager::*;
 pub use process::*;
 pub use processor::*;
 pub use signal::*;
-pub use task::{TaskControlBlock, TaskStatus};
+pub use task::*;
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
@@ -89,6 +89,13 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let mut task_inner = task.acquire_inner_lock();
     let process = task.process.upgrade().unwrap();
     let rel_tid = task_inner.get_relative_tid();
+
+    // do futex_wake if clear_child_tid is set
+    if let Some(p) = &task_inner.clear_child_tid {
+        // debug!("p = {:#x?}", p);
+        *translated_refmut(process.acquire_inner_lock().get_user_token(), p.addr as *mut u32) = 0;
+        futex_wake(p.addr, 1);
+    }
 
     remove_from_tid2task(task_inner.gettid());
 
@@ -152,6 +159,11 @@ pub fn perform_signals_of_current() {
     let task = current_task().unwrap();
     let process = current_process();
 
+    // 禁止中断嵌套
+    if task.acquire_inner_lock().is_signaling() {
+        return;
+    }
+
     loop {
         // 取出pending的第一个signal
         let signum_option = task.acquire_inner_lock().pending_signals.pop_front();
@@ -166,7 +178,6 @@ pub fn perform_signals_of_current() {
                 let handler = sigaction.sa_handler;
                 let token = inner.get_user_token();
                 if sigaction.sa_handler != SIG_DFL && sigaction.sa_handler != SIG_IGN {
-                    let task = current_task().unwrap();
                     let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
@@ -184,7 +195,7 @@ pub fn perform_signals_of_current() {
                     if sigaction.sa_flags.contains(SAFlags::SA_SIGINFO) {
                         trap_cx.x[2] -= size_of::<UContext>(); // sp -= sizeof(ucontext)
                         trap_cx.x[12] = trap_cx.x[2];          // a2  = sp
-                        debug!("sighandler prepare: sp = {:#x?}, a2 = {:#x?}", trap_cx.x[2], trap_cx.x[12]);
+                        // debug!("sighandler prepare: sp = {:#x?}, a2 = {:#x?}", trap_cx.x[2], trap_cx.x[12]);
                         let mut userbuf = UserBuffer::new(translated_byte_buffer(
                             token,
                             trap_cx.x[2] as *const u8,

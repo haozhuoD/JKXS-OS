@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    suspend_current_and_run_next, tid2task, SigAction, SIG_DFL, UContext, MContext,
+    suspend_current_and_run_next, tid2task, MContext, SigAction, UContext, SIG_DFL, ClearChildTid,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -109,10 +109,10 @@ bitflags! {
 
 pub fn sys_clone(
     flags: u32,
-    child_stack: *const u8,
-    ptid: *mut u32,
-    ctid: *mut u32,
+    stack_ptr: *const u8,
+    ptid_ptr: *mut u32,
     newtls: usize,
+    ctid_ptr: *mut u32,
 ) -> isize {
     let current_process = current_process();
     let flags = CloneFlags::from_bits(flags).unwrap();
@@ -120,26 +120,39 @@ pub fn sys_clone(
     let ret = if flags.contains(CloneFlags::CLONE_THREAD) {
         // create a thread here
         let task = current_task().unwrap();
-        let new_task = current_process.clone_thread(task, flags, child_stack as usize, newtls);
-        let new_task_inner = new_task.acquire_inner_lock();
+        let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
+        let mut new_task_inner = new_task.acquire_inner_lock();
         let new_tid = new_task_inner.gettid();
-        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid as usize != 0 {
-            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid) =
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
+            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
                 new_tid as u32;
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
+            new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
+                current_process.acquire_inner_lock().get_user_token(),
+                ctid_ptr,
+            ),
+            addr: ctid_ptr as usize});
         }
         new_tid
     } else {
-        let new_process = current_process.fork(flags, child_stack as usize, newtls);
+        let new_process = current_process.fork(flags, stack_ptr as usize, newtls);
         let new_pid = new_process.getpid();
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
+            unimplemented!("CLONE_PARENT_SETTID");
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
+            unimplemented!("CLONE_CHILD_CLEARTID");
+        }
         new_pid
     };
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_clone(flags: {:#x?}, child_stack: {:#x?}, ptid: {:#x?}, ctid: {:#x?}, newtls: {:#x?}) = {}",
         flags,
-        child_stack,
-        ptid,
-        ctid,
+        stack_ptr,
+        ptid_ptr,
+        ctid_ptr,
         newtls,
         ret
     );
@@ -404,11 +417,17 @@ pub fn sys_times(time: *mut usize) -> isize {
     0
 }
 
-pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
+pub fn sys_set_tid_address(ptr: *mut u32) -> isize {
     let token = current_user_token();
     let task = current_task().unwrap();
     let task_inner = task.acquire_inner_lock();
-    *translated_refmut(token, ptr) = task_inner.gettid();
+
+    let ctid = if let Some(p) = &task_inner.clear_child_tid {
+        p.ctid
+    } else {
+        0
+    };
+    *translated_refmut(token, ptr) = ctid;
     let ret = task_inner.gettid();
     gdb_println!(
         SYSCALL_ENABLE,
@@ -549,15 +568,21 @@ pub fn sys_sigreturn() -> isize {
 
     let trap_cx = task_inner.get_trap_cx();
     let mc_pc_ptr = trap_cx.x[2] + size_of::<UContext>() - size_of::<MContext>();
-    let mc_pc = *translated_ref(token, mc_pc_ptr as *mut usize);
-    debug!("sigreturn: sp = {:#x?}, mc_pc_ptr = {:#x?}", trap_cx.x[2], mc_pc_ptr);
-    debug!("sigreturn: mc_pc = {:#x?}", mc_pc);
+    let mc_pc = *translated_ref(token, mc_pc_ptr as *mut u32) as usize;
+    // debug!(
+    //     "sigreturn: sp = {:#x?}, mc_pc_ptr = {:#x?}",
+    //     trap_cx.x[2], mc_pc_ptr
+    // );
+    // debug!("sigreturn: mc_pc = {:#x?}", mc_pc);
 
     drop(trap_cx);
 
     task_inner.pop_trap_cx();
-    task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
-
+    if mc_pc != 0 {
+        // if cancel valid
+        // warning!("prepare to exit the thread");
+        task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
+    }
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }

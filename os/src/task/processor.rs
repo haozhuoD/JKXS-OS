@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 use spin::{Lazy, RwLock};
 
 pub struct Processor {
-    tid: RwLock<usize>,
+    __debug_tid: RwLock<usize>,
     inner: RefCell<ProcessorInner>,
 }
 
@@ -25,7 +25,7 @@ unsafe impl Sync for Processor {}
 impl Processor {
     pub fn new() -> Self {
         Self {
-            tid: RwLock::new(0),
+            __debug_tid: RwLock::new(0),
             inner: RefCell::new(ProcessorInner {
                 current: None,
                 idle_task_cx: TaskContext::zero_init(),
@@ -151,7 +151,7 @@ pub fn run_tasks() {
             let mut task_inner = task.acquire_inner_lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
-            *(PROCESSORS[get_hartid()].tid.write()) = task_inner.gettid();
+            *(PROCESSORS[get_hartid()].__debug_tid.write()) = task_inner.gettid();
             drop(task_inner);
             // release coming task TCB manually
             // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().getpid());
@@ -181,7 +181,7 @@ pub fn current_process() -> Arc<ProcessControlBlock> {
 }
 
 pub fn current_tid() -> usize {
-    *(PROCESSORS[get_hartid()].tid.read())
+    *(PROCESSORS[get_hartid()].__debug_tid.read())
 }
 
 pub fn current_user_token() -> usize {
