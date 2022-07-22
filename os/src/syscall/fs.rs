@@ -181,6 +181,11 @@ pub fn sys_dup(fd: usize) -> isize {
     if inner.fd_table[fd].is_none() {
         return -EPERM;
     }
+
+    if inner.fd_table.len() >inner.fd_max {
+        return -EMFILE;
+    }
+
     let new_fd = inner.alloc_fd(0);
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
     gdb_println!(SYSCALL_ENABLE, "sys_dup(fd: {}) = {}", fd, new_fd);
@@ -196,6 +201,11 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     if inner.fd_table[old_fd].is_none() {
         return -EPERM;
     }
+
+    if old_fd  >inner.fd_max {
+        return -EMFILE;
+    }
+
     while new_fd >= inner.fd_table.len() {
         inner.fd_table.push(None);
     }

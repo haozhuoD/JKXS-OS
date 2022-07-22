@@ -2,7 +2,7 @@ use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
 
-use crate::config::{aligned_up, PAGE_SIZE};
+use crate::config::{aligned_up, PAGE_SIZE, FDMAX};
 use crate::console::{
     clear_log_buf, read_all_log_buf, read_clear_log_buf, read_log_buf, unread_size, LOG_BUF_LEN,
 };
@@ -710,4 +710,68 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
         0
     );
     0
+}
+
+// SYSCALL_PRLIMIT
+#[derive(Clone,Copy,Debug)]
+pub struct RLimit64 {
+	pub rlim_cur: usize ,
+	pub rlim_max: usize ,
+}
+// The resource argument :
+// const RLIMIT_CPU : usize = 0;
+// const RLIMIT_FSIZE : usize = 1;
+// const RLIMIT_DATA : usize = 2;
+// const RLIMIT_STACK : usize = 3;
+// const RLIMIT_CORE : usize = 4;
+// const RLIMIT_RSS : usize = 5;
+// const RLIMIT_NPROC : usize = 6;
+const RLIMIT_NOFILE : usize = 7;
+// const RLIMIT_MEMLOCK : usize = 8;
+// const RLIMIT_AS : usize = 9;
+// const RLIMIT_LOCKS : usize = 10;
+// const RLIMIT_SIGPENDING : usize = 11;
+// const RLIMIT_MSGQUEUE : usize = 12;
+// const RLIMIT_NICE : usize = 13;
+// const RLIMIT_RTPRIO : usize = 14;
+// const RLIMIT_RTTIME : usize = 15;
+// const RLIM_NLIMITS : usize = 16;
+/// 仅实现不完整的RLIMIT_NOFILE
+pub fn sys_prlimit(pid:usize, resource:usize, rlimit:*const RLimit64, old_rlimit: *mut RLimit64) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let mut inner = process.acquire_inner_lock();
+    let ret = match resource{
+        RLIMIT_NOFILE => {
+            // 仅仅记录值到inner.fd_max
+            if rlimit as usize != 0 {
+                let _rlimit = translated_ref(token, rlimit);
+                inner.fd_max =  _rlimit.rlim_max - 1;
+            }
+            if old_rlimit as usize != 0 && inner.fd_max != FDMAX {
+                let _old_rlimit = translated_refmut(token, old_rlimit);
+                _old_rlimit.rlim_cur = inner.fd_max + 1;
+                _old_rlimit.rlim_max = inner.fd_max + 1;
+            }
+            0
+        }
+        _ => {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_prlimit() unsuport resource:{}",
+                resource,
+            );
+            0
+        }
+    };
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_prlimit(pid: {:x?}, resource: {:x?}, rlimit: {:#?}, old_rlimit: {:#?} ) = {}",
+        pid,
+        resource,
+        rlimit,
+        old_rlimit,
+        ret
+    );
+    ret
 }

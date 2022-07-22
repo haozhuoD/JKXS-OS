@@ -189,6 +189,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),
+        SYSCALL_PRLIMIT => sys_prlimit(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
         SYS_SENDTO => sys_sendto(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
         SYS_RECVFROM => sys_recvfrom(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
         _ => {

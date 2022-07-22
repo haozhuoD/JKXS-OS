@@ -223,7 +223,7 @@ impl VFile {
 
     // 通过短文件名name(可以是小写)查找目录dir_ent下的目录项
     fn find_short_name(&self, name: &str, dir_ent: &ShortDirEntry) -> Option<VFile> {
-        let print_flag = name=="libc.so";
+        // let print_flag = name=="libc.so";
 
         if dir_ent.first_cluster() == 2 && name == ".." {
             return Some(self.get_fs().get_root_vfile(&self.get_fs()));
@@ -241,17 +241,17 @@ impl VFile {
                 &self.block_device
             );
             if read_sz != DIRENT_SZ || short_ent.is_empty() {
-                if print_flag {
-                    let mut buf: [u8; 512] = [0; 512];
-                    dir_ent.read_at(
-                        0, 
-                        buf.as_mut(), 
-                        &self.fs, 
-                        &self.fs.get_fat(), 
-                        &self.block_device
-                    );
-                    println!("{:?}", buf);
-                }
+                // if print_flag {
+                //     let mut buf: [u8; 512] = [0; 512];
+                //     dir_ent.read_at(
+                //         0, 
+                //         buf.as_mut(), 
+                //         &self.fs, 
+                //         &self.fs.get_fat(), 
+                //         &self.block_device
+                //     );
+                //     println!("{:?}", buf);
+                // }
                 return None;
             }
             if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {

@@ -21,6 +21,9 @@ pub const MMAP_BASE: usize = 0x8000_0000;
 //1G = 0x0-0x3FFF_FFFF    256G = 0x0-0x3F_0000_0000
 pub const DYNAMIC_LINKER:usize = 0x30_0000_0000;
 
+// max fd
+pub const FDMAX: usize = 1023;
+
 pub use crate::board::{CLOCK_FREQ, MMIO};
 
 #[allow(unused)]
