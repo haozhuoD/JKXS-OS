@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use riscv::register::satp;
 use spin::{Lazy, RwLock};
-use crate::fs::{open_file, OpenFlags, OSFile};
+use crate::fs::{open_file, OpenFlags};
 
 extern "C" {
     fn stext();

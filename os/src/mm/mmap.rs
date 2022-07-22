@@ -3,7 +3,6 @@ use alloc::collections::BTreeMap;
 use crate::{
     config::PAGE_SIZE,
     fs::{File, FileClass},
-    task::FdTable,
 };
 
 use super::{

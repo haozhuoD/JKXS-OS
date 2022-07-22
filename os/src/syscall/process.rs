@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    suspend_current_and_run_next, tid2task, MContext, SigAction, UContext, SIG_DFL, ClearChildTid,
+    suspend_current_and_run_next, tid2task, _MContext, SigAction, UContext, SIG_DFL, ClearChildTid,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;

@@ -53,11 +53,11 @@ pub fn is_signal_valid(signum: u32) -> bool {
     signum >= 1 && signum < 64
 }
 
-pub struct MContext {
+pub struct _MContext {
     __gregs: [usize; 32],
 }
 
-pub struct Signaltstack {
+pub struct _Signaltstack {
     ss_sp: usize,
     ss_flags: u32,
     ss_size: usize,
