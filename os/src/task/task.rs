@@ -2,6 +2,7 @@ use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
+use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
 
 use alloc::vec::Vec;
@@ -33,11 +34,14 @@ pub struct TaskControlBlockInner {
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub exit_code: Option<i32>,
-    trap_cx_backup: Vec<TrapContext>
+    pub pending_signals: VecDeque<u32>,
+    trap_cx_backup: Vec<TrapContext>,
+    pub clear_child_tid: Option<ClearChildTid>,
 }
 
 impl TaskControlBlockInner {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
+        // debug!("trap_cx_ppn = {:#x?}", self.trap_cx_ppn);
         self.trap_cx_ppn.get_mut()
     }
 
@@ -53,15 +57,29 @@ impl TaskControlBlockInner {
     pub fn push_trap_cx(&mut self) {
         self.trap_cx_backup.push((*self.get_trap_cx()).clone());
     }
+
+    pub fn is_signaling(&self) -> bool {
+        !self.trap_cx_backup.is_empty()
+    }
+
+    pub fn gettid(&self) -> usize {
+        self.res.as_ref().unwrap().tid.0
+    }
+
+    pub fn get_relative_tid(&self) -> usize {
+        self.res.as_ref().unwrap().rel_tid
+    }
 }
 
 impl TaskControlBlock {
+    /// pid == -1 means that the main thread is being created.
     pub fn new(
         process: Arc<ProcessControlBlock>,
         ustack_base: usize,
+        pid: isize,
         alloc_user_res: bool,
     ) -> Self {
-        let res = TaskUserRes::new(Arc::clone(&process), ustack_base, alloc_user_res);
+        let res = TaskUserRes::new(Arc::clone(&process), ustack_base, pid, alloc_user_res);
         let trap_cx_ppn = res.trap_cx_ppn();
         let kstack = kstack_alloc();
         let kstack_top = kstack.get_top();
@@ -74,7 +92,9 @@ impl TaskControlBlock {
                 task_cx: TaskContext::goto_trap_return(kstack_top),
                 task_status: TaskStatus::Ready,
                 exit_code: None,
-                trap_cx_backup: Vec::new()
+                pending_signals: VecDeque::new(),
+                trap_cx_backup: Vec::new(),
+                clear_child_tid: None,
             })),
         }
     }
@@ -85,4 +105,10 @@ pub enum TaskStatus {
     Ready,
     Running,
     Blocking,
+}
+
+#[derive(Debug)]
+pub struct ClearChildTid {
+    pub ctid: u32,
+    pub addr: usize,
 }

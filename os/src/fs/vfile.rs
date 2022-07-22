@@ -155,7 +155,6 @@ pub fn init_rootfs(){
         core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), 1)
     }]);
     zero.write(zero_write);
-    // let file = open("/","ls", OpenFlags::CREATE, DiskInodeType::File).unwrap();
 }
 
 bitflags! {
@@ -290,10 +289,10 @@ impl File for OSFile {
         }
         total_write_size
     }
-    fn read_blocking(&self) -> bool{
+    fn read_blocking(&self) -> bool {
         false
     }
-    fn write_blocking(&self)->bool{
+    fn write_blocking(&self) -> bool {
         false
     }
 }

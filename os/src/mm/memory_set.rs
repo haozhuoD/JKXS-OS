@@ -5,9 +5,9 @@ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE, SIGRETURN_TRAMPOLINE, DYNAMIC_LINKER};
 use crate::gdb_println;
-use crate::monitor::{MAPPING_ENABLE, QEMU, SYSCALL_ENABLE};
+use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
-    AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
+    AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
 };
 use alloc::collections::BTreeMap;
@@ -500,11 +500,12 @@ impl MemorySet {
             let frame = frame_alloc().unwrap();
             let ppn = frame.ppn;
             memory_set.heap_frames.insert(vpn, frame);
-            memory_set.page_table.map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            memory_set
+                .page_table
+                .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
             // copy data from another space
             let src_ppn = user_space.translate(vpn).unwrap().ppn();
-            ppn
-                .get_bytes_array()
+            ppn.get_bytes_array()
                 .copy_from_slice(src_ppn.get_bytes_array());
         }
         memory_set
@@ -520,7 +521,11 @@ impl MemorySet {
 
     /// 设置pte标志位，失败返回-1
     pub fn set_pte_flags(&self, vpn: VirtPageNum, flags: PTEFlags) -> isize {
-        if self.page_table.set_pte_flags(vpn, flags).is_none() {-1} else {0}
+        if self.page_table.set_pte_flags(vpn, flags).is_none() {
+            -1
+        } else {
+            0
+        }
     }
 
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {

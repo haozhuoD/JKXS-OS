@@ -39,7 +39,4 @@ impl TrapContext {
         cx.set_sp(sp);
         cx
     }
-    pub fn empty() -> Self {
-        Self::app_init_context(0, 0, 0, 0, 0, 0)
-    }
 }

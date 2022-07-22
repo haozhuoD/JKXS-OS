@@ -72,9 +72,9 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
-const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
-const SYSCALL_READDIR: usize = 0xf001;
-const SYSCALL_SHUTDOWN: usize = 0xffff;
+pub const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
+pub const SYSCALL_READDIR: usize = 0xf001;
+pub const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod errorno;
 mod fs;
@@ -132,7 +132,13 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PREAD64 => sys_pread64(args[0], args[1] as _, args[2], args[3]),
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2] as _, args[3]),
         SYSCALL_PPOLL => sys_ppoll(args[0] as _, args[1], args[2] as _),
-        SYSCALL_PSELECT6=>sys_pselect(args[0] as _, args[1] as _, args[2] as _,args[3] as _,args[4] as _, ),
+        SYSCALL_PSELECT6 => sys_pselect(
+            args[0] as _,
+            args[1] as _,
+            args[2] as _,
+            args[3] as _,
+            args[4] as _,
+        ),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_FSTAT => sys_fstat(args[0] as _, args[1] as _),
         SYSCALL_UTIMENSAT => sys_utimensat(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
@@ -140,11 +146,11 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXIT_GRUOP => sys_exit_group(args[0] as _),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as _),
         SYSCALL_FUTEX => sys_futex(
-            args[0] as _, 
-            args[1], 
-            args[2] as _, 
-            args[3] as _, 
-            args[4] as _, 
+            args[0] as _,
+            args[1],
+            args[2] as _,
+            args[3] as _,
+            args[4] as _,
             args[5] as _,
         ),
         SYSCALL_NANOSLEEP => sys_sleep(args[0] as _),
@@ -152,7 +158,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SYSLOG => sys_syslog(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_SCHED_YIELD => sys_yield(),
         SYSCALL_KILL => sys_kill(args[0], args[1] as _),
-        SYSCALL_SIGACTION => sys_sigaction(args[0], args[1] as _, args[2] as _),
+        SYSCALL_TKILL => sys_tkill(args[0], args[1] as _),
+        SYSCALL_SIGACTION => sys_sigaction(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_SIGPROCMASK => 0,
         SYSCALL_SIGRETURN => sys_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as _),
@@ -163,7 +170,13 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETTID => sys_getpid(),
         SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_CLONE => sys_clone(args[0] as _, args[1] as _, args[2], args[3] as _, args[4]),
+        SYSCALL_CLONE => sys_clone(
+            args[0] as _,
+            args[1] as _,
+            args[2] as _,
+            args[3] as _,
+            args[4] as _,
+        ),
         SYSCALL_EXECVE => sys_exec(args[0] as _, args[1] as _),
         SYSCALL_MMAP => sys_mmap(
             args[0] as _,
@@ -181,10 +194,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SYSINFO => sys_sysinfo(args[0] as _),
         SYSCALL_RENAMEAT2 => sys_renameat2(
             args[0] as _,
-            args[1] as _, 
-            args[2] as _, 
-            args[3] as _, 
-            args[4]
+            args[1] as _,
+            args[2] as _,
+            args[3] as _,
+            args[4],
         ),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),

@@ -10,22 +10,27 @@ mod switch;
 mod task;
 mod utils;
 
-use crate::{loader::get_initproc_binary, task::utils::user_backtrace, config::SIGRETURN_TRAMPOLINE};
+use core::mem::size_of;
+
+use crate::{
+    config::SIGRETURN_TRAMPOLINE,
+    loader::get_initproc_binary,
+    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake,
+};
 use alloc::sync::Arc;
 use manager::fetch_task;
 use process::ProcessControlBlock;
 use spin::Lazy;
 use switch::__switch;
-use crate::config::TRAMPOLINE;
 
 pub use aux::*;
 pub use context::TaskContext;
-pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-pub use manager::{add_task, pid2process, remove_from_pid2process};
+pub use id::{kstack_alloc, tid_alloc, KernelStack, TidHandle};
+pub use manager::*;
 pub use process::*;
 pub use processor::*;
 pub use signal::*;
-pub use task::{TaskControlBlock, TaskStatus};
+pub use task::*;
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
@@ -53,30 +58,58 @@ pub fn suspend_current_and_run_next() {
     schedule(task_cx_ptr);
 }
 
-// pub fn block_current_and_run_next() {
-//     let task = take_current_task().unwrap();
-//     let mut task_inner = task.inner_exclusive_access();
-//     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-//     task_inner.task_status = TaskStatus::Blocking;
-//     drop(task_inner);
-//     schedule(task_cx_ptr);
-// }
+pub fn block_current_and_run_next() {
+    // There must be an application running.
+    // 将原来的take_current改为current_task，也就是说blocking之后，task仍然保留在processor中
+    let task = current_task().unwrap();
+
+    // ---- access current TCB exclusively
+    let mut task_inner = task.acquire_inner_lock();
+    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+    // Change status to Ready
+    task_inner.task_status = TaskStatus::Blocking;
+    drop(task_inner);
+    drop(task);
+
+    // jump to scheduling cycle
+    schedule(task_cx_ptr);
+}
+
+/// 需要保证该task目前没有上锁
+pub fn unblock_task(task: Arc<TaskControlBlock>) {
+    let mut task_inner = task.acquire_inner_lock();
+    assert!(task_inner.task_status == TaskStatus::Blocking);
+    task_inner.task_status = TaskStatus::Ready;
+    drop(task_inner);
+    add_task(task);
+}
 
 pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     let task = take_current_task().unwrap();
     let mut task_inner = task.acquire_inner_lock();
     let process = task.process.upgrade().unwrap();
-    let tid = task_inner.res.as_ref().unwrap().tid;
+    let rel_tid = task_inner.get_relative_tid();
+
+    // do futex_wake if clear_child_tid is set
+    if let Some(p) = &task_inner.clear_child_tid {
+        // debug!("p = {:#x?}", p);
+        *translated_refmut(process.acquire_inner_lock().get_user_token(), p.addr as *mut u32) = 0;
+        futex_wake(p.addr, 1);
+    }
+
+    remove_from_tid2task(task_inner.gettid());
+
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
+
     // here we do not remove the thread since we are still using the kstack
     // it will be deallocated when sys_waittid is called
     drop(task_inner);
     drop(task);
     // however, if this is the main thread of current process
     // the process should terminate at once
-    if tid == 0 || is_exit_group {
+    if rel_tid == 0 || is_exit_group {
         remove_from_pid2process(process.getpid());
         let mut initproc_inner = INITPROC.acquire_inner_lock();
         let mut process_inner = process.acquire_inner_lock();
@@ -123,26 +156,28 @@ pub fn add_initproc() {
 }
 
 pub fn perform_signals_of_current() {
+    let task = current_task().unwrap();
     let process = current_process();
+
+    // 禁止中断嵌套
+    if task.acquire_inner_lock().is_signaling() {
+        return;
+    }
 
     loop {
         // 取出pending的第一个signal
-        let signum_option = process
-            .acquire_inner_lock()
-            .signal_info
-            .pending_signals
-            .pop_front();
+        let signum_option = task.acquire_inner_lock().pending_signals.pop_front();
         if signum_option.is_none() {
             break;
         }
         let signum = signum_option.unwrap();
         {
-            let mut inner = process.acquire_inner_lock();
-            if let Some(sigaction) = inner.signal_info.sigactions.get(&signum).clone() {
-                let sigaction = sigaction.clone();
+            let inner = process.acquire_inner_lock();
+            if let Some(sigaction) = inner.sigactions.get(&signum) {
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备
-                if sigaction.handler != SIG_DFL && sigaction.handler != SIG_IGN { 
-                    let task = current_task().unwrap();
+                let handler = sigaction.sa_handler;
+                let token = inner.get_user_token();
+                if sigaction.sa_handler != SIG_DFL && sigaction.sa_handler != SIG_IGN {
                     let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
@@ -153,23 +188,38 @@ pub fn perform_signals_of_current() {
                         fn __sigreturn();
                         fn __alltraps();
                     }
-                    trap_cx.x[1] = __sigreturn as usize - __alltraps as usize + SIGRETURN_TRAMPOLINE; // ra 
-                    trap_cx.x[10] = signum; // a0 (args0 = signum)
-                    trap_cx.sepc = sigaction.handler; // sepc
+                    trap_cx.x[1] =
+                        __sigreturn as usize - __alltraps as usize + SIGRETURN_TRAMPOLINE; // ra
+                    trap_cx.x[10] = signum as usize; // a0 (args0 = signum)
+
+                    if sigaction.sa_flags.contains(SAFlags::SA_SIGINFO) {
+                        trap_cx.x[2] -= size_of::<UContext>(); // sp -= sizeof(ucontext)
+                        trap_cx.x[12] = trap_cx.x[2];          // a2  = sp
+                        // debug!("sighandler prepare: sp = {:#x?}, a2 = {:#x?}", trap_cx.x[2], trap_cx.x[12]);
+                        let mut userbuf = UserBuffer::new(translated_byte_buffer(
+                            token,
+                            trap_cx.x[2] as *const u8,
+                            size_of::<UContext>(),
+                        ));
+                        let mut ucontext = UContext::new();
+                        *ucontext.mc_pc() = trap_cx.sepc;
+                        userbuf.write(ucontext.as_bytes()); // copy ucontext to userspace
+                    }
+
+                    trap_cx.sepc = handler; // sepc = handler
                     return;
                 }
-                if sigaction.handler == SIG_DFL{
+                if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
                     // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
                     drop(inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);
                 }
-                if sigaction.handler == SIG_IGN
-                {
+                if sigaction.sa_handler == SIG_IGN {
                     //SIG_IGN 忽略
                     // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_IGN ignore process",current_pid(),signum);
-                    return ;
+                    return;
                 }
             }
         }
@@ -182,8 +232,8 @@ pub fn perform_signals_of_current() {
     }
 }
 
-pub fn current_add_signal(signum: usize) {
-    let process = current_process();
-    let mut process_inner = process.acquire_inner_lock();
-    process_inner.signal_info.pending_signals.push_back(signum);
+pub fn current_add_signal(signum: u32) {
+    let task = current_task().unwrap();
+    let mut task_inner = task.acquire_inner_lock();
+    task_inner.pending_signals.push_back(signum);
 }

@@ -11,7 +11,11 @@ pub unsafe fn user_backtrace(token: usize, s0: usize) {
         if fp == USER_STACK_BASE {
             break;
         }
-        debug!("#{}:ra={:#x}", i, *(translated_ref(token, (fp - 8) as *const usize)));
+        debug!(
+            "#{}:ra={:#x}",
+            i,
+            *(translated_ref(token, (fp - 8) as *const usize))
+        );
         fp = *(translated_ref(token, (fp - 16) as *const usize));
         if fp == 0 {
             warning!("corrupted stack frame");

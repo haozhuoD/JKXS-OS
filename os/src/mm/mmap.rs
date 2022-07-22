@@ -89,7 +89,10 @@ impl MmapArea {
         for (vpn, frame) in (&self.data_frames).into_iter() {
             let ppn = frame.ppn;
             // let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
-            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap() | PTEFlags::U | PTEFlags::R | PTEFlags::W;
+            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap()
+                | PTEFlags::U
+                | PTEFlags::R
+                | PTEFlags::W;
             page_table.map(*vpn, ppn, pte_flags);
         }
     }

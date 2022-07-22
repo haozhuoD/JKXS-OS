@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 use spin::{Lazy, RwLock};
 
 pub struct Processor {
-    pid: RwLock<usize>,
+    __debug_tid: RwLock<usize>,
     inner: RefCell<ProcessorInner>,
 }
 
@@ -25,7 +25,7 @@ unsafe impl Sync for Processor {}
 impl Processor {
     pub fn new() -> Self {
         Self {
-            pid: RwLock::new(0),
+            __debug_tid: RwLock::new(0),
             inner: RefCell::new(ProcessorInner {
                 current: None,
                 idle_task_cx: TaskContext::zero_init(),
@@ -136,22 +136,25 @@ pub fn run_tasks() {
         //             }
         //         }
         // }
-        
 
         // 核不绑定任务  √
-        if let Some(last_task) = processor.take_current() {    
-            add_task(last_task);
+        if let Some(last_task) = processor.take_current() {
+            // Do not enqueue blocking tasks!
+            if last_task.acquire_inner_lock().task_status == TaskStatus::Ready {
+                add_task(last_task);
+            }
         }
+
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.acquire_inner_lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            *(PROCESSORS[get_hartid()].__debug_tid.write()) = task_inner.gettid();
             drop(task_inner);
             // release coming task TCB manually
-            // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-            *(PROCESSORS[get_hartid()].pid.write()) = task.process.upgrade().unwrap().pid.0;
+            // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().getpid());
             processor.current = Some(task);
 
             // release processor manually
@@ -160,24 +163,6 @@ pub fn run_tasks() {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         }
-
-        // if let Some(task) = fetch_task() {
-        //     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-        //     // access coming task TCB exclusively
-        //     let mut task_inner = task.inner_exclusive_access();
-        //     let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-        //     task_inner.task_status = TaskStatus::Running;
-        //     drop(task_inner);
-        //     // release coming task TCB manually
-        //     // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().pid.0);
-        //     processor.current = Some(task);
-
-        //     // release processor manually
-        //     drop(processor);
-        //     unsafe {
-        //         __switch(idle_task_cx_ptr, next_task_cx_ptr);
-        //     }
-        // }
     }
 }
 
@@ -195,8 +180,8 @@ pub fn current_process() -> Arc<ProcessControlBlock> {
     current_task().unwrap().process.upgrade().unwrap()
 }
 
-pub fn current_pid() -> usize {
-    *(PROCESSORS[get_hartid()].pid.read())
+pub fn current_tid() -> usize {
+    *(PROCESSORS[get_hartid()].__debug_tid.read())
 }
 
 pub fn current_user_token() -> usize {
@@ -205,10 +190,7 @@ pub fn current_user_token() -> usize {
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task()
-        .unwrap()
-        .acquire_inner_lock()
-        .get_trap_cx()
+    current_task().unwrap().acquire_inner_lock().get_trap_cx()
 }
 
 pub fn current_trap_cx_user_va() -> usize {

@@ -19,10 +19,10 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     fn write(&self, buf: UserBuffer) -> usize;
     fn read_blocking(&self) -> bool;
-    fn write_blocking(&self)->bool;
+    fn write_blocking(&self) -> bool;
 }
 
 pub use finfo::*;
 pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
-pub use vfile::{list_apps, init_rootfs, open_file, path2vec, OSFile, OpenFlags};
+pub use vfile::{init_rootfs, list_apps, open_file, path2vec, OSFile, OpenFlags};

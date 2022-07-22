@@ -880,7 +880,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
  * in the FPIOA */
 const SD_CS: u32 = 0;
 
-// 无需实现如下功能  
+// 无需实现如下功能
 /** Connect pins to internal functions */
 // fn io_init() {
 //     fpioa::set_function(io::SPI0_SCLK, fpioa::function::SPI0_SCLK);
@@ -928,7 +928,10 @@ fn init_sdcard() -> SDCard<SPIImpl> {
     assert!(num_sectors > 0);
 
     // choose hfpclkpll
-    let clocks = peripherals.PRCI.hfpclkpllsel.modify(|_, w| w.source().hfpclkpll());;
+    let clocks = peripherals
+        .PRCI
+        .hfpclkpllsel
+        .modify(|_, w| w.source().hfpclkpll());
     println!("[sdcard] init sdcard finish !");
     sd
 }
@@ -958,7 +961,7 @@ impl BlockDevice for SDCardWrapper {
         // self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
         let ret = self.0.lock().write_sector(buf, block_id as u32 + 10274);
         let ret = match ret {
-            Ok(()) =>  {},//println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
+            Ok(()) => {} //println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
             Err(()) => {
                 println!(
                     "[BlockDevice-write_sector] retry write block {} | {} ......",

@@ -209,9 +209,9 @@ impl SPI for SPIImpl {
         // assert!(div <= 4096);
 
         // let div =;
-        unsafe{
+        unsafe {
             //sckdiv `div` Field only [11:0] 12bit
-            self.spi.sckdiv.modify(|_,w| w.bits(div));
+            self.spi.sckdiv.modify(|_, w| w.bits(div));
         }
         //
         // spi_clk / 2*(div+1)
@@ -219,7 +219,7 @@ impl SPI for SPIImpl {
     }
 
     // 如何分离一次trans的两次 transfer mode : 不分离send和recv都是一次完整的数据交换   设置 dir
-    // 不处理time out ，死循环等       
+    // 不处理time out ，死循环等
     // 参考 linux-source code
     // todo 目前做法：fmt::dir 置为Rx:0  ,永远交换     参考: sifive/freedom-metal
     //       另一些可能： 在单独发送数据时是否需要将fmt::dir 置为Tx:1 使其不填充接收fifo
@@ -265,8 +265,10 @@ impl SPI for SPIImpl {
             }
             // enque spi
             for _ in 0..n_words {
-                unsafe{
-                    self.spi.txdata.modify(|_,w| w.data().bits(tx[len - remaining]));
+                unsafe {
+                    self.spi
+                        .txdata
+                        .modify(|_, w| w.data().bits(tx[len - remaining]));
                 }
                 remaining = remaining - 1;
             }
@@ -309,13 +311,13 @@ impl SPI for SPIImpl {
             let n_words = if 8usize < remaining { 8 } else { remaining };
             // enqueue n_words junk for transmission
             for _ in 0..n_words {
-                unsafe{
-                    self.spi.txdata.modify(|_,w| w.bits(0xff)); //默认发ff
+                unsafe {
+                    self.spi.txdata.modify(|_, w| w.bits(0xff)); //默认发ff
                 }
             }
             // set watermark
-            unsafe{
-                self.spi.rxmark.modify(|_,w| w.bits(n_words as u32 - 1));
+            unsafe {
+                self.spi.rxmark.modify(|_, w| w.bits(n_words as u32 - 1));
             }
             // wait for spi
             while !self.spi.ip.read().rxwm().bits() {

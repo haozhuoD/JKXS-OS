@@ -1,8 +1,5 @@
-use super::id::RecycleAllocator;
+use super::{add_task, SigAction, insert_into_tid2task};
 use super::manager::insert_into_pid2process;
-use super::signal::SigInfo;
-use super::add_task;
-use super::{pid_alloc, PidHandle};
 use super::TaskControlBlock;
 use crate::config::{is_aligned, MMAP_BASE, PAGE_SIZE, FDMAX};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -11,6 +8,7 @@ use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -19,13 +17,11 @@ use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
-    // immutable
-    pub pid: PidHandle,
-    // mutable
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub struct ProcessControlBlockInner {
+    pub pid: usize,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -33,13 +29,12 @@ pub struct ProcessControlBlockInner {
     pub exit_code: i32,
     pub fd_max: usize,
     pub fd_table: FdTable,
-    pub signal_info: SigInfo,
+    pub sigactions: BTreeMap<u32, SigAction>,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
-    pub task_res_allocator: RecycleAllocator,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
     pub user_heap_top: usize,
-    pub mmap_area_top: usize,  // mmap area
+    pub mmap_area_top: usize, // mmap area
 }
 
 pub type FdTable = Vec<Option<FileClass>>;
@@ -64,14 +59,6 @@ impl ProcessControlBlockInner {
         }
     }
 
-    pub fn alloc_tid(&mut self) -> usize {
-        self.task_res_allocator.alloc()
-    }
-
-    pub fn dealloc_tid(&mut self, tid: usize) {
-        self.task_res_allocator.dealloc(tid)
-    }
-
     pub fn thread_count(&self) -> usize {
         self.tasks.len()
     }
@@ -90,10 +77,9 @@ impl ProcessControlBlock {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
-        let pid_handle = pid_alloc();
         let process = Arc::new(Self {
-            pid: pid_handle,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: None,
@@ -108,9 +94,8 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                signal_info: SigInfo::new(),
+                sigactions: BTreeMap::new(),
                 tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
@@ -121,14 +106,18 @@ impl ProcessControlBlock {
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&process),
             ustack_base,
+            -1,
             true,
         ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
+
         // prepare trap_cx of main thread
         let task_inner = task.acquire_inner_lock();
+
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
-        drop(task_inner);
+
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             ustack_top,
@@ -139,8 +128,12 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
+        process_inner.pid = task_inner.gettid();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+
+        drop(task_inner);
         drop(process_inner);
+
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
@@ -331,10 +324,9 @@ impl ProcessControlBlock {
         let mut parent = self.acquire_inner_lock();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
-        // 复制trapframe等内存区域均在这里
+        // 复制trap_cx和ustack等内存区域均在这里
+        // 因此后面不需要再allow_user_res了
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
-        // alloc a pid
-        let pid = pid_alloc();
         // copy fd table
         let mut new_fd_table = Vec::new();
         for fd in parent.fd_table.iter() {
@@ -344,14 +336,11 @@ impl ProcessControlBlock {
                 new_fd_table.push(None);
             }
         }
-        // copy signal-info
-        let mut new_signal_info = parent.signal_info.clone();
-        new_signal_info.pending_signals.clear();
 
         // create child process pcb
         let child = Arc::new(Self {
-            pid,
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
+                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
@@ -359,9 +348,8 @@ impl ProcessControlBlock {
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: new_fd_table,
-                signal_info: new_signal_info,
+                sigactions: parent.sigactions.clone(),
                 tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
@@ -370,7 +358,6 @@ impl ProcessControlBlock {
         });
         // add child
         parent.children.push(Arc::clone(&child));
-
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&child),
@@ -381,16 +368,20 @@ impl ProcessControlBlock {
                 .as_ref()
                 .unwrap()
                 .ustack_base(),
+            -1,
             // here we do not allocate trap_cx or ustack again
             // but mention that we allocate a new kstack here
             false,
         ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
+
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
+        let task_inner = task.acquire_inner_lock();
+        child_inner.pid = task_inner.gettid();
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
-        let task_inner = task.acquire_inner_lock();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         // sys_fork return value ...
@@ -408,6 +399,65 @@ impl ProcessControlBlock {
         // add this thread to scheduler
         add_task(task);
         child
+    }
+
+    pub fn clone_thread(
+        self: &Arc<Self>,
+        parent_task: Arc<TaskControlBlock>,
+        flags: CloneFlags,
+        stack: usize,
+        newtls: usize,
+    ) -> Arc<TaskControlBlock> {
+        let pid = self.acquire_inner_lock().pid;
+        // only the main thread can create a sub-thread
+        assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0);
+        // create main thread of child process
+        let task = Arc::new(TaskControlBlock::new(
+            Arc::clone(self),
+            parent_task
+                .acquire_inner_lock()
+                .res
+                .as_ref()
+                .unwrap()
+                .ustack_base(),
+            pid as isize,
+            // mention that we allocate a new kstack / ustack / trap_cx here
+            true,
+        ));
+        insert_into_tid2task(task.acquire_inner_lock().gettid(), Arc::clone(&task));
+
+        // attach task to process
+        let mut process_inner = self.acquire_inner_lock();
+        let task_inner = task.acquire_inner_lock();
+        let task_rel_tid = task_inner.get_relative_tid();
+        let tasks = &mut process_inner.tasks;
+
+        while tasks.len() < task_rel_tid + 1 {
+            tasks.push(None);
+        }
+        tasks[task_rel_tid] = Some(Arc::clone(&task));
+        let trap_cx = task_inner.get_trap_cx();
+
+        // copy trap_cx from the parent thread
+        *trap_cx = *parent_task.acquire_inner_lock().get_trap_cx();
+
+        // modify kstack_top in trap_cx of this thread
+        trap_cx.kernel_sp = task.kstack.get_top();
+        // sys_fork return value ...
+        if stack != 0 {
+            trap_cx.set_sp(stack);
+        }
+        trap_cx.x[10] = 0;
+        if flags.contains(CloneFlags::CLONE_SETTLS) {
+            trap_cx.x[4] = newtls;
+        }
+
+        drop(task_inner);
+        // add this thread to scheduler
+        add_task(Arc::clone(&task));
+
+        task
+        // child
     }
 
     /// 插入一个mmap区域（此时尚未实际分配数据页），并更新进程mmap顶部位置
@@ -614,6 +664,6 @@ impl ProcessControlBlock {
     }
 
     pub fn getpid(&self) -> usize {
-        self.pid.0
+        self.acquire_inner_lock().pid
     }
 }

@@ -33,11 +33,11 @@ mod task;
 mod timer;
 mod trap;
 
-use spin::{Lazy, RwLock, Mutex};
-use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
+use crate::multicore::{get_hartid, save_hartid};
 use core::arch::global_asm;
 #[allow(unused)]
 use drivers::block_device_test;
+use spin::{Lazy, Mutex, RwLock};
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -84,7 +84,7 @@ pub fn rust_main() -> ! {
     //     let core_f = drivers::core_freq();
     //     info!("core_freq is 0x{:X} ", core_f);
     // }
-    
+
     *(BOOT_CORE_READY.write()) = true;
     // wakeup_other_cores(hartid);
 
@@ -101,10 +101,9 @@ fn others_main(hartid: usize) -> ! {
     timer::set_next_trigger();
     info!("(Other Cores) Riscv hartid {} run ", hartid);
     {
-        
         let mut boot_count = BOOT_COUNT.lock();
         // println!("==== boot_count++ before:{:?} ==== ",boot_count);
-        *boot_count += 1 ;
+        *boot_count += 1;
     }
     task::run_tasks();
     panic!("Unreachable in others_main!");

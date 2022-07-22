@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    pid2process, suspend_current_and_run_next, SigAction,SIG_DFL,
+    suspend_current_and_run_next, tid2task, MContext, SigAction, UContext, SIG_DFL, ClearChildTid,
 };
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
@@ -26,7 +26,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fat32_fs::sync_all;
 
-use super::errorno::{EINVAL, EPERM};
+use super::errorno::{EINVAL, EPERM, ESRCH};
 
 pub fn sys_shutdown() -> ! {
     sync_all();
@@ -46,11 +46,10 @@ pub fn sys_exit(exit_code: i32) -> ! {
 pub fn sys_exit_group(exit_code: i32) -> ! {
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_exit_group(exit_code: {} ) = ?",
+        "sys_exit_group(exit_code: {}) = ?",
         exit_code
     );
     exit_current_and_run_next(exit_code, true);
-    panic!("Unreachable in sys_exit!");
 }
 
 pub fn sys_yield() -> isize {
@@ -110,44 +109,58 @@ bitflags! {
 
 pub fn sys_clone(
     flags: u32,
-    child_stack: *const u8,
-    ptid: usize,
-    ctid: *mut u32,
+    stack_ptr: *const u8,
+    ptid_ptr: *mut u32,
     newtls: usize,
+    ctid_ptr: *mut u32,
 ) -> isize {
     let current_process = current_process();
     let flags = CloneFlags::from_bits(flags).unwrap();
-    let new_process = current_process.fork(flags, child_stack as usize, newtls);
-    let new_pid = new_process.getpid();
 
-    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid as usize != 0 {
-        *translated_refmut(
-            new_process.acquire_inner_lock().get_user_token(),
-            ctid,
-        ) = new_pid as u32;
-    }
-    // // modify trap context of new_task, because it returns immediately after switching
-    // let new_process_inner = new_process.inner_exclusive_access();
-    // let task = new_process_inner.tasks[0].as_ref().unwrap();
-    // let trap_cx = task.inner_exclusive_access().get_trap_cx();
-    // // we do not have to move to next instruction since we have done it before
-    // // for child process, fork returns 0
-    // trap_cx.x[10] = 0;
+    let ret = if flags.contains(CloneFlags::CLONE_THREAD) {
+        // create a thread here
+        let task = current_task().unwrap();
+        let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
+        let mut new_task_inner = new_task.acquire_inner_lock();
+        let new_tid = new_task_inner.gettid();
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
+            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
+                new_tid as u32;
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
+            new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
+                current_process.acquire_inner_lock().get_user_token(),
+                ctid_ptr,
+            ),
+            addr: ctid_ptr as usize});
+        }
+        new_tid
+    } else {
+        let new_process = current_process.fork(flags, stack_ptr as usize, newtls);
+        let new_pid = new_process.getpid();
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
+            unimplemented!("CLONE_PARENT_SETTID");
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
+            unimplemented!("CLONE_CHILD_CLEARTID");
+        }
+        new_pid
+    };
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_clone(flags: {:#x?}, child_stack: {:#x?}, ptid: {:#x?}, ctid: {:#x?}, newtls: {:#x?}) = {}",
         flags,
-        child_stack,
-        ptid,
-        ctid,
+        stack_ptr,
+        ptid_ptr,
+        ctid_ptr,
         newtls,
-        new_pid
+        ret
     );
     unsafe {
         asm!("sfence.vma");
         asm!("fence.i");
     }
-    new_pid as isize
+    ret as isize
 }
 
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
@@ -236,12 +249,12 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
             {
                 found = false;
             }
-
             // child process exists
             if found {
                 let pair = inner.children.iter().enumerate().find(|(_, p)| {
                     // ++++ temporarily access child PCB exclusively
-                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p.getpid())
+                    let p_pid = p.getpid();
+                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p_pid)
                     // ++++ release child PCB
                 });
                 if let Some((idx, _)) = pair {
@@ -288,26 +301,39 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
     }
 }
 
-pub fn sys_kill(pid: usize, signum: u32) -> isize {
-    let signum = signum as usize;
-    let ret = if let Some(process) = pid2process(pid) {
+fn do_tkill(tid: usize, signum: u32) -> isize {
+    if let Some(task) = tid2task(tid) {
         if is_signal_valid(signum) {
-            process
-                .acquire_inner_lock()
-                .signal_info
-                .pending_signals
-                .push_back(signum);
+            task.acquire_inner_lock().pending_signals.push_back(signum);
             0
         } else {
-            -EPERM
+            -EINVAL
         }
     } else {
-        -EPERM
-    };
+        -ESRCH
+    }
+}
+
+pub fn sys_kill(pid: usize, signum: u32) -> isize {
+    let ret = do_tkill(pid, signum);
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_kill(pid: {}, signal: {:#x?}) = {}",
+        "sys_kill(pid: {}, signum: {}) = {}",
         pid,
+        signum,
+        ret
+    );
+    ret
+}
+
+pub fn sys_tkill(tid: usize, signum: u32) -> isize {
+    let ret = do_tkill(tid, signum);
+    // let ret = 0;
+    // warning!("tkill disabled...");
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_tkill(tid: {}, signum: {}) = {}",
+        tid,
         signum,
         ret
     );
@@ -409,17 +435,25 @@ pub fn sys_times(time: *mut usize) -> isize {
     0
 }
 
-pub fn sys_set_tid_address(ptr: *mut usize) -> isize {
+pub fn sys_set_tid_address(ptr: *mut u32) -> isize {
     let token = current_user_token();
-    *translated_refmut(token, ptr) = current_process().pid.0;
-    let ret = current_process().pid.0 as isize;
+    let task = current_task().unwrap();
+    let task_inner = task.acquire_inner_lock();
+
+    let ctid = if let Some(p) = &task_inner.clear_child_tid {
+        p.ctid
+    } else {
+        0
+    };
+    *translated_refmut(token, ptr) = ctid;
+    let ret = task_inner.gettid();
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_set_tid_address(ptr: {:#x?}) = {}",
         ptr,
         ret
     );
-    ret
+    ret as isize
 }
 
 #[repr(packed)]
@@ -487,7 +521,7 @@ pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize {
 }
 
 pub fn sys_sigaction(
-    signum: usize,
+    signum: u32,
     sigaction: *const SigAction,
     old_sigaction: *mut SigAction,
 ) -> isize {
@@ -510,28 +544,25 @@ pub fn sys_sigaction(
         return -EINVAL;
     }
 
-    // let sigact = translated_refmut(token, sigaction as *mut SigAction);
-
-    // 当sigaction存在时， 在pcb中注册给定的signaction 
+    // 当sigaction存在时， 在pcb中注册给定的signaction
     if sigaction as usize != 0 {
         // 如果旧的sigaction存在，则将它保存到指定位置.否则置为 SIG_DFL
-        if let Some(old) = inner.signal_info.sigactions.get(&signum) {
+        if let Some(old) = inner.sigactions.get(&signum) {
             if old_sigaction as usize != 0 {
                 // println!("arg old_sigaction !=0  ");
                 *translated_refmut(token, old_sigaction) = (*old).clone();
             }
-        }else{
+        } else {
             if old_sigaction as usize != 0 {
                 let sigact_old = translated_refmut(token, old_sigaction);
-                sigact_old.handler = SIG_DFL;
-                sigact_old.sigaction = 0;
-                sigact_old.mask = 0;
+                sigact_old.sa_handler = SIG_DFL;
+                sigact_old.sa_sigaction = 0;
+                sigact_old.sa_mask = 0;
             }
         }
 
         //在pcb中注册给定的signaction
         inner
-            .signal_info
             .sigactions
             .insert(signum, (*translated_ref(token, sigaction)).clone());
     }
@@ -540,7 +571,7 @@ pub fn sys_sigaction(
         SYSCALL_ENABLE,
         "sys_sigaction(signum: {}, sigaction = {:#x?}, old_sigaction = {:#x?} ) = {}",
         signum,
-        sigaction,// sigact,
+        sigaction, // sigact,
         old_sigaction,
         0
     );
@@ -549,10 +580,24 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     // 恢复之前保存的trap_cx
-    current_task()
-        .unwrap()
-        .acquire_inner_lock()
-        .pop_trap_cx();
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let mut task_inner = task.acquire_inner_lock();
+
+    let trap_cx = task_inner.get_trap_cx();
+    let mc_pc_ptr = trap_cx.x[2] + UContext::pc_offset();
+    let mc_pc = *translated_ref(token, mc_pc_ptr as *mut u32) as usize;
+    // debug!(
+    //     "sigreturn: sp = {:#x?}, mc_pc_ptr = {:#x?}",
+    //     trap_cx.x[2], mc_pc_ptr
+    // );
+    // debug!("sigreturn: mc_pc = {:#x?}", mc_pc);
+
+    drop(trap_cx);
+
+    task_inner.pop_trap_cx();
+    task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
+
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }

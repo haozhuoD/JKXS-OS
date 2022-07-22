@@ -52,10 +52,10 @@ impl File for Stdin {
     fn write(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot write to stdin!");
     }
-    fn read_blocking(&self) -> bool{
+    fn read_blocking(&self) -> bool {
         false
     }
-    fn write_blocking(&self)->bool{
+    fn write_blocking(&self) -> bool {
         false
     }
 }
@@ -76,10 +76,10 @@ impl File for Stdout {
         }
         user_buf.len()
     }
-    fn read_blocking(&self) -> bool{
+    fn read_blocking(&self) -> bool {
         false
     }
-    fn write_blocking(&self)->bool{
+    fn write_blocking(&self) -> bool {
         false
     }
 }
