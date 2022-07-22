@@ -4,7 +4,7 @@ use super::signal::SigInfo;
 use super::add_task;
 use super::{pid_alloc, PidHandle};
 use super::TaskControlBlock;
-use crate::config::{is_aligned, MMAP_BASE, PAGE_SIZE};
+use crate::config::{is_aligned, MMAP_BASE, PAGE_SIZE, FDMAX};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE, MmapFlags};
 use crate::multicore::get_hartid;
@@ -31,6 +31,7 @@ pub struct ProcessControlBlockInner {
     pub parent: Option<Weak<ProcessControlBlock>>,
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
+    pub fd_max: usize,
     pub fd_table: FdTable,
     pub signal_info: SigInfo,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
@@ -98,6 +99,7 @@ impl ProcessControlBlock {
                 parent: None,
                 children: Vec::new(),
                 exit_code: 0,
+                fd_max: FDMAX,
                 fd_table: vec![
                     // 0 -> stdin
                     Some(FileClass::Abs(Arc::new(Stdin))),
@@ -355,6 +357,7 @@ impl ProcessControlBlock {
                 parent: Some(Arc::downgrade(self)),
                 children: Vec::new(),
                 exit_code: 0,
+                fd_max: FDMAX,
                 fd_table: new_fd_table,
                 signal_info: new_signal_info,
                 tasks: Vec::new(),

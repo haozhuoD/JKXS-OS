@@ -1,7 +1,7 @@
 use crate::fs::{
     make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
     OpenFlags, Pollfd, POLLIN, SEEK_SET, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, SEEK_CUR, SEEK_END,
-    FdSet,TimeSpec, BitOpt, S_IFCHR,
+    FdSet,TimeSpec, BitOpt, S_IFCHR, Statfs,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -181,6 +181,11 @@ pub fn sys_dup(fd: usize) -> isize {
     if inner.fd_table[fd].is_none() {
         return -EPERM;
     }
+
+    if inner.fd_table.len() >inner.fd_max {
+        return -EMFILE;
+    }
+
     let new_fd = inner.alloc_fd(0);
     inner.fd_table[new_fd] = inner.fd_table[fd].clone();
     gdb_println!(SYSCALL_ENABLE, "sys_dup(fd: {}) = {}", fd, new_fd);
@@ -196,6 +201,11 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     if inner.fd_table[old_fd].is_none() {
         return -EPERM;
     }
+
+    if old_fd  >inner.fd_max {
+        return -EMFILE;
+    }
+
     while new_fd >= inner.fd_table.len() {
         inner.fd_table.push(None);
     }
@@ -225,7 +235,6 @@ fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
     kstat.st_size = f.file_size() as i64;
     kstat.st_atime_sec = f.accessed_time() as i64;
     kstat.st_mtime_sec = f.modification_time() as i64;
-    println!("kstat_mtime:{}", kstat.st_mtime_sec);
     userbuf.write(kstat.as_bytes());
     0
 }
@@ -767,8 +776,18 @@ pub fn sys_utimensat(dirfd: isize, ppath: *const u8, times: *const TimeSpec, _fl
             );
             return -EBADF;
         }
-        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
-            if let Some(f) = osfile.find(path.as_str(), OpenFlags::empty()) {
+        if let Some(FileClass::File(osfile)) = inner.fd_table[dirfd].clone() {
+            if ppath as usize == 0 {
+                do_utimensat(osfile, times, token);
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_utimensat(dirfd = {}, path = {:#?}) = {}",
+                    dirfd,
+                    path,
+                    0
+                );
+                return 0;
+            } else if let Some(f) = osfile.find(path.as_str(), OpenFlags::empty()) {
                 do_utimensat(f, times, token);
                 gdb_println!(
                     SYSCALL_ENABLE,
@@ -789,6 +808,7 @@ pub fn sys_utimensat(dirfd: isize, ppath: *const u8, times: *const TimeSpec, _fl
         );
         return -ENOENT;
     }
+    // println!("base_path:{}, path: {}", base_path, path);
     if let Some(f) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
         do_utimensat(f, times, token);
         gdb_println!(
@@ -823,7 +843,6 @@ fn do_utimensat(file: Arc<OSFile>, times: *const TimeSpec, token: usize) {
             _ => file.set_accessed_time(atime_ts.tv_sec as u64),
         };
         let mtime_ts = translated_ref(token, unsafe { times.add(1) });
-        println!("mtime: {}, {}, curtime: {}", mtime_ts.tv_sec, mtime_ts.tv_nsec, curtime);
         match mtime_ts.tv_nsec {
             UTIME_NOW => file.set_modification_time(curtime),
             UTIME_OMIT => (),
@@ -1312,4 +1331,20 @@ pub fn sys_pread64(fd: usize, buf: *mut u8, count: usize, offset: usize) -> isiz
         ret
     );
     ret
+}
+
+pub fn sys_statfs(_path: *const u8, buf: *const u8) -> isize {
+    let token = current_user_token();
+    let buf_vec = translated_byte_buffer(token, buf, size_of::<Statfs>());
+    let mut userbuf = UserBuffer::new(buf_vec);
+    let statfs = Statfs::new();
+    userbuf.write(statfs.as_bytes());
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_statfs(path: {:#x?}, buf: {:#x?}) = {}",
+        _path,
+        buf,
+        0
+    );
+    return 0;
 }

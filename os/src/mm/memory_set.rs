@@ -15,8 +15,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use riscv::register::satp;
 use spin::{Lazy, RwLock};
-use alloc::string::String;
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::{open_file, OpenFlags, OSFile};
 
 extern "C" {
     fn stext();
@@ -32,6 +31,24 @@ extern "C" {
 }
 
 pub static mut SATP: usize = 0;
+
+// TODO 此处仅仅在内核地址空间中保存一份lic.so, 可使用更优雅的方式解决
+// 还需在动态链接加载其不同时继续进行处理
+pub static KERNEL_DL_DATA: Lazy<RwLock<Vec<u8>>> =
+    Lazy::new(|| RwLock::new( read_dll() ));
+
+fn read_dll()->Vec<u8> {
+    if let Some(app_vfile) = open_file("/", "libc.so", OpenFlags::RDONLY) {
+        return app_vfile.read_all();
+    }else{
+        error!("[execve load_dl] dynamic load dl false");
+        return Vec::new();
+    }
+}
+
+pub fn load_lic_so(){
+    debug!("load lic.so to kernel memoryset size:0x{:x} ......" , KERNEL_DL_DATA.read().len());
+} 
 
 pub static KERNEL_SPACE: Lazy<RwLock<MemorySet>> =
     Lazy::new(|| RwLock::new(MemorySet::new_kernel()));
@@ -208,59 +225,55 @@ impl MemorySet {
     /// load libc.so(elf) to DYNAMIC_LINKER
     /// return value 0: erro,   other: ld入口地址
     pub fn load_dl(&mut self) -> usize {
-        // let ld = String::from("libc.so"); //libc.so
-        // let cwd = String::from("/");
-        // if let Some(app_vfile) = open_file(cwd.as_str(), ld.as_str(), OpenFlags::RDONLY) {
-        if let Some(app_vfile) = open_file("/", "libc.so", OpenFlags::RDONLY) {
-            let all_data = app_vfile.read_all();
-            let elf_data =  all_data.as_slice();
-            let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
-            let elf_header = elf.header;
-            let magic = elf_header.pt1.magic;
-            assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf-dl !");
-            let ph_count = elf_header.pt2.ph_count();
-
-            for i in 0..ph_count {
-                let ph = elf.program_header(i).unwrap();
-                let start_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize).into();
-                // let start_va: VirtAddr = (ph.virtual_addr() as usize).into(); // virtual_addr 应该是0
-                let end_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize + ph.mem_size() as usize).into();
-
-                if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
-                    // println!("[load_dl] start_va:{:#?},   end_va: {:#?} ", start_va, end_va);
-                    let mut map_perm = MapPermission::U;
-                    let ph_flags = ph.flags();
-                    if ph_flags.is_read() {
-                        map_perm |= MapPermission::R;
-                    }
-                    if ph_flags.is_write() {
-                        map_perm |= MapPermission::W;
-                    }
-                    if ph_flags.is_execute() {
-                        map_perm |= MapPermission::X;
-                    }
-                    let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
-                    // max_end_vpn = map_area.vpn_range.get_end();
-                    self.push(
-                        map_area,
-                        Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
-                        start_va.page_offset(),
-                    );  
-
-                    // gdb_println!(
-                    //     SYSCALL_ENABLE,
-                    //     "[load_dl] va[0x{:X} - 0x{:X}] Framed",
-                    //     start_va.0,
-                    //     end_va.0
-                    // );
-                }
-                
-            }
-            return elf_header.pt2.entry_point() as usize;
-        } else {
-            error!("[execve load_dl] dynamic load dl false");
+        let all_data = KERNEL_DL_DATA.read();
+        if all_data.len() == 0{
             return 0;
         }
+        // println!("[load_dl]  KERNEL_DL_DATA.len():{}", all_data.len());
+        let elf_data =  all_data.as_slice();
+        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        let elf_header = elf.header;
+        let magic = elf_header.pt1.magic;
+        assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf-dl !");
+        let ph_count = elf_header.pt2.ph_count();
+
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            let start_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize).into();
+            // let start_va: VirtAddr = (ph.virtual_addr() as usize).into(); // virtual_addr 应该是0
+            let end_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize + ph.mem_size() as usize).into();
+
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                // println!("[load_dl] start_va:{:#?},   end_va: {:#?} ", start_va, end_va);
+                let mut map_perm = MapPermission::U;
+                let ph_flags = ph.flags();
+                if ph_flags.is_read() {
+                    map_perm |= MapPermission::R;
+                }
+                if ph_flags.is_write() {
+                    map_perm |= MapPermission::W;
+                }
+                if ph_flags.is_execute() {
+                    map_perm |= MapPermission::X;
+                }
+                let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+                // println!("[load_dl]  elf.input:{}, start:{},   end:{} ", &elf.input.len(), ph.offset() as usize, (ph.offset() + ph.file_size()) as usize);
+                self.push(
+                    map_area,
+                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    start_va.page_offset(),
+                );  
+
+                // gdb_println!(
+                //     SYSCALL_ENABLE,
+                //     "[load_dl] va[0x{:X} - 0x{:X}] Framed",
+                //     start_va.0,
+                //     end_va.0
+                // );
+            }
+            
+        }
+        return elf_header.pt2.entry_point() as usize;
     }
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
@@ -281,10 +294,6 @@ impl MemorySet {
             
         // println!("[from_elf] program_header-2 : type is {:#?} ",ph.get_type().unwrap());
         // run other programs
-
-        // todo fun load_dl()
-
-
         auxv.push(AuxHeader {
             aux_type: AT_PHENT,
             value: elf.header.pt2.ph_entry_size() as usize,
@@ -329,8 +338,7 @@ impl MemorySet {
                     0,
                     auxv,
                 );
-            }
-            
+            }    
         }else{
             auxv.push(AuxHeader {
                 aux_type: AT_BASE,
@@ -338,7 +346,6 @@ impl MemorySet {
             });
             at_base = 0;
         }
-        
 
         auxv.push(AuxHeader {
             aux_type: AT_FLAGS,
