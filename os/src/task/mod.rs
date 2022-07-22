@@ -201,7 +201,9 @@ pub fn perform_signals_of_current() {
                             trap_cx.x[2] as *const u8,
                             size_of::<UContext>(),
                         ));
-                        userbuf.write(UContext::new().as_bytes()); // copy ucontext to userspace
+                        let mut ucontext = UContext::new();
+                        *ucontext.mc_pc() = trap_cx.sepc;
+                        userbuf.write(ucontext.as_bytes()); // copy ucontext to userspace
                     }
 
                     trap_cx.sepc = handler; // sepc = handler

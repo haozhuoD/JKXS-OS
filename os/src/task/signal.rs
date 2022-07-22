@@ -1,3 +1,5 @@
+use core::mem::size_of;
+
 use alloc::{collections::BTreeMap, string::String};
 use spin::Lazy;
 
@@ -58,40 +60,31 @@ pub struct MContext {
 pub struct Signaltstack {
     ss_sp: usize,
     ss_flags: u32,
-    ss_size: u64,
-}
-
-#[repr(C)]
-pub struct Sigset {
-    pub __bits: [usize; 16],
+    ss_size: usize,
 }
 
 #[repr(C)]
 pub struct UContext {
-    pub uc_flags: u64,
-    pub uc_link: usize,
-    pub uc_stack: Signaltstack,
-    pub uc_sigmask: Sigset,
-    pub uc_mcontext: MContext,
+    pub __bits: [usize; 25]
 }
 
 impl UContext {
     pub fn new() -> Self {
         Self {
-            uc_flags: 0,
-            uc_link: 0,
-            uc_stack: Signaltstack {
-                ss_sp: 0,
-                ss_flags: 0,
-                ss_size: 0,
-            },
-            uc_sigmask: Sigset { __bits: [0; 16] },
-            uc_mcontext: MContext { __gregs: [0; 32] },
+            __bits: [0; 25]
         }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *mut u8, size) }
+    }
+
+    pub fn pc_offset() -> usize {
+        176
+    }
+
+    pub fn mc_pc(&mut self) -> &mut usize {
+        &mut self.__bits[Self::pc_offset() / size_of::<usize>()]
     }
 }

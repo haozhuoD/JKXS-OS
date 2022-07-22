@@ -72,6 +72,8 @@ impl FutexQueue {
 
 const FUTEX_WAIT: usize = 0;
 const FUTEX_WAKE: usize = 1;
+const FUTEX_REQUEUE: usize = 3; 
+
 const FUTEX_PRIVATE_FLAG: usize = 128;
 const FUTEX_CLOCK_REALTIME: usize = 256;
 const FUTEX_CMD_MASK: usize = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
@@ -125,11 +127,9 @@ pub fn sys_futex(
             futex_wait(uaddr as usize, val, t)
         }
         FUTEX_WAKE => futex_wake(uaddr as usize, val),
-        _ => -1,
+        FUTEX_REQUEUE => futex_requeue(uaddr as usize, val, uaddr2 as usize, timeout as u32),
+        _ => panic!("ENOSYS"),
     };
-    if ret < 0 {
-        panic!("ENOSYS");
-    }
     gdb_println!(
         SYSCALL_ENABLE, 
         "sys_futex(uaddr: {:#x?}, futex_op: {:x?}, val: {:x?}, timeout: {:#x?}, uaddr2: {:#x?}, val3: {:x?}) = {}", 
@@ -207,10 +207,6 @@ pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
 }
 
 pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
-    // debug!(
-    //     "****futex_wake: uaddr: {:x?}, nr_wake: {:x?}",
-    //     uaddr, nr_wake
-    // );
     if !FUTEX_QUEUE.read().contains_key(&uaddr) {
         return 0;
     }
@@ -240,5 +236,69 @@ pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
     for task in wakeup_queue.into_iter() {
         unblock_task(task);
     }
+    return nr_wake as isize;
+}
+
+pub fn futex_requeue(uaddr: usize, nr_wake: u32, uaddr2: usize, nr_limit: u32) -> isize {
+    if !FUTEX_QUEUE.read().contains_key(&uaddr) {
+        return 0;
+    }
+    let flag2 = FUTEX_QUEUE.read().contains_key(&uaddr2);
+
+    let mut fq_writer = FUTEX_QUEUE.write();
+    let fq = fq_writer.get(&uaddr).unwrap();
+    let mut fq_lock = fq.chain.write();
+    let waiters = fq.waiters();
+    if waiters == 0 {
+        return 0;
+    }
+    let nr_wake = nr_wake.min(waiters as u32);
+
+    let mut wakeup_q = Vec::new();
+    let mut requeue_q = Vec::new();
+
+    (0..nr_wake as usize).for_each(|_| {
+        // prepare to wake-up
+        let task = fq_lock.pop_front().unwrap();
+        wakeup_q.push(task);
+        fq.waiters_dec();
+    });
+
+    let nr_limit = nr_limit.min(fq.waiters() as u32);
+    (0..nr_limit as usize).for_each(|_| {
+        // prepare to requeue
+        let task = fq_lock.pop_front().unwrap();
+        requeue_q.push(task);
+        fq.waiters_dec();
+    });
+    drop(fq_lock);
+
+    // wakeup sleeping tasks
+    if fq.waiters() == 0 {
+        fq_writer.remove(&uaddr);
+    }
+    for task in wakeup_q.into_iter() {
+        unblock_task(task);
+    }
+
+    // requeue...
+    if nr_limit == 0 {
+        return nr_wake as isize;
+    }
+
+    let fq2 = if flag2 {
+        fq_writer.get(&uaddr2).unwrap()
+    } else {
+        fq_writer.insert(uaddr2, FutexQueue::new());
+        fq_writer.get(&uaddr2).unwrap()
+    };
+
+    let mut fq2_lock = fq2.chain.write();
+
+    for task in requeue_q.into_iter() {
+        fq2_lock.push_back(task);
+        fq2.waiters_inc();
+    }
+
     return nr_wake as isize;
 }

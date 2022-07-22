@@ -1,6 +1,7 @@
 FAT32_DIR="../fat32-fuse"
 FS_IMG="${FAT32_DIR}/fs.img"
 
+rm -rf ${FAT32_DIR}
 mkdir -p ${FAT32_DIR}
 if test ! -e ${FAT32_DIR}/${FS_IMG}
 then

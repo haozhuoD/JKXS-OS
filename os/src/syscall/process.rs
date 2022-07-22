@@ -567,7 +567,7 @@ pub fn sys_sigreturn() -> isize {
     let mut task_inner = task.acquire_inner_lock();
 
     let trap_cx = task_inner.get_trap_cx();
-    let mc_pc_ptr = trap_cx.x[2] + size_of::<UContext>() - size_of::<MContext>();
+    let mc_pc_ptr = trap_cx.x[2] + UContext::pc_offset();
     let mc_pc = *translated_ref(token, mc_pc_ptr as *mut u32) as usize;
     // debug!(
     //     "sigreturn: sp = {:#x?}, mc_pc_ptr = {:#x?}",
@@ -578,11 +578,8 @@ pub fn sys_sigreturn() -> isize {
     drop(trap_cx);
 
     task_inner.pop_trap_cx();
-    if mc_pc != 0 {
-        // if cancel valid
-        // warning!("prepare to exit the thread");
-        task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
-    }
+    task_inner.get_trap_cx().sepc = mc_pc; // 确保SIGCANCEL的正确性，使程序跳转到sig_exit
+
     gdb_println!(SYSCALL_ENABLE, "sys_sigreturn() = 0");
     return 0;
 }
