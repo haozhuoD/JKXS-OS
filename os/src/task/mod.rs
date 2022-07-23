@@ -15,7 +15,7 @@ use core::mem::size_of;
 use crate::{
     config::SIGRETURN_TRAMPOLINE,
     loader::get_initproc_binary,
-    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake,
+    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake, timer::wakeup_futex_waiters,
 };
 use alloc::sync::Arc;
 use manager::fetch_task;
@@ -33,6 +33,7 @@ pub use signal::*;
 pub use task::*;
 
 pub fn suspend_current_and_run_next() {
+    wakeup_futex_waiters();
     // There must be an application running.
     // 将原来的take_current改为current_task，也就是说suspend之后，task仍然保留在processor中
     let task = current_task().unwrap();

@@ -1,5 +1,5 @@
 use crate::mm::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+    translated_byte_buffer, UserBuffer,
 };
 use crate::task::{current_user_token};
 use spin::{Lazy, Mutex};
@@ -54,7 +54,7 @@ pub fn sys_sendto(sockfd : isize, buf: *const u8, len:usize , flags:isize , dest
 
 // ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
 //     struct sockaddr *src_addr, socklen_t *addrlen);
-pub fn sys_recvfrom(sockfd : isize, buf: *const u8, len:usize , flags:isize , src_addr:usize, addrlen:usize) -> isize{
+pub fn sys_recvfrom(_sockfd : isize, buf: *const u8, len:usize , _flags:isize , _src_addr:usize, _addrlen:usize) -> isize{
     let token = current_user_token();
     let userbuf = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let mut buf_iter = userbuf.into_iter();

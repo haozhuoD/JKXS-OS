@@ -76,7 +76,7 @@ pub fn rust_main() -> ! {
     fs::init_rootfs();
     // block_device_test();
     task::add_initproc();
-    mm::load_lic_so();
+    mm::load_libc_so();
     info!("(Boot Core) Riscv hartid {} run ", hartid);
     // // get core_clock
     // #[cfg(feature = "board_fu740")]

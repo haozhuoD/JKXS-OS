@@ -32,10 +32,28 @@ pub fn sys_sleep(req: *mut u64) -> isize {
     0
 }
 
+pub struct FutexWaiter {
+    pub task: Arc<TaskControlBlock>,
+    expire_time: usize
+}
+
+impl FutexWaiter {
+    pub fn new(task: Arc<TaskControlBlock>, current_time: usize, timeout: usize) -> Self {
+        Self {
+            task,
+            expire_time: if current_time <= usize::MAX - timeout { current_time + timeout } else {usize::MAX}
+        }
+    }
+
+    pub fn check_expire(&self) -> bool {
+        // debug!("cur = {}, exp = {}", get_time_us(), self.expire_time);
+        get_time_us() >= self.expire_time
+    }
+}
+
 pub struct FutexQueue {
-    waiters: RwLock<usize>,
-    // chain: RwLock<Vec<FutexQ>>,
-    chain: RwLock<VecDeque<Arc<TaskControlBlock>>>,
+    pub waiters: RwLock<usize>,
+    pub chain: RwLock<VecDeque<FutexWaiter>>,
 }
 
 impl FutexQueue {
@@ -58,18 +76,6 @@ impl FutexQueue {
     }
 }
 
-// struct FutexQ {
-//     task: Arc<TaskControlBlock>,
-// }
-
-// impl FutexQ {
-//     pub fn new(task: Arc<TaskControlBlock>) -> Self {
-//         Self {
-//             task
-//         }
-//     }
-// }
-
 const FUTEX_WAIT: usize = 0;
 const FUTEX_WAKE: usize = 1;
 const FUTEX_REQUEUE: usize = 3; 
@@ -78,8 +84,8 @@ const FUTEX_PRIVATE_FLAG: usize = 128;
 const FUTEX_CLOCK_REALTIME: usize = 256;
 const FUTEX_CMD_MASK: usize = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
 
-const FLAGS_SHARED: usize = 1;
-const FLAGS_CLOCKRT: usize = 2;
+// const FLAGS_SHARED: usize = 1;
+// const FLAGS_CLOCKRT: usize = 2;
 
 pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<usize, FutexQueue>>> =
     Lazy::new(|| RwLock::new(BTreeMap::new()));
@@ -93,7 +99,7 @@ pub fn sys_futex(
     uaddr2: *const u32,
     val3: u32,
 ) -> isize {
-    let mut flags = 0;
+    let mut _flags = 0;
     let cmd = futex_op & FUTEX_CMD_MASK;
     let token = current_user_token();
     gdb_println!(
@@ -174,8 +180,7 @@ pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
 
     // futex_wait_queue_me
     let task = current_task().unwrap();
-    let q = task.clone();
-    fq_lock.push_back(q.clone());
+    fq_lock.push_back(FutexWaiter::new(task.clone(), get_time_us(), timeout));
     drop(fq_lock);
     drop(fq_writer);
 
@@ -223,7 +228,7 @@ pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
     let mut wakeup_queue = Vec::new();
     (0..nr_wake as usize).for_each(|_| {
         // 加入唤醒队列中，但需要等到释放完锁之后才能唤醒
-        let task = fq_lock.pop_front().unwrap();
+        let task = fq_lock.pop_front().unwrap().task;
         wakeup_queue.push(task);
         fq.waiters_dec();
     });
@@ -259,7 +264,7 @@ pub fn futex_requeue(uaddr: usize, nr_wake: u32, uaddr2: usize, nr_limit: u32) -
 
     (0..nr_wake as usize).for_each(|_| {
         // prepare to wake-up
-        let task = fq_lock.pop_front().unwrap();
+        let task = fq_lock.pop_front().unwrap().task;
         wakeup_q.push(task);
         fq.waiters_dec();
     });

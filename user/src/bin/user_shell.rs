@@ -27,8 +27,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
-    chdir, close, dup, exec, fork, longest_common_prefix, open, pipe, preliminary_test,
-    get_wordlist, toggle_trace, waitpid, OpenFlags, change_cwd, shutdown, busybox_lua_test
+    change_cwd, chdir, close, dup, exec, fork, get_wordlist, longest_common_prefix, open, pipe,
+    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags,
 };
 
 #[derive(Debug)]
@@ -117,7 +117,6 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 //     shutdown()
 // }
 
-
 #[no_mangle]
 pub fn main() -> i32 {
     // busybox_lua_test();
@@ -152,7 +151,7 @@ fn interactive_main() -> i32 {
                         cmd_history.push(line.clone());
                     }
                     while cmd_history.len() > CMD_HISTORY_SIZE {
-                       cmd_history.remove(0);
+                        cmd_history.remove(0);
                     }
                     cmd_history_idx = cmd_history.len();
                     if line == "trace" {
@@ -324,7 +323,8 @@ fn interactive_main() -> i32 {
                 let wordv: Vec<&str> = space_word.split('/').collect();
                 let slash_word = wordv.last().unwrap();
                 if !slash_word.is_empty() {
-                    if space_word != slash_word {  // 还可以加个search_dir_flag来加快二次tab的搜索效率
+                    if space_word != slash_word {
+                        // 还可以加个search_dir_flag来加快二次tab的搜索效率
                         let search_path = space_word.rsplit_once('/').unwrap().0;
                         let search_dir: String;
                         if space_word.starts_with('/') {
@@ -336,7 +336,10 @@ fn interactive_main() -> i32 {
                         search_sub_flag = true;
                     }
                     if search_sub_flag {
-                        sub_wl = sub_wl.into_iter().filter(|x| x.starts_with(slash_word)).collect();
+                        sub_wl = sub_wl
+                            .into_iter()
+                            .filter(|x| x.starts_with(slash_word))
+                            .collect();
                     // 在sub_wl中找以slash_word为首的补全词
                     } else {
                         sub_wl = cwd_wl

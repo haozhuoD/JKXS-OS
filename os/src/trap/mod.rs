@@ -8,7 +8,7 @@ use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx, current_trap_cx_user_va,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
 };
-use crate::timer::set_next_trigger;
+use crate::timer::{set_next_trigger, wakeup_futex_waiters};
 use core::arch::{asm, global_asm};
 use riscv::register::{
     mtvec::TrapMode,

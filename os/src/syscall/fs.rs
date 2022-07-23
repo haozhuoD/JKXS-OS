@@ -580,7 +580,7 @@ pub fn sys_ioctl() -> isize {
 pub const F_DUPFD: u32 = 0;
 pub const F_GETFD: u32 = 1;
 pub const F_SETFD: u32 = 2;
-pub const F_GETFL: u32 = 3;
+// pub const F_GETFL: u32 = 3;
 pub const F_DUPFD_CLOEXEC: u32 = 1030;
 
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {

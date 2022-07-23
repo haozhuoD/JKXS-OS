@@ -1,4 +1,4 @@
-// #![allow(unused)]
+#![allow(unused)]
 
 pub const SYSCALL_GETCWD: usize = 17;
 pub const SYSCALL_DUP: usize = 23;

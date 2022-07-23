@@ -42,6 +42,7 @@ pub fn task_count() -> usize {
     TASK_MANAGER.lock().ready_queue.clone().into_iter().count()
 }
 
+#[allow(unused)]
 pub fn pid2process(pid: usize) -> Option<Arc<ProcessControlBlock>> {
     let map = PID2PCB.read();
     map.get(&pid).map(Arc::clone)

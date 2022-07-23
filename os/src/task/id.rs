@@ -30,15 +30,15 @@ impl RecycleAllocator {
             self.current - 1
         }
     }
-    pub fn dealloc(&mut self, id: usize) {
-        assert!(id < self.current);
-        assert!(
-            !self.recycled.iter().any(|i| *i == id),
-            "id {} has been deallocated!",
-            id
-        );
-        self.recycled.push(id);
-    }
+    // pub fn dealloc(&mut self, id: usize) {
+    //     assert!(id < self.current);
+    //     assert!(
+    //         !self.recycled.iter().any(|i| *i == id),
+    //         "id {} has been deallocated!",
+    //         id
+    //     );
+    //     self.recycled.push(id);
+    // }
 }
 
 static TID_ALLOCATOR: Lazy<RwLock<RecycleAllocator>> =
