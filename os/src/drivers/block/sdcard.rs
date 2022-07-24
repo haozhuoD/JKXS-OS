@@ -980,11 +980,11 @@ impl BlockDevice for SDCardWrapper {
 #[cfg(not(any(feature = "local_fu740")))]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        // println!("read block {}", block_id);
+        println!("read block {} ...", block_id);
         self.0.lock().read_sector(buf, block_id as u32).unwrap();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        // println!("write block {}", block_id);
+        println!("write block {} ...", block_id);
         self.0.lock().write_sector(buf, block_id as u32).unwrap();
     }
 }
