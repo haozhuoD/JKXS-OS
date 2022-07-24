@@ -35,8 +35,9 @@ pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
     pub exit_code: Option<i32>,
     pub pending_signals: VecDeque<u32>,
-    trap_cx_backup: Vec<TrapContext>,
+    pub sigmask: u64,
     pub clear_child_tid: Option<ClearChildTid>,
+    trap_cx_backup: Vec<TrapContext>,
 }
 
 impl TaskControlBlockInner {
@@ -93,6 +94,7 @@ impl TaskControlBlock {
                 task_status: TaskStatus::Ready,
                 exit_code: None,
                 pending_signals: VecDeque::new(),
+                sigmask: 0,
                 trap_cx_backup: Vec::new(),
                 clear_child_tid: None,
             })),

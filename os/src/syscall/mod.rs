@@ -79,14 +79,16 @@ pub const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 mod errorno;
 mod fs;
-mod process;
-mod sync;
 mod net;
+mod process;
+mod signal;
+mod sync;
 
 pub use fs::*;
-pub use process::*;
-pub use sync::*;
 pub use net::*;
+pub use process::*;
+pub use signal::*;
+pub use sync::*;
 
 use crate::{
     gdb_println,
@@ -161,7 +163,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_KILL => sys_kill(args[0], args[1] as _),
         SYSCALL_TKILL => sys_tkill(args[0], args[1] as _),
         SYSCALL_SIGACTION => sys_sigaction(args[0] as _, args[1] as _, args[2] as _),
-        SYSCALL_SIGPROCMASK => 0,
+        SYSCALL_SIGPROCMASK => sys_sigprocmask(args[0], args[1] as _, args[2] as _, args[3] as _),
         SYSCALL_SIGRETURN => sys_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as _),
         SYSCALL_SETPGID => sys_setpgid(),
@@ -204,8 +206,22 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),
         SYSCALL_PRLIMIT => sys_prlimit(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
-        SYS_SENDTO => sys_sendto(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
-        SYS_RECVFROM => sys_recvfrom(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
+        SYS_SENDTO => sys_sendto(
+            args[0] as _,
+            args[1] as _,
+            args[2] as _,
+            args[3] as _,
+            args[4] as _,
+            args[5] as _,
+        ),
+        SYS_RECVFROM => sys_recvfrom(
+            args[0] as _,
+            args[1] as _,
+            args[2] as _,
+            args[3] as _,
+            args[4] as _,
+            args[5] as _,
+        ),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

@@ -4,7 +4,7 @@ mod id;
 mod manager;
 mod process;
 mod processor;
-mod signal;
+mod siginfo;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
@@ -29,7 +29,7 @@ pub use id::{kstack_alloc, tid_alloc, KernelStack, TidHandle};
 pub use manager::*;
 pub use process::*;
 pub use processor::*;
-pub use signal::*;
+pub use siginfo::*;
 pub use task::*;
 
 pub fn suspend_current_and_run_next() {
