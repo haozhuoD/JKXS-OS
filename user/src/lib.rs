@@ -317,6 +317,23 @@ pub fn longest_common_prefix(str_vec: &Vec<String>) -> String {
         .collect()
 }
 
+pub fn str2args(s: &str) -> (Vec<String>, Vec<*const u8>) {
+    let args_copy: Vec<String> = s
+        .split(' ')
+        .map(|s1| {
+            let mut string = String::new();
+            string.push_str(&s1);
+            string.push('\0');
+            string
+        })
+        .collect();
+
+    let mut args_addr: Vec<*const u8> = args_copy.iter().map(|arg| arg.as_ptr()).collect();
+    args_addr.push(core::ptr::null::<u8>());
+
+    (args_copy, args_addr)
+}
+
 pub fn preliminary_test() {
     let mut preliminary_apps = Vec::new();
     preliminary_apps.push("times\0");
@@ -372,6 +389,140 @@ pub fn busybox_lua_test() {
         let pid = fork();
         if pid == 0 {
             exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
+        } else {
+            let mut exit_code = 0;
+            waitpid(pid as usize, &mut exit_code);
+        }
+    }
+}
+
+pub fn load_libc_test_cmds() -> Vec<String> {
+    let mut cmds = Vec::new();
+    cmds.push(String::from("./runtest.exe -w entry-static.exe argv"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe basename"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe clocale_mbfuncs"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe clock_gettime"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe crypt"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe dirname"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe env"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fdopen"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fnmatch"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fscanf"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fwscanf"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe iconv_open"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe inet_pton"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe mbc"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe memstream"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cancel_points"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cancel"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cond"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_tsd"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe qsort"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe random"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe search_hsearch"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe search_insque"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe search_lsearch"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe search_tsearch"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe setjmp"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe snprintf"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe socket"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe sscanf"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe sscanf_long"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe stat"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strftime"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_memcpy"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_memmem"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_memset"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_strchr"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_strcspn"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe string_strstr"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strptime"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strtod"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strtod_simple"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strtof"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strtol"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strtold"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe swprintf"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe tgmath"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe time"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe tls_align"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe udiv"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe ungetc"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe utime"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe wcsstr"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe wcstol"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pleval"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe daemon_failure"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe dn_expand_empty"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe dn_expand_ptr_0"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fflush_exit"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fgets_eof"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fgetwc_buffering"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe flockfile_list"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe fpclassify_invalid_ld80"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe ftello_unflushed_append"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe getpwnam_r_crash"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe getpwnam_r_errno"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe iconv_roundtrips"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe inet_ntop_v4mapped"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe inet_pton_empty_last_field"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe iswspace_null"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe lrand48_signextend"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe lseek_large"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe malloc_0"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe mbsrtowcs_overflow"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe memmem_oob_read"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe memmem_oob"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe mkdtemp_failure"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe mkstemp_failure"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe printf_1e9_oob"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe printf_fmt_g_round"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe printf_fmt_g_zeros"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe printf_fmt_n"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_robust_detach"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cancel_sem_wait"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cond_smasher"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_condattr_setclock"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_exit_cancel"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_once_deadlock"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_rwlock_ebusy"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe putenv_doublefree"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_backref_0"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_bracket_icase"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_ere_backref"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_escaped_high_byte"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_negated_range"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regexec_nosub"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe rewind_clear_error"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe rlimit_open_files"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_bytes_consumed"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_match_literal_eof"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_nullbyte_char"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe setvbuf_unget"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe sigprocmask_internal"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe sscanf_eof"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe statvfs"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe strverscmp"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe syscall_sign_extend"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe uselocale_0"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe wcsncpy_read_overflow"));
+    cmds.push(String::from("./runtest.exe -w entry-static.exe wcsstr_false_negative"));
+    cmds
+}
+
+pub fn libc_test() {
+    let mut buf = [0u8; 4096];
+    let fd = open("run-static.sh", OpenFlags::RDONLY);
+    read(fd as _, &mut buf);
+
+    let cmds = load_libc_test_cmds();
+
+    for cmd in cmds {
+        let (args_copy, args_addr) = str2args(&cmd);
+        let pid = fork();
+        if pid == 0 {
+            exec(args_copy[0].as_str(), args_addr.as_slice());
         } else {
             let mut exit_code = 0;
             waitpid(pid as usize, &mut exit_code);

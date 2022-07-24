@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     change_cwd, chdir, close, dup, exec, fork, get_wordlist, longest_common_prefix, open, pipe,
-    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags,
+    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test,
 };
 
 #[derive(Debug)]
@@ -119,8 +119,8 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 
 #[no_mangle]
 pub fn main() -> i32 {
-    // busybox_lua_test();
-    interactive_main();
+    libc_test();
+    // interactive_main();
     shutdown()
 }
 
