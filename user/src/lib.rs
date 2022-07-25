@@ -459,7 +459,7 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-static.exe fflush_exit"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe fgets_eof"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe fgetwc_buffering"));
-    cmds.push(String::from("./runtest.exe -w entry-static.exe flockfile_list"));
+    // cmds.push(String::from("./runtest.exe -w entry-static.exe flockfile_list"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe fpclassify_invalid_ld80"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe ftello_unflushed_append"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe getpwnam_r_crash"));
@@ -573,7 +573,7 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe fflush_exit"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe fgets_eof"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe fgetwc_buffering"));
-    cmds.push(String::from("./runtest.exe -w entry-dynamic.exe flockfile_list"));
+    // cmds.push(String::from("./runtest.exe -w entry-dynamic.exe flockfile_list"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe fpclassify_invalid_ld80"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe ftello_unflushed_append"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe getpwnam_r_crash"));
