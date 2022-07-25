@@ -1,7 +1,7 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, DType, FSDirent, File, FileClass, IOVec, Kstat, OSFile,
-    OpenFlags, Pollfd, POLLIN, SEEK_SET, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, SEEK_CUR, SEEK_END,
-    FdSet,TimeSpec, BitOpt, S_IFCHR, Statfs,
+    make_pipe, open_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
+    OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR,
+    S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -9,7 +9,7 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
-use crate::task::{current_process, current_user_token,suspend_current_and_run_next};
+use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
 use crate::timer::{get_time_ns, NSEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -106,7 +106,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let mut path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags).unwrap();
 
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
@@ -114,6 +114,10 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     } else {
         String::from("/")
     };
+
+    path = path
+        .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
+        .replace("/dlopen_dso.so", "/libdlopen_dso.so");
 
     let ret = {
         if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
@@ -188,7 +192,7 @@ pub fn sys_dup(fd: usize) -> isize {
         return -EPERM;
     }
 
-    if inner.fd_table.len() >inner.fd_max {
+    if inner.fd_table.len() > inner.fd_max {
         return -EMFILE;
     }
 
@@ -208,7 +212,7 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
         return -EPERM;
     }
 
-    if old_fd  >inner.fd_max {
+    if old_fd > inner.fd_max {
         return -EMFILE;
     }
 
@@ -757,7 +761,12 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
     }
 }
 
-pub fn sys_utimensat(dirfd: isize, ppath: *const u8, times: *const TimeSpec, _flags: isize) -> isize {
+pub fn sys_utimensat(
+    dirfd: isize,
+    ppath: *const u8,
+    times: *const TimeSpec,
+    _flags: isize,
+) -> isize {
     let process = current_process();
     let token = current_user_token();
     let inner = process.acquire_inner_lock();
