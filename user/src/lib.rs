@@ -526,8 +526,8 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe inet_pton"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe mbc"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe memstream"));
-    // cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_cancel_points"));
-    // cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_cancel"));
+    cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_cancel_points"));
+    cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_cancel"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_cond"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe pthread_tsd"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe qsort"));

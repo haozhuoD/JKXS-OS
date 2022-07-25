@@ -107,6 +107,7 @@ gdb:
 
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
+		-ex 'add-symbol-file ../user/libc-tests/entry-static.exe'\
 		-ex 'set arch riscv:rv64' \
 		-ex 'target remote localhost:1234'
 

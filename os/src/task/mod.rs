@@ -196,7 +196,6 @@ pub fn perform_signals_of_current() {
                     if sigaction.sa_flags.contains(SAFlags::SA_SIGINFO) {
                         trap_cx.x[2] -= size_of::<UContext>(); // sp -= sizeof(ucontext)
                         trap_cx.x[12] = trap_cx.x[2];          // a2  = sp
-                        // debug!("sighandler prepare: sp = {:#x?}, a2 = {:#x?}", trap_cx.x[2], trap_cx.x[12]);
                         let mut userbuf = UserBuffer::new(translated_byte_buffer(
                             token,
                             trap_cx.x[2] as *const u8,
@@ -206,6 +205,7 @@ pub fn perform_signals_of_current() {
                         *ucontext.mc_pc() = trap_cx.sepc;
                         userbuf.write(ucontext.as_bytes()); // copy ucontext to userspace
                     }
+                    // debug!("prepare to jump to `handler`, original sepc = {:#x?}", trap_cx.sepc);
 
                     trap_cx.sepc = handler; // sepc = handler
                     return;
