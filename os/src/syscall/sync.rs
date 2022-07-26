@@ -152,8 +152,8 @@ pub fn sys_futex(
 
 pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     // futex_wait_setup
-    let flag = FUTEX_QUEUE.read().contains_key(&uaddr);
     let mut fq_writer = FUTEX_QUEUE.write();
+    let flag = fq_writer.contains_key(&uaddr);
     let fq = if flag {
         fq_writer.get(&uaddr).unwrap()
     } else {
@@ -212,10 +212,10 @@ pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
 }
 
 pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
-    if !FUTEX_QUEUE.read().contains_key(&uaddr) {
+    let mut fq_writer = FUTEX_QUEUE.write();
+    if !fq_writer.contains_key(&uaddr) {
         return 0;
     }
-    let mut fq_writer = FUTEX_QUEUE.write();
     let fq = fq_writer.get(&uaddr).unwrap();
     let mut fq_lock = fq.chain.write();
     let waiters = fq.waiters();
@@ -245,12 +245,11 @@ pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
 }
 
 pub fn futex_requeue(uaddr: usize, nr_wake: u32, uaddr2: usize, nr_limit: u32) -> isize {
-    if !FUTEX_QUEUE.read().contains_key(&uaddr) {
+    let mut fq_writer = FUTEX_QUEUE.write();
+    if !fq_writer.contains_key(&uaddr) {
         return 0;
     }
-    let flag2 = FUTEX_QUEUE.read().contains_key(&uaddr2);
-
-    let mut fq_writer = FUTEX_QUEUE.write();
+    let flag2 = fq_writer.contains_key(&uaddr2);
     let fq = fq_writer.get(&uaddr).unwrap();
     let mut fq_lock = fq.chain.write();
     let waiters = fq.waiters();
