@@ -620,7 +620,7 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe uselocale_0"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe wcsncpy_read_overflow"));
     cmds.push(String::from("./runtest.exe -w entry-dynamic.exe wcsstr_false_negative"));
-    
+    cmds
 }
 
 pub fn libc_test() {
