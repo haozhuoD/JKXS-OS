@@ -95,13 +95,16 @@ use crate::{
     monitor::{QEMU, SYSCALL_ENABLE},
 };
 
-pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    if syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE && syscall_id != SYSCALL_READDIR {
+pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
+    if !((syscall_id == SYSCALL_READ || syscall_id == SYSCALL_WRITE) && (args[0] <= 2))
+        && syscall_id != SYSCALL_READDIR
+    {
         gdb_println!(
             SYSCALL_ENABLE,
-            "\x1b[034msyscall({}), args = {:x?}\x1b[0m",
+            "\x1b[034msyscall({}), args = {:x?}, sepc = {:#x?}\x1b[0m",
             syscall_id,
-            args
+            args,
+            sepc - 4
         );
     }
     match syscall_id {
@@ -135,6 +138,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PREAD64 => sys_pread64(args[0], args[1] as _, args[2], args[3]),
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2] as _, args[3]),
         SYSCALL_PPOLL => sys_ppoll(args[0] as _, args[1], args[2] as _),
+        SYSCALL_READLINKAT => sys_readlinkat(args[0] as _, args[1] as _, args[2] as _, args[3]),
         SYSCALL_PSELECT6 => sys_pselect(
             args[0] as _,
             args[1] as _,

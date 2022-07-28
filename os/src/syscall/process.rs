@@ -119,17 +119,18 @@ pub fn sys_clone(
 
     let ret = if flags.contains(CloneFlags::CLONE_THREAD) {
         // create a thread here
+        let current_process_inner = current_process.acquire_inner_lock();
         let task = current_task().unwrap();
         let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
         let mut new_task_inner = new_task.acquire_inner_lock();
         let new_tid = new_task_inner.gettid();
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
-            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
+            *translated_refmut(current_process_inner.get_user_token(), ptid_ptr) =
                 new_tid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
-                current_process.acquire_inner_lock().get_user_token(),
+                current_process_inner.get_user_token(),
                 ctid_ptr,
             ),
             addr: ctid_ptr as usize});
@@ -137,14 +138,26 @@ pub fn sys_clone(
         new_tid
     } else {
         let new_process = current_process.fork(flags, stack_ptr as usize, newtls);
-        let new_pid = new_process.getpid();
+        let new_process_inner = new_process.acquire_inner_lock();
+        let new_task = new_process_inner.get_task(0);
+        let mut new_task_inner = new_task.acquire_inner_lock();
+
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
-            unimplemented!("CLONE_PARENT_SETTID");
+            *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
+            new_process_inner.pid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
-            unimplemented!("CLONE_CHILD_CLEARTID");
+            new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
+                new_process_inner.get_user_token(),
+                ctid_ptr,
+            ),
+            addr: ctid_ptr as usize});
         }
-        new_pid
+        if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid_ptr as usize != 0 {
+            *translated_refmut(new_process_inner.get_user_token(), ctid_ptr) =
+            new_process_inner.pid as u32;
+        }
+        new_process_inner.pid
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -184,8 +197,8 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     // run usershell
     if cwd == "/" && path == "user_shell" {
         let process = current_process();
-        let exec_ret = process.exec(get_usershell_binary(), args_vec);
-        if exec_ret!=0 {
+        let exec_ret = process.exec(get_usershell_binary(), &args_vec);
+        if exec_ret != 0 {
             return -1;
         }
         unsafe {
@@ -203,30 +216,33 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     }
 
     // run other programs
-    if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+    let ret = if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
-        let argc = args_vec.len();
-        gdb_println!(
-            SYSCALL_ENABLE,
-            "sys_exec(path: {:?}, args: {:x?} ) = {}",
-            path,
-            args_vec,
-            argc
-        );
-        let exec_ret = process.exec(all_data.as_slice(), args_vec);
-        if exec_ret!=0 {
-            return -1;
+        let exec_ret = process.exec(all_data.as_slice(), &args_vec);
+        if exec_ret != 0 {
+            -EPERM
+        } else {
+            unsafe {
+                asm!("sfence.vma");
+                asm!("fence.i");
+            }
+            // return argc because cx.x[10] will be covered with it later
+            0
         }
-        unsafe {
-            asm!("sfence.vma");
-            asm!("fence.i");
-        }
-        // return argc because cx.x[10] will be covered with it later
-        argc as isize
     } else {
         -EPERM
-    }
+    };
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_exec(path: {:?}, args: {:x?} ) = {}",
+        path,
+        args_vec,
+        ret
+    );
+
+    ret
 }
 
 const WNOHANG: isize = 1;

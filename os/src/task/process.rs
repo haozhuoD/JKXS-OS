@@ -141,7 +141,7 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) -> isize {
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> isize {
         assert_eq!(self.acquire_inner_lock().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
@@ -311,7 +311,7 @@ impl ProcessControlBlock {
             trap_handler as usize,
             get_hartid(),
         );
-        trap_cx.x[10] = args.len();
+        trap_cx.x[10] = 0;
         trap_cx.x[11] = argv_base;
         trap_cx.x[12] = envp_base;
         trap_cx.x[13] = auxv_base;
