@@ -120,8 +120,8 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 #[no_mangle]
 pub fn main() -> i32 {
     println!("\nHello, jkxs-OS!\n");
-    // libc_test();
-    interactive_main();
+    libc_test();
+    // interactive_main();
     shutdown()
 }
 

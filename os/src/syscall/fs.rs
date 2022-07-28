@@ -116,9 +116,10 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         String::from("/")
     };
 
-    path = path
-        .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
-        .replace("/dlopen_dso.so", "/libdlopen_dso.so");
+    // 不再需要更换路径
+    // path = path
+    //     .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
+    //     .replace("/dlopen_dso.so", "/libdlopen_dso.so");
 
     let ret = {
         if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
