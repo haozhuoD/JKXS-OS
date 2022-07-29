@@ -480,7 +480,7 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-static.exe printf_fmt_g_zeros"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe printf_fmt_n"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_robust_detach"));
-    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cancel_sem_wait"));;
+    cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cancel_sem_wait"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_cond_smasher"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_condattr_setclock"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe pthread_exit_cancel"));
@@ -490,13 +490,13 @@ pub fn load_libc_test_cmds() -> Vec<String> {
     cmds.push(String::from("./runtest.exe -w entry-static.exe regex_backref_0"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe regex_bracket_icase"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe regex_ere_backref"));
-    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_escaped_high_byte"));;
+    cmds.push(String::from("./runtest.exe -w entry-static.exe regex_escaped_high_byte"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe regex_negated_range"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe regexec_nosub"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe rewind_clear_error"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe rlimit_open_files"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_bytes_consumed"));
-    cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_match_literal_eof"));;
+    cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_match_literal_eof"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe scanf_nullbyte_char"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe setvbuf_unget"));
     cmds.push(String::from("./runtest.exe -w entry-static.exe sigprocmask_internal"));

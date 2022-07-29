@@ -9,6 +9,7 @@ use bitflags::*;
 use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
 use spin::{Lazy, Mutex};
 
+/// OSFile表示在磁盘上真实存在的文件
 pub struct OSFile {
     readable: bool,
     writable: bool,
@@ -141,15 +142,15 @@ pub fn list_apps() {
 }
 
 pub fn init_rootfs(){
-    let _proc = open_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _mounts = open_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
-    let _meminfo = open_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
-    let _var = open_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _tmp = open_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _dev = open_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _null = open_file("/dev", "null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let zero = open_file("/dev", "zero", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
-    let _invalid = open_file("/dev/null", "invalid", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
+    let _proc = open_common_file("/","proc", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _mounts = open_common_file("/proc","mounts", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _meminfo = open_common_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
+    let _var = open_common_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _tmp = open_common_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _dev = open_common_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _null = open_common_file("/dev", "null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let zero = open_common_file("/dev", "zero", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
+    let _invalid = open_common_file("/dev/null", "invalid", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
     let mut buf = vec![0u8; 1];
     let zero_write = UserBuffer::new(vec![unsafe {
         core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), 1)
@@ -199,7 +200,7 @@ impl OpenFlags {
     }
 }
 
-fn do_create_file(
+fn do_create_common_file(
     cur_vfile: Arc<VFile>,
     mut pathv: Vec<&str>,
     flags: OpenFlags,
@@ -222,7 +223,7 @@ fn do_create_file(
     }
 }
 
-pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
     let cur_vfile = {
         if cwd == "/" {
             ROOT_VFILE.clone()
@@ -241,7 +242,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
         // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
-            return do_create_file(cur_vfile, pathv, flags);
+            return do_create_common_file(cur_vfile, pathv, flags);
         }
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
@@ -253,7 +254,7 @@ pub fn open_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>>
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
         // println!("don't exist");
-        return do_create_file(cur_vfile, pathv, flags);
+        return do_create_common_file(cur_vfile, pathv, flags);
     }
     None
 }

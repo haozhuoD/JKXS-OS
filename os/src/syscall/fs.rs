@@ -1,5 +1,5 @@
 use crate::fs::{
-    make_pipe, open_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
+    make_pipe, open_common_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
     OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR,
     S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
@@ -116,13 +116,8 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         String::from("/")
     };
 
-    // 不再需要更换路径
-    // path = path
-    //     .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
-    //     .replace("/dlopen_dso.so", "/libdlopen_dso.so");
-
     let ret = {
-        if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
+        if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
             let mut inner = process.acquire_inner_lock();
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
@@ -262,7 +257,7 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
 
     let ret = if fd == AT_FDCWD {
         fstat_inner(
-            open_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+            open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
             &mut userbuf,
         )
     } else if fd < 0 || fd >= inner.fd_table.len() as isize {
@@ -301,7 +296,7 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
         String::from("/")
     };
 
-    let ret = if let Some(osfile) = open_file(&cwd, &path, OpenFlags::RDONLY) {
+    let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
         fstat_inner(osfile, &mut userbuf)
     } else {
         -ENOENT
@@ -363,14 +358,14 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     // );
 
     let ret = {
-        if let Some(_) = open_file(
+        if let Some(_) = open_common_file(
             cwd.as_str(),
             path.as_str(),
             OpenFlags::DIRECTORY | OpenFlags::RDWR,
         ) {
             -EEXIST
         } else {
-            if let Some(_) = open_file(
+            if let Some(_) = open_common_file(
                 cwd.as_str(),
                 path.as_str(),
                 OpenFlags::DIRECTORY | OpenFlags::RDWR | OpenFlags::CREATE,
@@ -405,7 +400,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
         String::from("/")
     };
     let ret = {
-        if let Some(osfile) = open_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+        if let Some(osfile) = open_common_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {
                 if path.starts_with("/") {
                     if !path.ends_with("/") {
@@ -490,7 +485,7 @@ pub fn sys_getdents64(fd: isize, buf: *mut u8, len: usize) -> isize {
 
     let ret = if fd == AT_FDCWD {
         getdents64_inner(
-            open_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+            open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
             &mut userbuf,
             len,
         )
@@ -564,7 +559,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
         }
         return -EPERM;
     }
-    if let Some(osfile) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
+    if let Some(osfile) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
         osfile.remove();
         gdb_println!(
             SYSCALL_ENABLE,
@@ -826,7 +821,7 @@ pub fn sys_utimensat(
         return -ENOENT;
     }
     // println!("base_path:{}, path: {}", base_path, path);
-    if let Some(f) = open_file(base_path, path.as_str(), OpenFlags::empty()) {
+    if let Some(f) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
         do_utimensat(f, times, token);
         gdb_println!(
             SYSCALL_ENABLE,
@@ -913,7 +908,7 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
         );
         return -ENOENT;
     }
-    if let Some(_) = open_file(base_path, path.as_str(), flags) {
+    if let Some(_) = open_common_file(base_path, path.as_str(), flags) {
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_faccessat(dirfd = {}, path = {:#?}, flags: {:#?}) = {}",
@@ -1208,7 +1203,7 @@ pub fn sys_renameat2(
     let new_file;
 
     if old_path.starts_with("/") {
-        match open_file("/", old_path.as_str(), OpenFlags::empty()) {
+        match open_common_file("/", old_path.as_str(), OpenFlags::empty()) {
             Some(tmp_file) => old_file = tmp_file.clone(),
             None => return -ENOENT,
         }
@@ -1225,7 +1220,7 @@ pub fn sys_renameat2(
         } else {
             return -ENOENT;
         }
-    } else if let Some(tmp_file) = open_file(cwd, old_path.as_str(), OpenFlags::empty()) {
+    } else if let Some(tmp_file) = open_common_file(cwd, old_path.as_str(), OpenFlags::empty()) {
         old_file = tmp_file.clone();
     } else {
         return -ENOENT;
@@ -1240,7 +1235,7 @@ pub fn sys_renameat2(
     };
 
     if new_path.starts_with("/") {
-        match open_file("/", new_path.as_str(), open_flags) {
+        match open_common_file("/", new_path.as_str(), open_flags) {
             Some(tmp_file) => new_file = tmp_file.clone(),
             None => return -ENOENT,
         }
@@ -1257,7 +1252,7 @@ pub fn sys_renameat2(
         } else {
             return -ENOENT;
         }
-    } else if let Some(tmp_file) = open_file(cwd, new_path.as_str(), open_flags) {
+    } else if let Some(tmp_file) = open_common_file(cwd, new_path.as_str(), open_flags) {
         new_file = tmp_file.clone();
     } else {
         return -ENOENT;
@@ -1283,7 +1278,7 @@ pub fn sys_readdir(abs_path: *const u8, buf: *mut u8, len: usize) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, len);
     let abs_path = translated_str(token, abs_path);
     let mut userbuf = UserBuffer::new(buf_vec);
-    let ret = if let Some(osfile) = open_file("/", abs_path.as_str(), OpenFlags::RDONLY) {
+    let ret = if let Some(osfile) = open_common_file("/", abs_path.as_str(), OpenFlags::RDONLY) {
         getdents64_inner(osfile, &mut userbuf, len)
     } else {
         -EPERM

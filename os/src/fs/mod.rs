@@ -25,4 +25,4 @@ pub trait File: Send + Sync {
 pub use finfo::*;
 pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
-pub use vfile::{init_rootfs, list_apps, open_file, path2vec, OSFile, OpenFlags};
+pub use vfile::{init_rootfs, list_apps, open_common_file, path2vec, OSFile, OpenFlags};

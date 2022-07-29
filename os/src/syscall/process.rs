@@ -6,7 +6,7 @@ use crate::config::{aligned_up, PAGE_SIZE, FDMAX};
 use crate::console::{
     clear_log_buf, read_all_log_buf, read_clear_log_buf, read_log_buf, unread_size, LOG_BUF_LEN,
 };
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::{open_common_file, OpenFlags};
 use crate::gdb_println;
 use crate::loader::get_usershell_binary;
 use crate::mm::{
@@ -216,7 +216,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     }
 
     // run other programs
-    let ret = if let Some(app_vfile) = open_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
+    let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
         let exec_ret = process.exec(all_data.as_slice(), &args_vec);

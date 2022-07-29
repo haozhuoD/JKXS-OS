@@ -6,7 +6,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{
     DYNAMIC_LINKER, MEMORY_END, MMIO, PAGE_SIZE, SIGRETURN_TRAMPOLINE, TRAMPOLINE, USER_STACK_BASE,
 };
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::{open_common_file, OpenFlags};
 use crate::gdb_println;
 use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
@@ -39,7 +39,7 @@ pub static mut SATP: usize = 0;
 pub static KERNEL_DL_DATA: Lazy<RwLock<Vec<u8>>> = Lazy::new(|| RwLock::new(read_dll()));
 
 fn read_dll() -> Vec<u8> {
-    if let Some(app_vfile) = open_file("/", "libc.so", OpenFlags::RDONLY) {
+    if let Some(app_vfile) = open_common_file("/", "libc.so", OpenFlags::RDONLY) {
         return app_vfile.read_all();
     } else {
         error!("[execve load_dl] dynamic load dl false");
