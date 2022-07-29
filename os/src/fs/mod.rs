@@ -7,7 +7,9 @@ use crate::mm::UserBuffer;
 use alloc::sync::Arc;
 
 /// 枚举类型，分为普通文件和抽象文件
-#[derive(Clone)]
+/// 普通文件File，特点是支持更多类型的操作，包含seek, set_offset等
+/// 抽象文件Abs，抽象文件，只支持File trait的一些操作
+#[derive(Clone)]    
 pub enum FileClass {
     File(Arc<OSFile>),
     Abs(Arc<dyn File + Send + Sync>),
