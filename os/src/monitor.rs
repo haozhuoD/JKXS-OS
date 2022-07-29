@@ -1,7 +1,10 @@
 #[allow(unused)]
 use crate::config::{MEMORY_END, PAGE_SIZE};
 
+#[cfg(feature = "board_qemu")]
 pub const QEMU: usize = 1; // 1: open in qemu mode, 0: close in real world
+#[cfg(not(any(feature = "board_qemu")))]
+pub const QEMU: usize = 0;
 
 // pub const MEMORY_GDB_START: usize = MEMORY_END - PAGE_SIZE;
 pub const MEMORY_GDB_START: usize = 0x87fff000;

@@ -107,9 +107,10 @@ gdb:
 
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
-		-ex 'add-symbol-file ../user/libc-tests/entry-static.exe'\
+		-ex 'add-symbol-file ../user/busybox_lua_testsuites/lmbench_all' \
 		-ex 'set arch riscv:rv64' \
 		-ex 'target remote localhost:1234'
+# -ex 'add-symbol-file ../user/libc-tests/entry-static.exe'\
 
 run-light:
 ifeq ($(BOARD),qemu)

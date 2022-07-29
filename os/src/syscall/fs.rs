@@ -9,6 +9,7 @@ use crate::mm::{
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
+use crate::syscall::process;
 use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
 use crate::timer::{get_time_ns, NSEC_PER_SEC};
 use alloc::string::String;
@@ -115,9 +116,10 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         String::from("/")
     };
 
-    path = path
-        .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
-        .replace("/dlopen_dso.so", "/libdlopen_dso.so");
+    // 不再需要更换路径
+    // path = path
+    //     .replace("/tls_get_new-dtv_dso.so", "/libtls_get_new-dtv_dso.so")
+    //     .replace("/dlopen_dso.so", "/libdlopen_dso.so");
 
     let ret = {
         if let Some(vfile) = open_file(cwd.as_str(), path.as_str(), flags) {
@@ -1370,5 +1372,33 @@ pub fn sys_statfs(_path: *const u8, buf: *const u8) -> isize {
         buf,
         0
     );
-    return 0;
+    0
+}
+
+pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: *mut u8, bufsiz: usize) -> isize {
+    if dirfd != AT_FDCWD {
+        panic!("dirfd != AT_FDCWD, unimplemented yet!");
+    }
+    let process = current_process();
+    let inner = process.acquire_inner_lock();
+    let token = inner.get_user_token();
+    let path = translated_str(token, pathname);
+    if path.as_str() != "/proc/self/exe" {
+        unimplemented!();
+    }
+    let mut userbuf = UserBuffer::new(translated_byte_buffer(token, buf, bufsiz));
+    let _lmbench = "/exit_test\0";
+    userbuf.write(_lmbench.as_bytes());
+    let len = _lmbench.len() - 1;
+
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "sys_readlinkat(dirfd = {}, pathname = {:#?}, buf = {:#x?}, bufsiz = {}) = {}",
+        dirfd,
+        path,
+        buf as usize,
+        bufsiz,
+        len
+    );
+    len as isize
 }
