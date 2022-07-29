@@ -101,7 +101,7 @@ impl VFile {
             get_info_block_cache(
                 self.short_sector, 
                 self.block_device.clone(),
-                CacheMode::WRITE
+                CacheMode::READ
             ).write().modify(self.short_offset, f)
         }
     }
@@ -111,7 +111,7 @@ impl VFile {
         get_info_block_cache(
             sector, 
             self.block_device.clone(), 
-            CacheMode::WRITE
+            CacheMode::READ
         ).write().modify(offset, f)
     }
 

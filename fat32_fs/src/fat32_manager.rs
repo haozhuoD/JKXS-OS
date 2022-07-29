@@ -80,6 +80,7 @@ impl FAT32Manager {
             CacheMode::READ)
             .read()
             .read(0, |&bpb: &FatBS| bpb);
+        println!("{:#?}", bpb);
         
         // 读入EBR
         println!("reading EBR...");
@@ -188,7 +189,7 @@ impl FAT32Manager {
             get_data_block_cache(
                 start_sector + i as usize, 
                 self.block_device.clone(), 
-                CacheMode::WRITE
+                CacheMode::READ
             )
             .write()
             .modify(0, |data_block: &mut [u8; 512]| {

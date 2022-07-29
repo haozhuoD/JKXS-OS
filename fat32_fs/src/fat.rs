@@ -101,7 +101,7 @@ impl FAT {
         get_info_block_cache(
             fat1_sec as usize, 
             Arc::clone(block_device), 
-            CacheMode::WRITE)
+            CacheMode::READ)
             .write()
             .modify(offset as usize, |val: &mut u32| {
                 *val = next_cluster;
@@ -109,7 +109,7 @@ impl FAT {
         get_info_block_cache(
             fat2_sec as usize, 
             Arc::clone(block_device), 
-            CacheMode::WRITE)
+            CacheMode::READ)
             .write()
             .modify(offset as usize, |val: &mut u32| {
                 *val = next_cluster;
