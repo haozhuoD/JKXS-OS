@@ -522,7 +522,7 @@ impl ShortDirEntry {
 					get_info_block_cache(  // 目录项通过Info block cache读取
 						curr_sector, 
 						Arc::clone(block_device), 
-						CacheMode::WRITE
+						CacheMode::READ
 					)
 					.write()
 					.modify(0, |data_block: &mut DataBlock| {
@@ -534,7 +534,7 @@ impl ShortDirEntry {
 					get_data_block_cache(  // 文件内容通过Data block cache读取
 						curr_sector, 
 						Arc::clone(block_device), 
-						CacheMode::WRITE
+						CacheMode::READ
 					)
 					.write()
 					.modify(0, |data_block: &mut DataBlock| {

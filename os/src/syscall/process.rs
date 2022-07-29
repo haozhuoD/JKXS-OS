@@ -24,12 +24,12 @@ use crate::trap::page_fault_handler;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use fat32_fs::sync_all;
+// use fat32_fs::sync_all;
 
 use super::errorno::{EINVAL, EPERM, ESRCH};
 
 pub fn sys_shutdown() -> ! {
-    sync_all();
+    // sync_all();
     shutdown();
 }
 
