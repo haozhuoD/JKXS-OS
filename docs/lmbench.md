@@ -225,3 +225,13 @@ a6             0x7fffcd40       2147470656
 
 其中a5不一样，是动态链接的退出函数，这个值正常来说应该是0，如果不是0的话，libc就会把它注册到退出函数表中，程序退出的时候会跳转到这个a5，从而出错。因此需要在_start函数中检查a5被错误设置的原因。我们发现在_start中a5被赋值为a0，即mv a5, a0，此时a0应该为exec的返回值，不应该是argc，而应该是0。修改exec的返回值为0后，问题解决。
 
+#### 性能测试
+
+Simple syscall: 10.8034 microseconds
+Simple read: 15.3981 microseconds
+Simple write: 14.9690 microseconds
+Simple stat: 615.3215 microseconds
+Simple fstat: 20.0672 microseconds
+Simple open/close: 856.4118 microseconds
+Select on 100 fd's: 18.6066 microseconds
+Signal handler installation: 13.2011 microseconds

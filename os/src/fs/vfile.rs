@@ -3,7 +3,6 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
 use alloc::vec::Vec;
-use alloc::vec;
 use alloc::{string::String, sync::Arc};
 use bitflags::*;
 use fat32_fs::{FAT32Manager, VFile, ATTRIBUTE_ARCHIVE, ATTRIBUTE_DIRECTORY};
@@ -53,7 +52,7 @@ impl OSFile {
         let (readable, writable) = flags.read_write();
         inner
             .vfile
-            .find_vfile_path(pathv)
+            .find_vfile_path(&pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 
@@ -148,14 +147,6 @@ pub fn init_rootfs(){
     let _var = open_common_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _tmp = open_common_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _dev = open_common_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let _null = open_common_file("/dev", "null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
-    let zero = open_common_file("/dev", "zero", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
-    let _invalid = open_common_file("/dev/null", "invalid", OpenFlags::CREATE | OpenFlags::RDONLY).unwrap();
-    let mut buf = vec![0u8; 1];
-    let zero_write = UserBuffer::new(vec![unsafe {
-        core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), 1)
-    }]);
-    zero.write(zero_write);
 }
 
 bitflags! {
@@ -202,11 +193,12 @@ impl OpenFlags {
 
 fn do_create_common_file(
     cur_vfile: Arc<VFile>,
-    mut pathv: Vec<&str>,
+    pathv: &Vec<&str>,
     flags: OpenFlags,
 ) -> Option<Arc<OSFile>> {
+    let mut pathv = pathv.clone();
     let name = pathv.pop().unwrap_or("/");
-    if let Some(parent_dir) = cur_vfile.find_vfile_path(pathv.clone()) {
+    if let Some(parent_dir) = cur_vfile.find_vfile_path(&pathv) {
         let attribute = {
             if flags.contains(OpenFlags::DIRECTORY) {
                 ATTRIBUTE_DIRECTORY
@@ -229,7 +221,7 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
             ROOT_VFILE.clone()
         } else {
             let wpath = path2vec(cwd);
-            ROOT_VFILE.find_vfile_path(wpath).unwrap()
+            ROOT_VFILE.find_vfile_path(&wpath).unwrap()
         }
     }; // 当前工作路径对应节点
     let (readable, writable) = flags.read_write();
@@ -238,11 +230,11 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     let pathv = path2vec(path);
 
     // 节点是否存在？
-    if let Some(inode) = cur_vfile.find_vfile_path(pathv.clone()) {
+    if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
         // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
-            return do_create_common_file(cur_vfile, pathv, flags);
+            return do_create_common_file(cur_vfile, &pathv, flags);
         }
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
@@ -254,7 +246,7 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
         // println!("don't exist");
-        return do_create_common_file(cur_vfile, pathv, flags);
+        return do_create_common_file(cur_vfile, &pathv, flags);
     }
     None
 }

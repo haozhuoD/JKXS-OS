@@ -293,7 +293,7 @@ impl VFile {
     }
 
     // 通过相对路径来查找文件
-    pub fn find_vfile_path(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
+    pub fn find_vfile_path(&self, path: &Vec<&str>) -> Option<Arc<VFile>> {
         let len = path.len();
         let mut curr_vfile = self.clone();
         for i in 0..len {

@@ -1,7 +1,7 @@
 use crate::fs::{
     make_pipe, open_common_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
     OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR,
-    S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, open_device_file,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -105,20 +105,31 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 }
 
 pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
-    let process = current_process();
     let token = current_user_token();
+    let process = current_process();
+    let mut inner = process.acquire_inner_lock();
     let mut path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags).unwrap();
-
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "***sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = ?",
+        dirfd,
+        path,
+        flags,
+        _mode
+    );
     let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        process.acquire_inner_lock().cwd.clone()
+        inner.cwd.clone()
     } else {
         String::from("/")
     };
 
     let ret = {
-        if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
-            let mut inner = process.acquire_inner_lock();
+        if let Some(devfile) = open_device_file(cwd.as_str(), path.as_str(), flags) {
+            let fd = inner.alloc_fd(0);
+            inner.fd_table[fd] = Some(FileClass::Abs(devfile));
+            fd as isize
+        } else if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
