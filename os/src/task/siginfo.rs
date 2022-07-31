@@ -50,7 +50,7 @@ bitflags! {
 }
 
 pub fn is_signal_valid(signum: u32) -> bool {
-    signum >= 1 && signum < 64
+    signum < 64
 }
 
 pub struct _MContext {

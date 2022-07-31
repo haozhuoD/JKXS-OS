@@ -71,22 +71,20 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            // let is_load = scause.cause() == Trap::Exception(Exception::LoadFault)
-            //     || scause.cause() == Trap::Exception(Exception::LoadPageFault);
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
             if page_fault_handler(&mut process_inner, stval) == -1 {
-                error!(
-                    "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                    current_tid(),
-                    scause.cause(),
-                    stval,
-                    current_trap_cx().sepc,
-                );
-                let cx = current_trap_cx();
-                for (i, v) in cx.x.iter().enumerate() {
-                    debug!("x[{}] = {:#x?}", i, v);
-                }
+                // error!(
+                //     "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                //     current_tid(),
+                //     scause.cause(),
+                //     stval,
+                //     current_trap_cx().sepc,
+                // );
+                // let cx = current_trap_cx();
+                // for (i, v) in cx.x.iter().enumerate() {
+                //     debug!("x[{}] = {:#x?}", i, v);
+                // }
                 current_add_signal(SIGSEGV);
             }
             unsafe {

@@ -182,7 +182,7 @@ pub fn perform_signals_of_current() {
                     let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
-                    task_inner.push_trap_cx();
+                    task_inner.signal_context_save(signum, sigaction.sa_flags);
 
                     // 准备跳到signal handler
                     extern "C" {
@@ -226,7 +226,7 @@ pub fn perform_signals_of_current() {
         }
         // 如果信号代表当前进程出错，则exit
         if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
-            error!("{}", msg);
+            error!("[tid={}] {}", current_tid(), msg);
             drop(process);
             exit_current_and_run_next(-(signum as i32), false);
         };

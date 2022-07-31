@@ -175,7 +175,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
         SYSCALL_UNAME => sys_uname(args[0] as _),
         SYSCALL_GETTIMEOFDAY => sys_get_time(args[0] as _, args[1]),
         SYSCALL_GETPID => sys_getpid(),
-        SYSCALL_GETTID => sys_getpid(),
+        SYSCALL_GETTID => sys_gettid(),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_CLONE => sys_clone(
             args[0] as _,

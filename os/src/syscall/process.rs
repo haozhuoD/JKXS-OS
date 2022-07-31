@@ -77,6 +77,12 @@ pub fn sys_getpid() -> isize {
     ret
 }
 
+pub fn sys_gettid() -> isize {
+    let ret = current_task().unwrap().acquire_inner_lock().gettid() as isize;
+    gdb_println!(SYSCALL_ENABLE, "sys_gettid() = {}", ret);
+    ret
+}
+
 bitflags! {
     pub struct CloneFlags: u32 {
         const SIGCHLD              = 17;

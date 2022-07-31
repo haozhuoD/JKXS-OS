@@ -549,7 +549,10 @@ impl MemorySet {
     /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
     pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum) -> isize {
         for mmap_area in self.mmap_areas.iter_mut() {
-            if vpn >= mmap_area.start_vpn && vpn < mmap_area.end_vpn {
+            if vpn >= mmap_area.start_vpn
+                && vpn < mmap_area.end_vpn
+                && !mmap_area.data_frames.contains_key(&vpn)
+            {
                 return mmap_area.map_one(&mut self.page_table, vpn);
             }
         }

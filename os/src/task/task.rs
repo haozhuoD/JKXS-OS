@@ -1,5 +1,5 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;
@@ -37,6 +37,7 @@ pub struct TaskControlBlockInner {
     pub pending_signals: VecDeque<u32>,
     pub sigmask: u64,
     pub clear_child_tid: Option<ClearChildTid>,
+    performing_signals: Vec<(u32, SAFlags)>,
     trap_cx_backup: Vec<TrapContext>,
 }
 
@@ -57,6 +58,16 @@ impl TaskControlBlockInner {
 
     pub fn push_trap_cx(&mut self) {
         self.trap_cx_backup.push((*self.get_trap_cx()).clone());
+    }
+
+    pub fn signal_context_restore(&mut self) -> (u32, SAFlags) {
+        self.pop_trap_cx();
+        self.performing_signals.pop().unwrap()
+    }
+
+    pub fn signal_context_save(&mut self, signum: u32, flag: SAFlags) {
+        self.push_trap_cx();
+        self.performing_signals.push((signum, flag));
     }
 
     pub fn is_signaling(&self) -> bool {
@@ -95,6 +106,7 @@ impl TaskControlBlock {
                 exit_code: None,
                 pending_signals: VecDeque::new(),
                 sigmask: 0,
+                performing_signals: Vec::new(),
                 trap_cx_backup: Vec::new(),
                 clear_child_tid: None,
             })),
