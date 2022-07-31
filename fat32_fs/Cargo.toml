@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 spin = "0.9.2"
+
+[features]
+vir-fsimg = []

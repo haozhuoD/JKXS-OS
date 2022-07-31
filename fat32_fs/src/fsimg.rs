@@ -1,5 +1,5 @@
 use spin::Lazy;
-use crate::BlockDevice;
+use crate::{BlockDevice, print};
 
 use super::{BLOCK_SZ, FSIMG_BASE};
 use alloc::vec::Vec;

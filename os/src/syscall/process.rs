@@ -119,11 +119,11 @@ pub fn sys_clone(
 
     let ret = if flags.contains(CloneFlags::CLONE_THREAD) {
         // create a thread here
-        let current_process_inner = current_process.acquire_inner_lock();
         let task = current_task().unwrap();
         let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
         let mut new_task_inner = new_task.acquire_inner_lock();
         let new_tid = new_task_inner.gettid();
+        let current_process_inner = current_process.acquire_inner_lock();
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
             *translated_refmut(current_process_inner.get_user_token(), ptid_ptr) =
                 new_tid as u32;
