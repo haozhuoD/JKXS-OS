@@ -2,6 +2,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Lazy, RwLock};
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::gdb_println;
 use crate::mm::translated_ref;
@@ -163,12 +164,13 @@ pub fn futex_wait(uaddr: usize, val: u32, timeout: usize) -> isize {
     fq.waiters_inc();
     let mut fq_lock = fq.chain.write();
     let token = current_user_token();
-    let uval = translated_ref(token, uaddr as *const u32);
+    let uval = translated_ref(token, uaddr as *const AtomicU32);
     // debug!(
     //     "futex_wait: uval: {:x?}, val: {:x?}, timeout: {}",
     //     uval, val, timeout
     // );
-    if *uval != val { // Need to be atomic
+    // Ordering is Relaxed
+    if uval.load(Ordering::Relaxed) != val { 
         drop(fq_lock);
         fq.waiters_dec();
         if fq.waiters() == 0 {

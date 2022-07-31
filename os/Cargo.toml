@@ -17,8 +17,8 @@ virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers" }
 # k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
 fu740-pac = { path = "../external_libs/fu740-pac" }
 fu740-hal = { path = "../external_libs/fu740-hal" }
-# fu740-soc = { path = "../dependency/fu740-soc" }
-fat32_fs = { path = "../fat32_fs" }
+# fat32_fs = { path = "../fat32_fs", features = ["vir-fsimg"] }
+fat32_fs = { path = "../fat32_fs"}
 spin = "0.9.2"
 
 [features]
@@ -33,4 +33,8 @@ board_fu740 = []
 local_fu740 = ["board_fu740","min_log_level_debug"]
 
 # [profile.release]
+# opt-level = 1
+# debug = 2
+# debug-assertions = true
+# incremental = true
 # lto = "off"

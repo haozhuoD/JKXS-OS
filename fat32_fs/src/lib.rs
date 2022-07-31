@@ -17,7 +17,7 @@ mod console;
 pub const BLOCK_SZ: usize = 512;
 pub const FSIMG_BASE: usize = 0x90000000;
 pub use block_dev::BlockDevice;
-#[cfg(not(any(feature = "board_fu740")))]
+#[cfg(not(any(feature = "vir-fsimg")))]
 pub use block_cache::{
     CacheMode,
     get_data_block_cache,
@@ -28,7 +28,7 @@ pub use block_cache::{
     DATA_BLOCK_CACHE_MANAGER,
     INFO_BLOCK_CACHE_MANAGER
 };
-#[cfg(feature = "board_fu740")]
+#[cfg(feature = "vir-fsimg")]
 pub use fsimg::{
     CacheMode,
     get_data_block_cache,
