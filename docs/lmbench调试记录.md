@@ -1,7 +1,4 @@
-
-debian for qemu编译环境没法编译。无法从设置lmbench 自带的 __DEBUG 更快地定位错误。只能看源码，比较痛苦。 
-
-目前对于第一个测试 lmbench_all lat_syscall -P 1 null 仍无法完全支持
+# 
 
 ### 已修复BUG与完善的系统调用
 
