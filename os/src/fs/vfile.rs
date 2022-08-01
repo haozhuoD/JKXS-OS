@@ -147,6 +147,8 @@ pub fn init_rootfs(){
     let _var = open_common_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _tmp = open_common_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _dev = open_common_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _null = open_common_file("/", "dev/null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _invalid = open_common_file("/", "dev/null/invalid", OpenFlags::CREATE | OpenFlags::RDWR ).unwrap();
 }
 
 bitflags! {
