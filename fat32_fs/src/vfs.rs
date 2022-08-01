@@ -223,54 +223,64 @@ impl VFile {
 
     // 通过短文件名name(可以是小写)查找目录dir_ent下的目录项
     fn find_short_name(&self, name: &str, dir_ent: &ShortDirEntry) -> Option<VFile> {
-        // let print_flag = name=="libc.so";
-
         if dir_ent.first_cluster() == 2 && name == ".." {
             return Some(self.get_fs().get_root_vfile(&self.get_fs()));
         }
-        let name_upper = name.to_ascii_uppercase();
-        let mut short_ent = ShortDirEntry::empty();
-        let mut offset = 0;
-        let mut read_sz: usize;
-        loop {
-            read_sz = dir_ent.read_at(
-                offset, 
-                short_ent.as_bytes_mut(), 
-                &self.fs, 
-                &self.fs.get_fat(), 
-                &self.block_device
-            );
-            if read_sz != DIRENT_SZ || short_ent.is_empty() {
-                // if print_flag {
-                //     let mut buf: [u8; 512] = [0; 512];
-                //     dir_ent.read_at(
-                //         0, 
-                //         buf.as_mut(), 
-                //         &self.fs, 
-                //         &self.fs.get_fat(), 
-                //         &self.block_device
-                //     );
-                //     println!("{:?}", buf);
-                // }
-                return None;
-            }
-            if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {
-                let (short_sector, short_offset) = self.get_pos(offset);
-                let long_pos_vec: Vec<(usize, usize)> = Vec::new();
-                return Some(
-                    VFile::new(
-                        String::from(name), 
-                        short_sector, 
-                        short_offset, 
-                        long_pos_vec, 
-                        short_ent.attribute(), 
-                        self.fs.clone(), 
-                        self.block_device.clone()
-                    )
-                );
-            }
-            offset += DIRENT_SZ;
+        // let name_upper = name.to_ascii_uppercase();
+        // let mut short_ent = ShortDirEntry::empty();
+        // let mut offset = 0;
+        // let mut read_sz: usize;
+        // loop {
+        //     read_sz = dir_ent.read_at(
+        //         offset, 
+        //         short_ent.as_bytes_mut(), 
+        //         &self.fs, 
+        //         &self.fs.get_fat(), 
+        //         &self.block_device
+        //     );
+        //     if read_sz != DIRENT_SZ || short_ent.is_empty() {
+        //         return None;
+        //     }
+        //     if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {
+        //         let (short_sector, short_offset) = self.get_pos(offset);
+        //         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
+        //         return Some(
+        //             VFile::new(
+        //                 String::from(name), 
+        //                 short_sector, 
+        //                 short_offset, 
+        //                 long_pos_vec, 
+        //                 short_ent.attribute(), 
+        //                 self.fs.clone(), 
+        //                 self.block_device.clone()
+        //             )
+        //         );
+        //     }
+        //     offset += DIRENT_SZ;
+        // }
+        let (offset, attribute) = dir_ent.find_short_name(
+            0,
+            name,
+            &self.fs,
+            &self.fs.get_fat(),
+            &self.block_device
+        );
+        if offset == EMPTY_DIRENT {
+            return None;
         }
+        let (short_sector, short_offset) = self.get_pos(offset as usize);
+        let long_pos_vec: Vec<(usize, usize)> = Vec::new();
+        Some(
+            VFile::new(
+                String::from(name), 
+                short_sector, 
+                short_offset, 
+                long_pos_vec, 
+                attribute as u8, 
+                self.fs.clone(), 
+                self.block_device.clone()
+            )
+        )
     }
 
     // 通过name查找当前目录下的文件

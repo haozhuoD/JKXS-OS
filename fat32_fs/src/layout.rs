@@ -1,5 +1,5 @@
 
-use crate::{CacheMode};
+use crate::CacheMode;
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -34,6 +34,10 @@ pub const ATTRIBUTE_LFN      :	u8 = 0x0F;
 pub const DIRENT_SZ:			usize = 32;
 
 type DataBlock = [u8; BLOCK_SZ];
+type DirentBlock = [ShortDirEntry; BLOCK_SZ / DIRENT_SZ];
+
+pub const EMPTY_DIRENT:		isize = -1;
+pub const NOTFIND_DIRENT:	isize = -2;
 
 
 #[repr(packed)]
@@ -480,87 +484,157 @@ impl ShortDirEntry {
 		}
 		read_size
 	}
-
-		// 以偏移量写文件，需要保证offset开始的区间在文件范围内
-		pub fn write_at(
-			&self,
-			offset: usize,
-			buf: &[u8],
-			manager: &Arc<FAT32Manager>,
-			fat: &Arc<RwLock<FAT>>,
-			block_device: &Arc<dyn BlockDevice> 
-		) -> usize {
-			// 不会修改文件size，因此不用获取FAT写锁
-			let fat_reader = fat.read();
-			let bytes_per_sector = manager.bytes_per_sector() as usize;
-			let bytes_per_cluster = manager.bytes_per_cluster() as usize;
-			let mut curr_offset = offset;
-			let end: usize;
-			// 边界检查
-			if self.is_dir() {
-				let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
-				end = (offset + buf.len()).min(size);
-			} else {
-				end = (offset + buf.len()).min(self.size_in_bytes as usize);
-			}
-			assert!(curr_offset <= end);
 	
-			let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
-			if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-				panic!("Write error!");
-			}
-			let mut curr_cluster = curr_cluster;
-			let mut curr_sector = curr_sector;
-	
-			let mut write_size = 0usize;
-			loop {
-				// 将偏移量向上对齐扇区大小
-				let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
-				end_current_block = end_current_block.min(end);
-				let block_write_size = end_current_block - curr_offset;
-				if self.is_dir() {
-					get_info_block_cache(  // 目录项通过Info block cache读取
-						curr_sector, 
-						Arc::clone(block_device), 
-						CacheMode::READ
-					)
-					.write()
-					.modify(0, |data_block: &mut DataBlock| {
-						let src = &buf[write_size..write_size + block_write_size];
-						let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
-						dst.copy_from_slice(src);
-					});
-				} else {
-					get_data_block_cache(  // 文件内容通过Data block cache读取
-						curr_sector, 
-						Arc::clone(block_device), 
-						CacheMode::READ
-					)
-					.write()
-					.modify(0, |data_block: &mut DataBlock| {
-						let src = &buf[write_size..write_size + block_write_size];
-						let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
-						dst.copy_from_slice(src);
-					});
-				}
-				write_size += block_write_size;
-				if end_current_block == end {
-					break;
-				}
-				curr_offset = end_current_block;
-				// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-				if curr_cluster % bytes_per_cluster as u32 == 0 {
-					curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
-					if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-						panic!("Write error!");
-					}
-					curr_sector = manager.first_sector_of_cluster(curr_cluster);
-				} else {
-					curr_sector += 1;
-				}
-			}
-			write_size
+	// 找不到时返回(-1, -1),找到了返回短文件名目录项的offset和attribute
+	pub fn find_short_name(
+		&self,
+		offset: usize,
+		name: &str,
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice> 
+	) -> (isize, isize) {
+		assert!(self.is_dir());
+		let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		// 边界检查
+		let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		if curr_offset >= end {
+			return (EMPTY_DIRENT, EMPTY_DIRENT);
 		}
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			return (EMPTY_DIRENT, EMPTY_DIRENT);
+		}
+
+		let name_upper = name.to_ascii_uppercase();
+		let mut short_offset;
+		let mut short_attr;
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+
+			(short_offset, short_attr) = get_info_block_cache(  // 目录项通过Info block cache读取
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.read()
+			.read(0, |dirent_blk: &DirentBlock| {
+				for (off, short_ent) in dirent_blk.iter().enumerate() {
+					if short_ent.is_empty() {
+						return (EMPTY_DIRENT, EMPTY_DIRENT);
+					} else if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {
+						return ((off * DIRENT_SZ + (curr_offset / bytes_per_sector) * bytes_per_sector) as isize, short_ent.attribute() as isize); 
+					}
+				}
+				(NOTFIND_DIRENT, NOTFIND_DIRENT)
+			});
+
+			if short_offset != NOTFIND_DIRENT {
+				break;
+			}
+			if end_current_block == end {
+				break;
+			}
+			curr_offset = end_current_block;
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_cluster % bytes_per_cluster as u32 == 0 {
+				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					break;  // TODO: panic?
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		(short_offset, short_attr)
+	}
+
+	// 以偏移量写文件，需要保证offset开始的区间在文件范围内
+	pub fn write_at(
+		&self,
+		offset: usize,
+		buf: &[u8],
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice> 
+	) -> usize {
+		// 不会修改文件size，因此不用获取FAT写锁
+		let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		let end: usize;
+		// 边界检查
+		if self.is_dir() {
+			let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			end = (offset + buf.len()).min(size);
+		} else {
+			end = (offset + buf.len()).min(self.size_in_bytes as usize);
+		}
+		assert!(curr_offset <= end);
+
+		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			panic!("Write error!");
+		}
+		let mut curr_cluster = curr_cluster;
+		let mut curr_sector = curr_sector;
+
+		let mut write_size = 0usize;
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+			let block_write_size = end_current_block - curr_offset;
+			if self.is_dir() {
+				get_info_block_cache(  // 目录项通过Info block cache读取
+					curr_sector, 
+					Arc::clone(block_device), 
+					CacheMode::READ
+				)
+				.write()
+				.modify(0, |data_block: &mut DataBlock| {
+					let src = &buf[write_size..write_size + block_write_size];
+					let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
+					dst.copy_from_slice(src);
+				});
+			} else {
+				get_data_block_cache(  // 文件内容通过Data block cache读取
+					curr_sector, 
+					Arc::clone(block_device), 
+					CacheMode::READ
+				)
+				.write()
+				.modify(0, |data_block: &mut DataBlock| {
+					let src = &buf[write_size..write_size + block_write_size];
+					let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
+					dst.copy_from_slice(src);
+				});
+			}
+			write_size += block_write_size;
+			if end_current_block == end {
+				break;
+			}
+			curr_offset = end_current_block;
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_cluster % bytes_per_cluster as u32 == 0 {
+				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					panic!("Write error!");
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		write_size
+	}
 
 	pub fn as_bytes(&self) -> &[u8] {
         unsafe {
