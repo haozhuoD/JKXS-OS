@@ -75,8 +75,6 @@ qemu支持对真实板子fu540/hifive unleasd 进行仿真， 而经过阅读硬
   * 解决方案： 多次发送，设定最大发送次数。若成功设置则跳出循环
 * qemu仿真的SDcard为标准SDcard(按字节寻址)，完善SDcard驱动。对stan。。和HC进行分别处理，同时适配。巴拉巴拉
 
-## todo完善内容
-
 
 ### SDcard驱动上板：
 
@@ -102,23 +100,24 @@ todo ： DMA？ 在fat32文件系统调用blockdevice时，不再默认只读一
 
 ### 主要的参考实现 :
 
-## todo 完善相关链接
+Rust实现的fu740-pac ：  https://github.com/riscv-rust/fu740-pac
+Rust实现的fu740-hal  ：	https://github.com/riscv-rust/fu740-hal    (相关SPI协议抽象并未实现)
 
-Rust实现的fu740-pac ： https://github.com/riscv-rust/fu740-pac
-Rust实现的fu740-hal  ：https://github.com/riscv-rust/fu740-hal    (相关SPI协议抽象并未实现)
+hifive-SDK : 	https://github.com/sifive/freedom-metal/blob/master/src/drivers/sifive_spi0.c
 
-hifive-SDK ,
+  https://github.com/snow107/HiFive-BareMetal-SPI/blob/master/freedom-metal/metal/spi.h
 
 rCore-tutorial中K210的SDcard驱动
 
-Linux中hifive的SPI驱动
+Linux中hifive的SPI驱动 :   https://elixir.bootlin.com/linux/latest/source/drivers/spi/spi-sifive.c
+
 
 参考文档：
 
-[xv6-k210团队编写的SD卡相关文档](https://qf.rs/2021/05/20/%E5%9F%BA%E4%BA%8ESPI%E6%A8%A1%E5%BC%8F%E7%9A%84SD%E5%8D%A1%E9%A9%B1%E5%8A%A8.html)
+[xv6-k210团队编写的SD卡相关文档](https://gitee.com/hustos/xv6-k210/blob/main/doc/%E6%9E%84%E5%BB%BA%E8%B0%83%E8%AF%95-SD%E5%8D%A1%E9%A9%B1%E5%8A%A8v2.md)
 
-SDcard官方手册
+SDcard官方手册:  [Simplified Specifications | SD Association (sdcard.org)](https://www.sdcard.org/downloads/pls/)
 
-fu740硬件手册 https://www.sifive.com/boards/hifive-unmatched
+fu740硬件手册:  https://www.sifive.com/boards/hifive-unmatched
 
 特别感谢许文浩同学在SDcard驱动编写方面提供的支持与帮助
