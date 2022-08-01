@@ -20,15 +20,49 @@
 
 #### 分支简介
 * main               ------主分支
+* libc-test          ------libc测试提交分支（决赛第一阶段提交）
+* pthread            ------lmbench开发分支
 * hifive-SingleCore  ------fu740平台单核分支
 * pre-k210           ------k210平台单核分支
-* finalcomp-syscalls ------面向决赛的多核开发分支
-* K210-Hifive        ------同时支持fu740多核 & k210单核开发分支
-* usershell          ------user-shell开发分支
 
 ## <i>How to Run</i>
 
-todo:.....
+### qemu运行
+
+切换工作目录为./os
+```shell
+cd os
+```
+
+安装必要的编译环境
+```shell
+make env
+```
+
+运行JKXS-OS需先生成FAT32标准的文件系统镜像
+```shell
+make fs-img
+```
+
+运行JKXS-OS
+```shell
+make run
+```
+
+### 生成fu740的内核镜像
+
+在项目根目录下运行命令生成fu740平台的JKXS-OS内核镜像
+```shell
+make all
+```
+
+### GDB调试
+
+在两个终端中分别运行如下命令，即可启动gdb调试
+```shell
+make gdb
+make monitor
+```
 
 ## <i>Our Work</i>
 
