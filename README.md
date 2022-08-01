@@ -27,7 +27,7 @@
 
 ## <i>How to Run</i>
 
-### qemu运行
+#### qemu运行
 
 切换工作目录为./os
 ```shell
@@ -49,14 +49,14 @@ make fs-img
 make run
 ```
 
-### 生成fu740的内核镜像
+#### 生成fu740的内核镜像
 
 在项目根目录下运行命令生成fu740平台的JKXS-OS内核镜像
 ```shell
 make all
 ```
 
-### GDB调试
+#### GDB调试
 
 在两个终端中分别运行如下命令，即可启动gdb调试
 ```shell
