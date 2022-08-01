@@ -1,11 +1,8 @@
 # system overview
 
-#### 内核赛道 初赛双赛道（k210 & fu740）测评满分
+#### 内核赛道 决赛第一阶段赛道（fu740）测评满分
 
-![fu740](./docs/image/readme/fu740排行榜.png)
-
-![k210](./docs/image/readme/k210排行榜.png)
-
+![fu740-决赛1](./docs/image/readme/fu740-决赛1.png)
 
 #### 项目整体设计文档   ` doc_jkxsos设计文档.pdf ` （文档主要描述内核在fu740平台上的设计与实现）
 
@@ -13,11 +10,10 @@
 
 #### 分支简介
 * main               ------主分支
+* libc-test          ------libc测试提交分支（决赛第一阶段提交）
+* pthread            ------lmbench开发分支
 * hifive-SingleCore  ------fu740平台单核分支
 * pre-k210           ------k210平台单核分支
-* finalcomp-syscalls ------面向决赛的多核开发分支
-* K210-Hifive        ------同时支持fu740多核 & k210单核开发分支
-* usershell          ------user-shell开发分支
 
 
 ## Our Work
@@ -82,9 +78,15 @@ jkxs-OS致力于开发一个能在RISCV-64处理器上运行的宏内核操作�
 
 计划|优先级
 -|-
-更全面的支持busybox sh等|高
 支持Imbench，并进行性能测试|高
 基于性能测试进行性能优化|高
 提升多核运行的稳定性：修复奇妙bug|高
 提高SDcard驱动的稳定性|中
 基于硬件平台拓展内核的功能：网卡等|低
+
+
+#### 内核赛道 初赛双赛道（k210 & fu740）测评满分
+
+![fu740](./docs/image/readme/fu740排行榜.png)
+
+![k210](./docs/image/readme/k210排行榜.png)
