@@ -2,6 +2,8 @@
 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
+use crate::syscall::FUTEX_QUEUE;
+use crate::task::unblock_task;
 //
 // use crate::task::{add_task, TaskControlBlock};
 // use alloc::collections::BinaryHeap;
@@ -27,6 +29,24 @@ pub fn get_time_ns() -> usize {
 
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
+}
+
+pub fn wakeup_futex_waiters() {
+    for (_, fq) in FUTEX_QUEUE.write().iter_mut() {
+        let mut fq_lock = fq.chain.write();
+        let mut i = 0;
+        while i < fq_lock.len() {
+            let w = &fq_lock[i];
+            if w.check_expire() {
+                let task = w.task.clone();
+                fq.waiters_dec();
+                fq_lock.remove(i);
+                unblock_task(task);
+            } else {
+                i += 1;
+            }
+        }
+    }
 }
 
 // pub struct TimerCondVar {

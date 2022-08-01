@@ -63,7 +63,9 @@ impl FAT {
 
     // 查询当前簇的下一个簇,如果空闲或坏簇则返回0
     pub fn get_next_cluster(&self, cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        assert!(cluster < self.max_cluster, "The current cluster number exceeds the maximum cluster number!");
+        assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+                , cluster, self.max_cluster);
+        // assert!(cluster < self.max_cluster, "The current cluster number exceeds the maximum cluster number!");
         let (fat1_sec, fat2_sec, offset) = self.cluster_position(cluster);
         let fat1_next_cluster = get_info_block_cache(
             fat1_sec as usize, 
@@ -99,7 +101,7 @@ impl FAT {
         get_info_block_cache(
             fat1_sec as usize, 
             Arc::clone(block_device), 
-            CacheMode::WRITE)
+            CacheMode::READ)
             .write()
             .modify(offset as usize, |val: &mut u32| {
                 *val = next_cluster;
@@ -107,7 +109,7 @@ impl FAT {
         get_info_block_cache(
             fat2_sec as usize, 
             Arc::clone(block_device), 
-            CacheMode::WRITE)
+            CacheMode::READ)
             .write()
             .modify(offset as usize, |val: &mut u32| {
                 *val = next_cluster;
@@ -123,6 +125,8 @@ impl FAT {
     pub fn get_cluster_at(&self, start_cluster: u32, index: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
         let mut cluster = start_cluster;
         for _ in 0..index {
+            assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , cluster, self.max_cluster);
             cluster = self.get_next_cluster(cluster, block_device);
             if cluster == 0 {
                 return 0;
@@ -135,6 +139,8 @@ impl FAT {
     pub fn get_final_cluster(&self, start_cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
         let mut curr_cluster = start_cluster;
         loop {
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER {  // 结束簇
                 return curr_cluster & 0x0FFFFFFF;
@@ -152,6 +158,8 @@ impl FAT {
         let mut v_cluster: Vec<u32> = Vec::new();
         loop {
             v_cluster.push(curr_cluster & 0x0FFFFFFF);
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {
                 return v_cluster;
@@ -163,12 +171,14 @@ impl FAT {
 
     // 获取start_cluster所在簇链上簇的个数
     pub fn cluster_count(&self, start_cluster: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        if start_cluster == 0 || start_cluster == 1{
+        if start_cluster == 0 || start_cluster == 1 {
             return 0;
         }
         let mut curr_cluster = start_cluster;
         let mut count: u32 = 0;
         loop {
+            assert!(curr_cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
+            , curr_cluster, self.max_cluster);
             count += 1;
             let next_cluster = self.get_next_cluster(curr_cluster, block_device);
             if next_cluster >= END_CLUSTER || next_cluster == 0 {

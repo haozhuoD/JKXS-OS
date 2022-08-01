@@ -4,7 +4,6 @@
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(btree_drain_filter)]
-
 extern crate alloc;
 
 #[macro_use]
@@ -17,7 +16,6 @@ mod board;
 #[path = "boards/qemu.rs"]
 mod board;
 
-
 #[macro_use]
 mod console;
 mod config;
@@ -25,21 +23,21 @@ mod drivers;
 mod fpu;
 mod fs;
 mod lang_items;
+mod loader;
 mod mm;
 mod monitor;
 mod multicore;
 mod sbi;
-mod sync;
 mod syscall;
 mod task;
 mod timer;
 mod trap;
-mod loader;
 
-use crate::multicore::{get_hartid, save_hartid};
-use crate::sbi::console_putchar;
+use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, Ordering};
+#[allow(unused)]
+use drivers::block_device_test;
+use spin::{Lazy, Mutex, RwLock};
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -55,49 +53,58 @@ fn clear_bss() {
     }
 }
 
-static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
-// static mut BOOTHART:isize = -1;
+static BOOT_CORE_READY: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
+static BOOT_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 
 #[no_mangle]
 pub fn rust_main() -> ! {
-    console_putchar('a' as usize);
-    // println!("[kernel] hello this is rust_main "); 这句话加了之后会覆盖a0，必须先save_hartid
-    save_hartid();
-    console_putchar('b' as usize);
+    save_hartid(); // 这句话之前不能加任何函数调用，否则a0的值会被覆盖
     let hartid = get_hartid();
-    println!("[kernel] Riscv hartid {} init ", hartid);
-    // if AP_CAN_INIT.load(Ordering::Relaxed) {
-    //     others_main(hartid);
-    // }
+    info!("Riscv hartid {} init ", hartid);
+    if *(BOOT_CORE_READY.read()) {
+        // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
+        others_main(hartid);
+    }
     clear_bss();
-    console_putchar('c' as usize);
     mm::init();
     mm::remap_test();
-    console_putchar('d' as usize);
     fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    console_putchar('e' as usize);
     fs::list_apps();
-    console_putchar('f' as usize);
+    fs::init_rootfs();
+    // block_device_test();
     task::add_initproc();
-    println!("[kernel] (Boot Core) Riscv hartid {} run ", hartid);
-    AP_CAN_INIT.store(true, Ordering::Relaxed);
+    mm::load_libc_so();
+    info!("(Boot Core) Riscv hartid {} run ", hartid);
+    // // get core_clock
+    // #[cfg(feature = "board_fu740")]
+    // {
+    //     let core_f = drivers::core_freq();
+    //     info!("core_freq is 0x{:X} ", core_f);
+    // }
+
+    *(BOOT_CORE_READY.write()) = true;
     // wakeup_other_cores(hartid);
 
+    // while *(BOOT_COUNT.lock()) != 2 {};
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
 
 fn others_main(hartid: usize) -> ! {
-    console_putchar('e' as usize);
-    println!("[kernel] (Other Cores) Riscv hartid {} run ", hartid);
     mm::init_other();
     fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
+    info!("(Other Cores) Riscv hartid {} run ", hartid);
+    {
+        let mut boot_count = BOOT_COUNT.lock();
+        // println!("==== boot_count++ before:{:?} ==== ",boot_count);
+        *boot_count += 1;
+    }
     task::run_tasks();
     panic!("Unreachable in others_main!");
 }

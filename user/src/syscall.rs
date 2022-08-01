@@ -64,6 +64,8 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 
+const SYSCALL_TOGGLE_TRACE: usize = 0xf000;
+const SYSCALL_READDIR: usize = 0xf001;
 const SYSCALL_SHUTDOWN: usize = 0xffff;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
@@ -95,7 +97,7 @@ pub fn sys_close(fd: usize) -> isize {
     syscall(SYSCALL_CLOSE, [fd, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_pipe(pipe: &mut [usize]) -> isize {
+pub fn sys_pipe2(pipe: &mut [usize]) -> isize {
     syscall(SYSCALL_PIPE2, [pipe.as_mut_ptr() as usize, 0, 0, 0, 0, 0])
 }
 
@@ -137,7 +139,7 @@ pub fn sys_getpid() -> isize {
     syscall(SYSCALL_GETPID, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_clone() -> isize {
     syscall(SYSCALL_CLONE, [0, 0, 0, 0, 0, 0])
 }
 
@@ -163,4 +165,20 @@ pub fn sys_brk(addr: usize) -> isize {
 pub fn sys_shutdown() -> ! {
     syscall(SYSCALL_SHUTDOWN, [0, 0, 0, 0, 0, 0]);
     panic!("Shutdown");
+}
+
+pub fn sys_toggle_trace() -> isize {
+    syscall(SYSCALL_TOGGLE_TRACE, [0, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_chdir(path: &str) -> isize {
+    syscall(SYSCALL_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_getdents64(fd: isize, buf: &mut [u8]) -> isize {
+    syscall(SYSCALL_GETDENTS64, [fd as usize, buf.as_mut_ptr() as usize, buf.len(), 0, 0, 0])
+}
+
+pub fn sys_readdir(abs_path: &str, buf: &mut [u8]) -> isize {
+    syscall(SYSCALL_READDIR, [abs_path.as_ptr() as usize, buf.as_mut_ptr() as usize, buf.len(), 0, 0, 0])
 }

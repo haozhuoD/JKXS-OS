@@ -109,6 +109,18 @@ impl PageTable {
         }
         result
     }
+    pub fn set_pte_flags(&self, vpn: VirtPageNum, flags: PTEFlags) -> Option<&mut PageTableEntry> {
+        if let Some(pte) = self.find_pte(vpn) {
+            if !pte.is_valid() {
+                return None;
+            }
+            pte.bits = usize::from(pte.ppn()) << 10
+                | (flags | PTEFlags::U | PTEFlags::V | PTEFlags::A | PTEFlags::D).bits() as usize;
+            Some(pte)
+        } else {
+            None
+        }
+    }
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
@@ -178,6 +190,7 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     string
 }
 
+/// 不支持跨页读写
 pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
     let page_table = PageTable::from_token(token);
     page_table
@@ -195,6 +208,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .get_mut()
 }
 
+#[derive(Debug)]
 pub struct UserBuffer {
     pub buffers: Vec<&'static mut [u8]>,
 }
@@ -230,6 +244,13 @@ impl UserBuffer {
             }
         }
         len
+    }
+
+    pub fn clear(&mut self) -> usize {
+        self.buffers.iter_mut().for_each(|buf| {
+            buf.fill(0);
+        });
+        self.len()
     }
 }
 

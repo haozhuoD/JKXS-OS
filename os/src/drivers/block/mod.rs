@@ -1,24 +1,32 @@
+#[cfg(feature = "board_fu740")]
+mod clock;
 mod sdcard;
-mod virtio_blk;
-mod spi;
 mod sleep;
+mod spi;
+mod virtio_blk;
+mod virtio_fsimg;
 
 pub use sdcard::SDCardWrapper;
-use spin::Lazy;
 pub use virtio_blk::VirtIOBlock;
+pub use virtio_fsimg::VirtIOFSImg;
+use spin::Lazy;
 
 use crate::board::BlockDeviceImpl;
 use alloc::sync::Arc;
 use fat32_fs::BlockDevice;
 
-pub static BLOCK_DEVICE: Lazy<Arc<dyn BlockDevice>> = Lazy::new(|| Arc::new(BlockDeviceImpl::new()));
+#[cfg(feature = "board_fu740")]
+pub use clock::core_freq;
+
+pub static BLOCK_DEVICE: Lazy<Arc<dyn BlockDevice>> =
+    Lazy::new(|| Arc::new(BlockDeviceImpl::new()));
 
 #[allow(unused)]
 pub fn block_device_test() {
     let block_device = BLOCK_DEVICE.clone();
     let mut write_buffer = [0u8; 512];
     let mut read_buffer = [0u8; 512];
-    for i in 0..512 {
+    for i in 131072..131584 {
         for byte in write_buffer.iter_mut() {
             *byte = i as u8;
         }
@@ -26,5 +34,15 @@ pub fn block_device_test() {
         block_device.read_block(i as usize, &mut read_buffer);
         assert_eq!(write_buffer, read_buffer);
     }
-    println!("block device test passed!");
+    info!("block device 512 blocks loop[ write-read ]  test passed!");
+    let mut write_buffer = [66u8; 512];
+    let mut read_buffer = [0u8; 512];
+    for i in 131072..131584 {
+        block_device.write_block(i as usize, &write_buffer);
+    }
+    for i in 131072..131584 {
+        block_device.read_block(i as usize, &mut read_buffer);
+        assert_eq!(write_buffer, read_buffer);
+    }
+    info!("block device 512 blocks test passed!");
 }

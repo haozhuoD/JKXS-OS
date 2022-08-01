@@ -8,6 +8,7 @@
     .section .text.trampoline
     .globl __alltraps
     .globl __restore
+    .globl __sigreturn
     .align 2
 __alltraps:
     csrrw sp, sscratch, sp
@@ -70,3 +71,9 @@ __restore:
     # back to user stack
     ld sp, 2*8(sp)
     sret
+
+    .align 2
+__sigreturn:
+    li a7, 139
+    # syscall SIGRETURN
+    ecall

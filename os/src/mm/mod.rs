@@ -9,14 +9,10 @@ use address::VPNRange;
 pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use core::arch::asm;
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
-pub use memory_set::remap_test;
+pub use memory_set::{remap_test, load_libc_so};
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-pub use mmap::MmapArea;
-use page_table::PTEFlags;
-pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
-};
+pub use mmap::{MmapArea, MmapFlags, FdOne};
+pub use page_table::*;
 use riscv::register::satp;
 
 pub fn init() {

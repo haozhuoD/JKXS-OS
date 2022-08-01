@@ -1,4 +1,4 @@
-pub const CLOCK_FREQ: usize = 403000000 / 62; //???
+pub const CLOCK_FREQ: usize = 1000000; //???
 
 pub const MMIO: &[(usize, usize)] = &[
     // we don't need clint in S priv when running
@@ -21,9 +21,9 @@ pub const MMIO: &[(usize, usize)] = &[
     // (0x0900_0000, 0x091F_FFFF), // Rom */                       0x200000    0x091F_FFFF
     // (0x0A00_0000, 0x0bFF_FFFF), // Rom */                       0x2000000   0x0bFF_FFFF
     (0x0C00_0000, 0x4000000), // PLIC */                      0x4000000   0x0FFF_FFFF
-    (0x1000_0000, 0x1000), // PRCI */                      0x1000      0x1000_0FFF
-    (0x1001_0000, 0x1000), // UART0 */                     0x1000      0x1001_0FFF
-    (0x1001_1000, 0x1000), // UART1 */                     0x1000      0x1001_1FFF
+    (0x1000_0000, 0x1000),    // PRCI */                      0x1000      0x1000_0FFF
+    (0x1001_0000, 0x1000),    // UART0 */                     0x1000      0x1001_0FFF
+    (0x1001_1000, 0x1000),    // UART1 */                     0x1000      0x1001_1FFF
     // (0x1002_0000, 0x1002_0FFF), // PWM0 */                      0x1000      0x1002_0FFF
     // (0x1002_1000, 0x1002_1FFF), // PWM1 */                      0x1000      0x1002_1FFF
     // (0x1003_0000, 0x1003_0FFF), // I2C 0 */                     0x1000      0x1003_0FFF
@@ -33,7 +33,7 @@ pub const MMIO: &[(usize, usize)] = &[
     (0x1005_0000, 0x1000), // QSPI 2 */                    0x1000      0x1005_0FFF
     (0x1006_0000, 0x1000), // GPIO */                      0x1000      0x1006_0FFF
     // (0x1007_0000, 0x1007_0FFF), // OTP */                       0x1000      0x1007_0FFF
-    (0x1008_0000, 0x1000), // Pin Control */               0x1000      0x1008_0FFF 
+    (0x1008_0000, 0x1000), // Pin Control */               0x1000      0x1008_0FFF
     // (0x1009_0000, 0x1009_1FFF), // Ethernet */                  0x2000      0x1009_1FFF
     // (0x100A_0000, 0x100A_0FFF), // GEMGXL MGMT */               0x1000      0x100A_0FFF
     // (0x100B_0000, 0x100B_3FFF), // Memory Controller */         0x4000      0x100B_3FFF
@@ -45,13 +45,14 @@ pub const MMIO: &[(usize, usize)] = &[
     // (0x1800_0000, 0x1FFF_FFFF), // Error Device 1 */            0x8000000   0x1FFF_FFFF
     (0x2000_0000, 0x10000000), // SPI 0 */                     0x10000000  0x2FFF_FFFF
     (0x3000_0000, 0x10000000), // SPI 1 */                     0x10000000  0x3FFF_FFFF
-    // (0x6000_0000, 0x7FFF_FFFF), // PCIe */                      0x10000000  0x7FFF_FFFF
-    // (0x8000_0000, 0x0008_7FFF_FFFF), // Memory */
-    // (0x000D_F000_0000, 0x000D_FFFF_FFFF), // PCIe */            0x10000000  0x000D_FFFF_FFFF
-    // (0x000E_0000_0000, 0x000E_FFFF_FFFF), // PCIe */            0x10000000  0x000E_FFFF_FFFF
-    // (0x0020_0000_0000, 0x003F_FFFF_FFFF),  // PCIe */           0x20_0000_0000  0x003F_FFFF_FFFF
+                               // (0x6000_0000, 0x7FFF_FFFF), // PCIe */                      0x10000000  0x7FFF_FFFF
+                               // (0x8000_0000, 0x0008_7FFF_FFFF), // Memory */
+                               // (0x000D_F000_0000, 0x000D_FFFF_FFFF), // PCIe */            0x10000000  0x000D_FFFF_FFFF
+                               // (0x000E_0000_0000, 0x000E_FFFF_FFFF), // PCIe */            0x10000000  0x000E_FFFF_FFFF
+                               // (0x0020_0000_0000, 0x003F_FFFF_FFFF),  // PCIe */           0x20_0000_0000  0x003F_FFFF_FFFF
 ];
 
-pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
+// pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
 
+pub type BlockDeviceImpl = crate::drivers::block::VirtIOFSImg;
 pub const MAX_CPU_NUM: usize = 5;

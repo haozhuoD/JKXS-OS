@@ -1,4 +1,4 @@
-use super::File;
+use super::{File, OpenFlags};
 use crate::mm::UserBuffer;
 
 use alloc::sync::{Arc, Weak};
@@ -9,27 +9,30 @@ use crate::task::suspend_current_and_run_next;
 pub struct Pipe {
     readable: bool,
     writable: bool,
+    nonblock: bool,
     buffer: Arc<Mutex<PipeRingBuffer>>,
 }
 
 impl Pipe {
-    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>, nonblock: bool) -> Self {
         Self {
             readable: true,
             writable: false,
+            nonblock,
             buffer,
         }
     }
-    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>, nonblock: bool) -> Self {
         Self {
             readable: false,
             writable: true,
+            nonblock,
             buffer,
         }
     }
 }
 
-const RING_BUFFER_SIZE: usize = 32;
+const RING_BUFFER_SIZE: usize = 1024;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
@@ -98,10 +101,11 @@ impl PipeRingBuffer {
 }
 
 /// Return (read_end, write_end)
-pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
+pub fn make_pipe(flags: OpenFlags) -> (Arc<Pipe>, Arc<Pipe>) {
     let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
-    let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone()));
-    let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
+    let nonblock = flags.contains(OpenFlags::NONBLOCK);
+    let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone(), nonblock));
+    let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone(), nonblock));
     buffer.lock().set_write_end(&write_end);
     (read_end, write_end)
 }
@@ -121,7 +125,7 @@ impl File for Pipe {
             let mut ring_buffer = self.buffer.lock();
             let loop_read = ring_buffer.available_read();
             if loop_read == 0 {
-                if ring_buffer.all_write_ends_closed() {
+                if ring_buffer.all_write_ends_closed() || read_size > 0 || self.nonblock {
                     return read_size;
                 }
                 drop(ring_buffer);
@@ -143,12 +147,18 @@ impl File for Pipe {
     }
     fn write(&self, buf: UserBuffer) -> usize {
         assert!(self.writable());
+        if buf.len() == 0 {
+            return 0;
+        }
         let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {
             let mut ring_buffer = self.buffer.lock();
             let loop_write = ring_buffer.available_write();
             if loop_write == 0 {
+                if self.nonblock {
+                    return write_size;
+                }
                 drop(ring_buffer);
                 suspend_current_and_run_next();
                 continue;
@@ -163,5 +173,35 @@ impl File for Pipe {
                 }
             }
         }
+    }
+    fn read_blocking(&self) -> bool {
+        if self.readable() {
+            if self.nonblock {
+                return false;
+            } else {
+                let ring_buffer = self.buffer.lock();
+                if ring_buffer.available_read() == 0 {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        false
+    }
+    fn write_blocking(&self) -> bool {
+        if self.writable() {
+            if self.nonblock {
+                return false;
+            } else {
+                let ring_buffer = self.buffer.lock();
+                if ring_buffer.available_write() == 0 {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        false
     }
 }

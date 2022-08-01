@@ -1,5 +1,5 @@
 
-use crate::CacheMode;
+use crate::{CacheMode};
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -246,7 +246,7 @@ impl ShortDirEntry {
 	}
 
 	pub fn is_valid(&self) -> bool {
-		self.name[0] != 0xE5
+		self.name[0] != 0xE5 && self.name[0] != 0x00
 	}
 
 	pub fn is_deleted(&self) -> bool {
@@ -281,26 +281,22 @@ impl ShortDirEntry {
         (year,month,day,hour,min,sec,long_sec)
     }
 
-	pub fn get_modification_time(&self) -> (u32,u32,u32,u32,u32,u32,u64) {
-        // year-month-day-Hour-min-sec
-        let year: u32  = ((self.last_mod_date & 0xFE00)>>9) as u32 + 1980;
-        let month: u32  = ((self.last_mod_date & 0x01E0)>>5) as u32 ;    
-        let day: u32  = (self.last_mod_date & 0x001F) as u32 ;    
-        let hour: u32  = ((self.last_mod_time & 0xF800)>>11) as u32;    
-        let min: u32  = ((self.last_mod_time & 0x07E0)>>5) as u32;    
-        let sec: u32  = ((self.last_mod_time & 0x001F)<<1) as u32; // 秒数需要*2   
-        let long_sec: u64 = ((((year - 1980) * 365 + month * 30 + day) * 24 + hour) * 3600 + min*60 + sec) as u64;
-        (year,month,day,hour,min,sec,long_sec)
+	pub fn get_modification_time(&self) -> (u16, u16) {
+		(self.last_mod_date, self.last_mod_time)
     }
 
-	pub fn get_accessed_time(&self) -> (u32,u32,u32,u32,u32,u32,u64) {
-        // year-month-day-Hour-min-sec
-        let year: u32  = ((self.last_accessed_date & 0xFE00)>>9) as u32 + 1980;
-        let month:u32  = ((self.last_accessed_date & 0x01E0)>>5) as u32 ;    
-        let day: u32  = (self.last_accessed_date & 0x001F) as u32 ;    
-        let long_sec: u64 = (((year - 1970) * 365 + month * 30 + day) * 24 * 3600) as u64;
-        (year,month,day,0,0,0,long_sec)
+	pub fn set_modification_time(&mut self, date: u16, time: u16) {
+		self.last_mod_date = date;
+		self.last_mod_time = time;
+	}
+
+	pub fn get_accessed_time(&self) -> (u16, u16) {
+        (self.last_accessed_date, 0)
     }
+
+	pub fn set_accessed_time(&mut self, date: u16) {
+		self.last_accessed_date = date;
+	}
 
 	// 获取文件名的大写
 	pub fn get_name_uppercase(&self) -> String {
@@ -526,7 +522,7 @@ impl ShortDirEntry {
 					get_info_block_cache(  // 目录项通过Info block cache读取
 						curr_sector, 
 						Arc::clone(block_device), 
-						CacheMode::WRITE
+						CacheMode::READ
 					)
 					.write()
 					.modify(0, |data_block: &mut DataBlock| {
@@ -538,7 +534,7 @@ impl ShortDirEntry {
 					get_data_block_cache(  // 文件内容通过Data block cache读取
 						curr_sector, 
 						Arc::clone(block_device), 
-						CacheMode::WRITE
+						CacheMode::READ
 					)
 					.write()
 					.modify(0, |data_block: &mut DataBlock| {

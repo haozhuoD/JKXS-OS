@@ -14,5 +14,5 @@ fn panic_handler(panic_info: &core::panic::PanicInfo) -> ! {
         println!("Panicked: {}", err);
     }
     kill(getpid() as usize, SignalFlags::SIGABRT.bits());
-    unreachable!()
+    loop {}
 }

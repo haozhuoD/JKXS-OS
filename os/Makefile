@@ -77,6 +77,7 @@ run: build
 ifeq ($(BOARD),qemu)
 	qemu-system-riscv64 \
 		-machine virt \
+		-m 1G	\
 		-nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
@@ -95,6 +96,7 @@ endif
 
 gdb:
 	@qemu-system-riscv64 \
+		-m 1G	\
 		-machine virt -nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
@@ -107,11 +109,15 @@ monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
 		-ex 'set arch riscv:rv64' \
 		-ex 'target remote localhost:1234'
+		
+# -ex 'add-symbol-file ../user/busybox_lua_testsuites/lmbench_all' \
+# -ex 'add-symbol-file ../user/libc-tests/entry-static.exe'\
 
 run-light:
 ifeq ($(BOARD),qemu)
 	qemu-system-riscv64 \
 		-machine virt \
+		-m 8G \
 		-nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
@@ -144,6 +150,27 @@ local: user-apps
 move:
 	rm -f ~/nfs/os.bin
 	sudo cp ./os.bin ~/nfs	
+
+showmount:
+	showmount -e 10.251.176.187
+
+nfs-mount:
+	sudo mount -t nfs 10.251.176.187:/home/whsu/Documents/nfs ~/nfs
+
+unmount:
+	sudo umount ~/nfs
+
+run-vir-fsimg: build
+	qemu-system-riscv64 \
+			-machine virt \
+			-m 1G	\
+			-nographic \
+			-bios $(BOOTLOADER) \
+			-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+			-device loader,file=$(FS_IMG),addr=0x90000000 \
+			-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
+			-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+			-smp $(CPUS)
 
 # burn-fu740:
 # 	@sudo chmod 777 $(fu740-SERIALPORT)

@@ -6,14 +6,14 @@ use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
-        println!(
-            "[kernel] Panicked at {}:{} {}",
+        error!(
+            "Panicked at {}:{} {}",
             location.file(),
             location.line(),
             info.message().unwrap()
         );
     } else {
-        println!("[kernel] Panicked: {}", info.message().unwrap());
+        error!("Panicked: {}", info.message().unwrap());
     }
     unsafe {
         backtrace();
@@ -26,14 +26,14 @@ unsafe fn backtrace() {
     let option_stop = current_kstack_top();
     if let Some(stop) = option_stop {
         asm!("mv {}, s0", out(reg) fp);
-        println!("---START BACKTRACE---");
+        info!("---START BACKTRACE---");
         for i in 0..10 {
             if fp == stop {
                 break;
             }
-            println!("#{}:ra={:#x}", i, *((fp - 8) as *const usize));
+            info!("#{}:ra={:#x}", i, *((fp - 8) as *const usize));
             fp = *((fp - 16) as *const usize);
         }
-        println!("---END   BACKTRACE---");
+        info!("---END   BACKTRACE---");
     }
 }

@@ -3,17 +3,21 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, USER_STACK_BASE};
+use crate::config::{
+    DYNAMIC_LINKER, MEMORY_END, MMIO, PAGE_SIZE, SIGRETURN_TRAMPOLINE, TRAMPOLINE, USER_STACK_BASE,
+};
+use crate::fs::{open_common_file, OpenFlags};
 use crate::gdb_println;
+use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
-    AuxHeader, FdTable, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
+    AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP,
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
 };
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::arch::asm;
 use riscv::register::satp;
-use spin::{RwLock, Lazy};
+use spin::{Lazy, RwLock};
 
 extern "C" {
     fn stext();
@@ -30,17 +34,38 @@ extern "C" {
 
 pub static mut SATP: usize = 0;
 
-pub static KERNEL_SPACE: Lazy<RwLock<MemorySet>> = Lazy::new(|| RwLock::new(MemorySet::new_kernel()));
+// TODO 此处仅仅在内核地址空间中保存一份lic.so, 可使用更优雅的方式解决
+// 还需在动态链接加载其不同时继续进行处理
+pub static KERNEL_DL_DATA: Lazy<RwLock<Vec<u8>>> = Lazy::new(|| RwLock::new(read_dll()));
+
+fn read_dll() -> Vec<u8> {
+    if let Some(app_vfile) = open_common_file("/", "libc.so", OpenFlags::RDONLY) {
+        return app_vfile.read_all();
+    } else {
+        error!("[execve load_dl] dynamic load dl false");
+        return Vec::new();
+    }
+}
+
+pub fn load_libc_so() {
+    debug!(
+        "load libc.so to kernel memoryset size:0x{:x} ......",
+        KERNEL_DL_DATA.read().len()
+    );
+}
+
+pub static KERNEL_SPACE: Lazy<RwLock<MemorySet>> =
+    Lazy::new(|| RwLock::new(MemorySet::new_kernel()));
 
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.read().token()
 }
 
 pub struct MemorySet {
-    page_table: PageTable,
+    pub page_table: PageTable,
     areas: Vec<MapArea>,
     heap_frames: BTreeMap<VirtPageNum, FrameTracker>,
-    mmap_areas: Vec<MmapArea>,
+    pub mmap_areas: Vec<MmapArea>,
 }
 
 impl MemorySet {
@@ -101,23 +126,30 @@ impl MemorySet {
             PTEFlags::R | PTEFlags::X,
         );
     }
+    fn map_sigreturn_trampoline(&mut self) {
+        self.page_table.map(
+            VirtAddr::from(SIGRETURN_TRAMPOLINE).into(),
+            PhysAddr::from(strampoline as usize).into(),
+            PTEFlags::R | PTEFlags::X | PTEFlags::U,
+        );
+    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();
         // map kernel sections
-        println!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(
+        debug!(".text va[{:#x}, {:#x})", stext as usize, etext as usize);
+        debug!(
             ".rodata va[{:#x}, {:#x})",
             srodata as usize, erodata as usize
         );
-        println!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
-        println!(
+        debug!(".data va[{:#x}, {:#x})", sdata as usize, edata as usize);
+        debug!(
             ".bss va[{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
-        println!("mapping .text section Identical");
+        debug!("mapping .text section Identical");
         memory_set.push(
             MapArea::new(
                 (stext as usize).into(),
@@ -128,7 +160,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .rodata section Identical");
+        debug!("mapping .rodata section Identical");
         memory_set.push(
             MapArea::new(
                 (srodata as usize).into(),
@@ -139,7 +171,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .data section Identical");
+        debug!("mapping .data section Identical");
         memory_set.push(
             MapArea::new(
                 (sdata as usize).into(),
@@ -150,7 +182,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping .bss section Identical");
+        debug!("mapping .bss section Identical");
         memory_set.push(
             MapArea::new(
                 (sbss_with_stack as usize).into(),
@@ -161,7 +193,7 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping physical memory Identical");
+        debug!("mapping physical memory Identical");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -172,9 +204,13 @@ impl MemorySet {
             None,
             0,
         );
-        println!("mapping memory-mapped registers Identical");
+        debug!("mapping memory-mapped registers Identical");
         for pair in MMIO {
-            println!("MMIO range [ {:#x} ~ {:#x}  ]",(*pair).0 ,(*pair).0 + (*pair).1);
+            debug!(
+                "MMIO range [ {:#x} ~ {:#x}  ]",
+                (*pair).0,
+                (*pair).0 + (*pair).1
+            );
             memory_set.push(
                 MapArea::new(
                     (*pair).0.into(),
@@ -187,8 +223,61 @@ impl MemorySet {
                 0,
             );
         }
-        println!("[kernel] mapping done");
+        debug!("mapping done");
         memory_set
+    }
+    /// load libc.so(elf) to DYNAMIC_LINKER
+    /// return value 0: erro,   other: ld入口地址
+    pub fn load_dl(&mut self) -> usize {
+        let all_data = KERNEL_DL_DATA.read();
+        if all_data.len() == 0 {
+            return 0;
+        }
+        // println!("[load_dl]  KERNEL_DL_DATA.len():{}", all_data.len());
+        let elf_data = all_data.as_slice();
+        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        let elf_header = elf.header;
+        let magic = elf_header.pt1.magic;
+        assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf-dl !");
+        let ph_count = elf_header.pt2.ph_count();
+
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            let start_va: VirtAddr = (DYNAMIC_LINKER + ph.virtual_addr() as usize).into();
+            // let start_va: VirtAddr = (ph.virtual_addr() as usize).into(); // virtual_addr 应该是0
+            let end_va: VirtAddr =
+                (DYNAMIC_LINKER + ph.virtual_addr() as usize + ph.mem_size() as usize).into();
+
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                // println!("[load_dl] start_va:{:#?},   end_va: {:#?} ", start_va, end_va);
+                let mut map_perm = MapPermission::U;
+                let ph_flags = ph.flags();
+                if ph_flags.is_read() {
+                    map_perm |= MapPermission::R;
+                }
+                if ph_flags.is_write() {
+                    map_perm |= MapPermission::W;
+                }
+                if ph_flags.is_execute() {
+                    map_perm |= MapPermission::X;
+                }
+                let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+                // println!("[load_dl]  elf.input:{}, start:{},   end:{} ", &elf.input.len(), ph.offset() as usize, (ph.offset() + ph.file_size()) as usize);
+                self.push(
+                    map_area,
+                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    start_va.page_offset(),
+                );
+
+                // gdb_println!(
+                //     SYSCALL_ENABLE,
+                //     "[load_dl] va[0x{:X} - 0x{:X}] Framed",
+                //     start_va.0,
+                //     end_va.0
+                // );
+            }
+        }
+        return elf_header.pt2.entry_point() as usize;
     }
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
@@ -196,6 +285,7 @@ impl MemorySet {
         let mut auxv: Vec<AuxHeader> = Vec::new();
         let mut memory_set = Self::new_bare();
         // map trampoline
+        memory_set.map_sigreturn_trampoline();
         memory_set.map_trampoline();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -204,7 +294,10 @@ impl MemorySet {
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirtPageNum(0);
+        let mut _at_base = 0usize;
 
+        // println!("[from_elf] program_header-2 : type is {:#?} ",ph.get_type().unwrap());
+        // run other programs
         auxv.push(AuxHeader {
             aux_type: AT_PHENT,
             value: elf.header.pt2.ph_entry_size() as usize,
@@ -217,10 +310,41 @@ impl MemorySet {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
-        auxv.push(AuxHeader {
-            aux_type: AT_BASE,
-            value: 0 as usize,
-        });
+
+        // todo is_dynamic = 1;
+        // .interp: 2 第二个
+        // .strtab: ph_count-2 倒数第二个
+        // TODO 通过方法寻找？ 可读性更高？
+        let dl_sec = elf.program_header(1).unwrap();
+        if dl_sec.get_type().unwrap() == xmas_elf::program::Type::Interp {
+            _at_base = memory_set.load_dl();
+            if _at_base != 0 {
+                // error!("load_dl finish !");
+                auxv.push(AuxHeader {
+                    aux_type: AT_BASE,
+                    value: DYNAMIC_LINKER as usize,
+                });
+                // println!("chech_addr : {:X} ",at_base);
+                // check
+                // if let Some(chech_addr) = memory_set.page_table.translate_va(DYNAMIC_LINKER.into()){
+                //     println!("chech_addr : {:?} ",chech_addr);
+                // }else {
+                //     error!("check no pass");
+                // }
+
+                _at_base += DYNAMIC_LINKER;
+            } else {
+                error!("dynamic linker error !");
+                return (memory_set, 0, 0, 0, auxv);
+            }
+        } else {
+            auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: 0 as usize,
+            });
+            _at_base = 0;
+        }
+
         auxv.push(AuxHeader {
             aux_type: AT_FLAGS,
             value: 0 as usize,
@@ -270,11 +394,17 @@ impl MemorySet {
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
+            // println!("[from_elf] program_header-{:#?} : type is {:#?} ", i, ph.get_type().unwrap());
+            // println!("[from_elf] virtual_addr : {:X},  mem_size is {:X} ", ph.virtual_addr(), ph.mem_size());
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                // println!(" +++ [from_elf] program_header-{:#?} : type is {:#?} ", i, ph.get_type().unwrap());
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
+                if head_va == 0 {
+                    head_va = start_va.0;
+                }
                 if ph_flags.is_read() {
                     map_perm |= MapPermission::R;
                 }
@@ -297,25 +427,33 @@ impl MemorySet {
                     start_va.0,
                     end_va.0
                 );
-
-                if start_va.aligned() {
-                    head_va = start_va.0;
-                }
             }
         }
 
         let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        // println!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,
         });
+
+        let entry: usize;
+        if _at_base == 0 {
+            // 静态链接程序
+            entry = elf.header.pt2.entry_point() as usize;
+        } else {
+            entry = _at_base;
+        }
+
+        // println!("[from_elf] elf entry : {:X} ",elf.header.pt2.entry_point() as usize);
 
         let max_end_va: VirtAddr = max_end_vpn.into();
         let user_heap_base: usize = max_end_va.into();
         (
             memory_set,
             USER_STACK_BASE,
-            elf.header.pt2.entry_point() as usize,
+            // elf.header.pt2.entry_point() as usize,
+            entry,
             user_heap_base,
             auxv,
         )
@@ -323,6 +461,7 @@ impl MemorySet {
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
         let mut memory_set = Self::new_bare();
         // map trampoline
+        memory_set.map_sigreturn_trampoline();
         memory_set.map_trampoline();
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
@@ -337,27 +476,56 @@ impl MemorySet {
                     .copy_from_slice(src_ppn.get_bytes_array());
             }
         }
+        // 复制mmap区域
+        for area in user_space.mmap_areas.iter() {
+            // 建立新的mmap_area，有vpn范围和dataframes（没有数据）
+            let new_area = MmapArea::from_another(area);
+            // 建立页表映射（物理页帧自动分配），同时添加dataframes
+            memory_set.push_and_map_mmap_area(new_area);
+            // 拷贝数据
+            for vpn in area.data_frames.keys() {
+                // debug!("mmap vpn copy {:#x}", vpn.0);
+                let src_ppn = user_space.translate(*vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
+                // debug!("mmap copy: src_ppn = {:#x?},  dst_ppn {:#x}", src_ppn.0, dst_ppn.0);
+                dst_ppn
+                    .get_bytes_array()
+                    .copy_from_slice(src_ppn.get_bytes_array());
+            }
+        }
+        // 复制heap区域
+        for &vpn in user_space.heap_frames.keys() {
+            let frame = frame_alloc().unwrap();
+            let ppn = frame.ppn;
+            memory_set.heap_frames.insert(vpn, frame);
+            memory_set
+                .page_table
+                .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            // copy data from another space
+            let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            ppn.get_bytes_array()
+                .copy_from_slice(src_ppn.get_bytes_array());
+        }
         memory_set
     }
     pub fn activate(&self) {
-        println!("meomry set activating...");
         let satp = self.page_table.token();
         unsafe {
-            println!("x1...");
             SATP = satp; //其他核初始化
-            println!("x2...");
             satp::write(satp);
-            println!("x3...");
             asm!("sfence.vma");
-            println!("x4...");
         }
     }
-    // pub fn activate_other(&self) {
-    //     unsafe {
-    //         satp::write(SATP);
-    //         asm!("sfence.vma");
-    //     }
-    // }
+
+    /// 设置pte标志位，失败返回-1
+    pub fn set_pte_flags(&self, vpn: VirtPageNum, flags: PTEFlags) -> isize {
+        if self.page_table.set_pte_flags(vpn, flags).is_none() {
+            -1
+        } else {
+            0
+        }
+    }
+
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
@@ -371,11 +539,21 @@ impl MemorySet {
         self.mmap_areas.push(mmap_area);
     }
 
+    /// 插入一个mmap区域并将mmap_area添加到页表
+    pub fn push_and_map_mmap_area(&mut self, mmap_area: MmapArea) {
+        // 添加页表和dataframes
+        mmap_area.map_all(&mut self.page_table);
+        self.mmap_areas.push(mmap_area);
+    }
+
     /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
-    pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum, fd_table: FdTable) -> isize {
+    pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum) -> isize {
         for mmap_area in self.mmap_areas.iter_mut() {
-            if vpn >= mmap_area.start_vpn && vpn < mmap_area.end_vpn {
-                return mmap_area.map_one(&mut self.page_table, fd_table, vpn);
+            if vpn >= mmap_area.start_vpn
+                && vpn < mmap_area.end_vpn
+                && !mmap_area.data_frames.contains_key(&vpn)
+            {
+                return mmap_area.map_one(&mut self.page_table, vpn);
             }
         }
         // if failed
@@ -543,33 +721,27 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    println!("[kernel] remap test start...");
+    debug!("remap test start...");
     let mut kernel_space = KERNEL_SPACE.read();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
-    println!("[kernel] mid_text = {:#x?}, mid_rodata = {:#x?}, mid_data = {:#x?}", mid_text, mid_rodata, mid_data);
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
         .unwrap()
         .writable(),);
-    println!("[kernel] remap test 1 passed");
 
     assert!(!kernel_space
         .page_table
         .translate(mid_rodata.floor())
         .unwrap()
         .writable(),);
-    println!("[kernel] remap test 2 passed");
 
     assert!(!kernel_space
         .page_table
         .translate(mid_data.floor())
         .unwrap()
         .executable(),);
-
-    println!("[kernel] remap test 3 passed");
-
-    println!("remap_test passed!");
+    debug!("remap_test passed!");
 }
