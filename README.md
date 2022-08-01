@@ -16,13 +16,9 @@
 
 ## <i>Documents</i>
 
-#### <u>项目整体设计文档</u>
+#### 项目整体设计文档 [doc_jkxsOS设计文档](./doc_jkxsOS设计文档.pdf)
 
-[doc_jkxsOS设计文档](./doc_jkxsOS设计文档.pdf)
-
-#### <u>模块开发相关文档</u>
-
-[./docs](./docs)
+#### 模块开发相关文档 [./docs](./docs)
 
 ## <i>Branches</i>
 
@@ -58,7 +54,7 @@ make run
 
 #### 生成fu740的内核镜像
 
-在项目根目录下运行命令生成`fu740`平台的`JKXS-OS`内核镜像
+在项目根目录下运行命令生成`fu740`平台的`JKXS-OS`内核镜像：
 ```shell
 make all
 ```
@@ -126,7 +122,7 @@ make monitor
 
 <br>
 
-## 未来计划
+## <i>Future Plans</i>
 
 计划|优先级
 -|-
