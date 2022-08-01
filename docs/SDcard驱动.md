@@ -20,7 +20,7 @@
 
 尽量保持rCore-tutorial中SDcard驱动的整体机构和接口不变，对于最上层
 
-![](image/SD卡驱动/1652331997475.png)![](image/SDcard驱动/1652359448039.png)
+![](image/SDcard/整体架构.png)
 
 ### 已有的FU740-PAC包
 
@@ -98,7 +98,7 @@ todo ： DMA？ 在fat32文件系统调用blockdevice时，不再默认只读一
 
 此手册第5页，如下图所示表明SDcard使用的是SPI0 ， 而实际上使用的为SPI2(和fu540中一致)
 
-![](image/SDcard驱动/1652360475313.png)
+![](image/SDcard/Schematics.png)
 
 ### 主要的参考实现 :
 
