@@ -2,15 +2,21 @@
 
 ![System](https://img.shields.io/badge/System-jkxsOS-brightgreen) ![Lang](https://img.shields.io/badge/Lang-Rust-green) ![ISA](https://img.shields.io/badge/ISA-riscv64-yellowgreen) ![Platform](https://img.shields.io/badge/Platform-Qemu%2c%20Hifive%20Unmatched-yellow)
 
-#### 内核赛道 初赛双赛道（k210 & fu740）测评满分
+## <i>Current Achievements</i>
+
+#### 内核赛道 决赛第一阶段`fu740`测评满分
+
+![决赛stage1](./docs/image/readme/决赛stage1排行榜.png)
+
+#### 内核赛道 初赛双赛道`(k210 & fu740)`测评满分
 
 ![fu740](./docs/image/readme/fu740排行榜.png)
 
 ![k210](./docs/image/readme/k210排行榜.png)
 
-#### 项目整体设计文档 [doc_jkxsOS设计文档](./doc_jkxsOS设计文档.pdf)
+#### 项目整体设计文档 [<u>doc_jkxsOS设计文档</u>](./doc_jkxsOS设计文档.pdf)
 
-#### 模块开发相关文档 [模块开发相关文档](./docs)
+#### 模块开发相关文档 [<u>docs</u>](./docs)
 
 #### 分支简介
 * main               ------主分支
@@ -20,6 +26,9 @@
 * K210-Hifive        ------同时支持fu740多核 & k210单核开发分支
 * usershell          ------user-shell开发分支
 
+## <i>How to Run</i>
+
+todo:.....
 
 ## <i>Our Work</i>
 
