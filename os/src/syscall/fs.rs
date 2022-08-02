@@ -1,7 +1,7 @@
 use crate::fs::{
-    make_pipe, open_common_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
-    OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR,
-    S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, open_device_file,
+    make_pipe, open_common_file, open_device_file, path2vec, BitOpt, DType, FSDirent, FdSet, File,
+    FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR,
+    SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -30,7 +30,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let process = current_process();
     let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
-        return -EPERM;
+        return -EBADF;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -39,34 +39,24 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.writable() {
-            return -EPERM;
+            return -EINVAL;
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        if fd == 2 {
-            let _str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
+        if fd > 2 {
             gdb_println!(
                 SYSCALL_ENABLE,
-                "sys_write(fd: {}, buf: \"{}\", len: {}) = {}",
+                "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
                 fd,
-                _str,
-                len,
-                ret
-            );
-        } else if fd > 2 {
-            gdb_println!(
-                SYSCALL_ENABLE,
-                "sys_write(fd: {}, buf: ?, len: {}) = {}",
-                fd,
+                translated_str(token, buf),
                 len,
                 ret
             );
         }
         ret as isize
     } else {
-        -EPERM
+        -EBADF
     }
 }
 
@@ -75,7 +65,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let process = current_process();
     let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
-        return -EPERM;
+        return -EBADF;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -84,7 +74,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.readable() {
-            return -EPERM;
+            return -EINVAL;
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
@@ -100,7 +90,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         ret as isize
     } else {
-        -EPERM
+        -EBADF
     }
 }
 

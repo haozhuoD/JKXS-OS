@@ -232,3 +232,9 @@ Simple fstat: 20.0672 microseconds
 Simple open/close: 856.4118 microseconds
 Select on 100 fd's: 18.6066 microseconds
 Signal handler installation: 13.2011 microseconds
+
+#### 当前无法成功运行的测试
+
+`./lmbench_all lat_pipe -P 1`        -----卡死，原因是不能kill掉一直卡在内核态的进程
+`./lmbench_all lat_proc -P 1 shell`  -----测试不正确，因为没有/bin/sh
+

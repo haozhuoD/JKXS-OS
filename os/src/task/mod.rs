@@ -225,7 +225,7 @@ pub fn perform_signals_of_current() {
             }
         }
         // 如果信号代表当前进程出错，则exit
-        if let Some(msg) = SIGNAL_ERRORS.get(&signum) {
+        if let Some(msg) = SIGNAL_DFL_EXIT.get(&signum) {
             error!("[tid={}] {}", current_tid(), msg);
             drop(process);
             exit_current_and_run_next(-(signum as i32), false);

@@ -10,16 +10,21 @@ pub const SIGINT: u32 = 2;
 pub const SIGILL: u32 = 4;
 pub const SIGABRT: u32 = 6;
 pub const SIGFPE: u32 = 8;
+pub const SIGKILL: u32 = 9;
 pub const SIGSEGV: u32 = 11;
 
-pub const SIGNAL_ERRORS: Lazy<BTreeMap<u32, String>> = Lazy::new(|| {
+pub const SIGNAL_DFL_EXIT: Lazy<BTreeMap<u32, String>> = Lazy::new(|| {
     let mut set_ = BTreeMap::new();
-    set_.insert(SIGINT, String::from("Killed, SIGINT=2"));
+    set_.insert(SIGINT, String::from("Interrupted, SIGINT=2"));
     set_.insert(SIGILL, String::from("Illegal Instruction, SIGILL=4"));
     set_.insert(SIGABRT, String::from("Aborted, SIGABRT=6"));
     set_.insert(
         SIGFPE,
         String::from("Erroneous Arithmetic Operation, SIGFPE=8"),
+    );
+    set_.insert(
+        SIGKILL,
+        String::from("Killed, SIGKILL=9"),
     );
     set_.insert(SIGSEGV, String::from("Segmentation Fault, SIGSEGV=11"));
     set_
