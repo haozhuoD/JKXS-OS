@@ -124,15 +124,22 @@ pub fn trap_handler() -> ! {
             );
         }
     }
+    stop_ttimer();
+    print_ttimer("trap_handler");
+
+    start_ttimer();
     // 处理当前进程的信号
     if !is_sigreturn {
         perform_signals_of_current();
     }
+    stop_ttimer();
+    print_ttimer("signal");
     trap_return();
 }
 
 #[no_mangle]
 pub fn trap_return() -> ! {
+    start_ttimer();
     set_user_trap_entry();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
@@ -146,7 +153,8 @@ pub fn trap_return() -> ! {
     current_trap_cx().core_id = get_hartid();
 
     stop_ttimer();
-    print_ttimer();
+    print_ttimer("trap_return");
+
     unsafe {
         asm!(
             "fence.i",

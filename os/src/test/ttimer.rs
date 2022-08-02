@@ -1,32 +1,48 @@
 #![allow(unused)]
 #![allow(non_upper_case_globals)]
+
+use riscv::register::time;
 use spin::rwlock::RwLock;
 
-use crate::timer::get_time_ns;
+use crate::config::CLOCK_FREQ;
 
-static ttimer0: RwLock<usize> = RwLock::new(0);
-static ttimer1: RwLock<usize> = RwLock::new(0);
-static ttimer_en: RwLock<bool> = RwLock::new(false);
+static mut ttimer0: usize = 0;
+static mut ttimer1: usize = 0;
+static mut ttimer_en: bool = false;
+
+// ttimer时钟自身有一定开销，大约为200-600ns
 
 pub fn start_ttimer() {
-    *ttimer0.write() = get_time_ns();
+    unsafe {
+        ttimer0 = time::read();
+    }
 }
 
 pub fn stop_ttimer() {
-    *ttimer1.write() = get_time_ns();
+    unsafe {
+        ttimer1 = time::read();
+    }
 }
 
 pub fn enable_ttimer_output() {
-    *ttimer_en.write() = true;
+    unsafe {
+        ttimer_en = true;
+    }
 }
 
 pub fn disable_ttimer_output() {
-    *ttimer_en.write() = false;
-}
-
-pub fn print_ttimer() {
-    if (*ttimer_en.read()) {
-        let t = *ttimer1.read() - *ttimer0.read();
-        debug!("ttimer = {}.{:03} us", t / 1000, t % 1000);
+    unsafe {
+        ttimer_en = false;
     }
 }
+
+pub fn print_ttimer(msg: &str) {
+    unsafe {
+        if (ttimer_en) {
+            let t = (ttimer1 - ttimer0) * 10000 / (CLOCK_FREQ / 100000);
+            debug!("ttimer ({}) = {} ns", msg, t);
+        }
+    }
+}
+
+
