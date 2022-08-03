@@ -46,3 +46,17 @@ pub fn print_ttimer(msg: &str) {
 }
 
 
+// pub fn start_ttimer() {
+// }
+
+// pub fn stop_ttimer() {
+// }
+
+// pub fn enable_ttimer_output() {
+// }
+
+// pub fn disable_ttimer_output() {
+// }
+
+// pub fn print_ttimer(msg: &str) {
+// }

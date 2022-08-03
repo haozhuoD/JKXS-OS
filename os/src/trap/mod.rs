@@ -3,12 +3,12 @@ mod page_fault;
 
 use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
-use crate::syscall::{syscall, SYSCALL_SIGRETURN, SYSCALL_GETPPID};
+use crate::syscall::{syscall, SYSCALL_SIGRETURN};
 use crate::task::{
-    current_add_signal, current_process, current_tid, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV,
+    current_add_signal, current_process, current_tid, current_trap_cx,
+    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_task, current_trap_cx_user_va,
 };
-use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, enable_ttimer_output, print_ttimer};
+use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, print_ttimer, enable_ttimer_output};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use riscv::register::{
@@ -44,7 +44,6 @@ pub fn enable_timer_interrupt() {
 #[no_mangle]
 pub fn trap_handler() -> ! {
     disable_ttimer_output();
-    start_ttimer();
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -58,9 +57,6 @@ pub fn trap_handler() -> ! {
             // get system call return value
             if cx.x[17] == SYSCALL_SIGRETURN {
                 is_sigreturn = true;
-            }
-            if cx.x[17] == SYSCALL_GETPPID {
-                enable_ttimer_output();
             }
             let result = syscall(
                 cx.x[17],
@@ -124,9 +120,6 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    stop_ttimer();
-    print_ttimer("trap_handler");
-
     start_ttimer();
     // 处理当前进程的信号
     if !is_sigreturn {

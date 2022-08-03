@@ -158,28 +158,29 @@ pub fn add_initproc() {
 
 pub fn perform_signals_of_current() {
     let task = current_task().unwrap();
-    let process = current_process();
+    let mut task_inner = task.acquire_inner_lock();
 
-    // 禁止中断嵌套
-    if task.acquire_inner_lock().is_signaling() {
+    // 禁止中断嵌套 & 提前退出，
+    if task_inner.pending_signals.is_empty() || task_inner.is_signaling() {
         return;
     }
 
+    let process = current_process();
+
     loop {
         // 取出pending的第一个signal
-        let signum_option = task.acquire_inner_lock().pending_signals.pop_front();
+        let signum_option = task_inner.pending_signals.pop_front();
         if signum_option.is_none() {
             break;
         }
         let signum = signum_option.unwrap();
         {
-            let inner = process.acquire_inner_lock();
-            if let Some(sigaction) = inner.sigactions.get(&signum) {
+            let process_inner = process.acquire_inner_lock();
+            if let Some(sigaction) = process_inner.sigactions.get(&signum) {
                 // 如果信号对应的处理函数存在，则做好跳转到handler的准备
                 let handler = sigaction.sa_handler;
-                let token = inner.get_user_token();
+                let token = process_inner.get_user_token();
                 if sigaction.sa_handler != SIG_DFL && sigaction.sa_handler != SIG_IGN {
-                    let mut task_inner = task.acquire_inner_lock();
                     let mut trap_cx = task_inner.get_trap_cx();
                     // 保存当前trap_cx
                     task_inner.signal_context_save(signum, sigaction.sa_flags);
@@ -213,7 +214,7 @@ pub fn perform_signals_of_current() {
                 if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
                     // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
-                    drop(inner);
+                    drop(process_inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);
                 }

@@ -19,6 +19,7 @@ use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
     suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid,
 };
+use crate::test::{enable_ttimer_output, stop_ttimer, print_ttimer, start_ttimer};
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
 use crate::trap::page_fault_handler;
 use alloc::string::String;
