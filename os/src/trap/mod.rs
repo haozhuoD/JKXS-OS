@@ -6,9 +6,9 @@ use crate::multicore::get_hartid;
 use crate::syscall::{syscall, SYSCALL_SIGRETURN};
 use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx,
-    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_task, current_trap_cx_user_va,
+    current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_trap_cx_user_va,
 };
-use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, print_ttimer, enable_ttimer_output};
+use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, print_ttimer};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use riscv::register::{
