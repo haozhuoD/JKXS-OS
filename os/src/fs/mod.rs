@@ -3,6 +3,7 @@ mod pipe;
 mod stdio;
 mod vfile;
 mod devfs;
+mod fsidx;
 
 use crate::mm::UserBuffer;
 use alloc::sync::Arc;
@@ -30,3 +31,4 @@ pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
 pub use vfile::{init_rootfs, list_apps, open_common_file, path2vec, OSFile, OpenFlags};
 pub use devfs::open_device_file;
+pub use fsidx::*;

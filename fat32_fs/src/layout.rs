@@ -429,12 +429,10 @@ impl ShortDirEntry {
 			return 0;
 		}
 
-		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 			return 0;
 		}
-		let mut curr_cluster = curr_cluster;
-		let mut curr_sector = curr_sector;
 
 		let mut read_size = 0usize;
 		loop {
