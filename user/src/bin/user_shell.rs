@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     change_cwd, chdir, close, dup, exec, fork, get_wordlist, longest_common_prefix, open, pipe,
-    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test,
+    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test, busybox_lua_test, lmbench_test,
 };
 
 #[derive(Debug)]
@@ -121,7 +121,8 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 pub fn main() -> i32 {
     println!("\nHello, jkxs-OS!\n");
     // libc_test();
-    interactive_main();
+    lmbench_test();
+    // interactive_main();
     shutdown()
 }
 
