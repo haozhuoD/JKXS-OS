@@ -257,21 +257,29 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let mut userbuf = UserBuffer::new(buf_vec);
 
     let ret = if fd == AT_FDCWD {
-        fstat_inner(
-            open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
-            &mut userbuf,
-        )
-    } else if fd < 0 || fd >= inner.fd_table.len() as isize {
-        -EPERM
+        // fstat_inner(
+        //     open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+        //     &mut userbuf,
+        // )
+        userbuf.write(open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap().stat().as_bytes());
+        0
+    // } else if fd < 0 || fd >= inner.fd_table.len() as isize {
+    //     -EPERM
+    // } else {
+    //     if let Some(file) = inner.fd_table[fd as usize].clone() {
+    //         match file {
+    //             FileClass::File(f) => fstat_inner(f, &mut userbuf),
+    //             _ => -EPERM,
+    //         }
+    //     } else {
+    //         -EPERM
+    //     }
+    // };
+    } else if let Some(Some(FileClass::File(f))) = inner.fd_table.get(fd as usize) {
+        userbuf.write(f.stat().as_bytes());
+        0
     } else {
-        if let Some(file) = inner.fd_table[fd as usize].clone() {
-            match file {
-                FileClass::File(f) => fstat_inner(f, &mut userbuf),
-                _ => -EPERM,
-            }
-        } else {
-            -EPERM
-        }
+        -EPERM
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -298,7 +306,9 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     };
 
     let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
-        fstat_inner(osfile, &mut userbuf)
+        // fstat_inner(osfile, &mut userbuf)
+        userbuf.write(osfile.stat().as_bytes());
+        0
     } else {
         -ENOENT
     };
