@@ -121,6 +121,7 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 pub fn main() -> i32 {
     println!("\nHello, jkxs-OS!\n");
     // libc_test();
+    busybox_lua_test();
     lmbench_test();
     // interactive_main();
     shutdown()
