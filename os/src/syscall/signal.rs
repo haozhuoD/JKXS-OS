@@ -4,7 +4,7 @@ use crate::{
     monitor::{QEMU, SYSCALL_ENABLE},
     task::{
         current_process, current_task, current_user_token, is_signal_valid, tid2task, SigAction,
-        UContext, SIG_DFL, SAFlags,
+        UContext, SIG_DFL, SAFlags, SIGKILL,
     },
 };
 
@@ -13,7 +13,11 @@ use super::errorno::{EINVAL, ESRCH};
 fn do_tkill(tid: usize, signum: u32) -> isize {
     if let Some(task) = tid2task(tid) {
         if is_signal_valid(signum) {
-            task.acquire_inner_lock().pending_signals.push_back(signum);
+            let mut inner = task.acquire_inner_lock();
+            inner.pending_signals.push_back(signum);
+            if signum == SIGKILL {
+                inner.killed = true;
+            }
             0
         } else {
             -EINVAL
@@ -37,8 +41,6 @@ pub fn sys_kill(pid: usize, signum: u32) -> isize {
 
 pub fn sys_tkill(tid: usize, signum: u32) -> isize {
     let ret = do_tkill(tid, signum);
-    // let ret = 0;
-    // warning!("tkill disabled...");
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_tkill(tid: {}, signum: {}) = {}",

@@ -37,6 +37,7 @@ pub struct TaskControlBlockInner {
     pub pending_signals: VecDeque<u32>,
     pub sigmask: u64,
     pub clear_child_tid: Option<ClearChildTid>,
+    pub killed: bool,
     performing_signals: Vec<(u32, SAFlags)>,
     trap_cx_backup: Vec<TrapContext>,
 }
@@ -109,6 +110,7 @@ impl TaskControlBlock {
                 performing_signals: Vec::new(),
                 trap_cx_backup: Vec::new(),
                 clear_child_tid: None,
+                killed: false
             })),
         }
     }

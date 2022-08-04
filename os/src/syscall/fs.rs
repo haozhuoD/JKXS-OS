@@ -43,6 +43,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
+        drop(process);
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
         if fd > 2 {
             gdb_println!(
@@ -77,7 +78,9 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
             return -EINVAL;
         }
         // release current task TCB manually to avoid multi-borrow
+        // 为什么要提前drop掉？因为在read/write的过程可能会触发suspend_current/exit_current
         drop(inner);
+        drop(process);
         let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len)));
         if fd > 2 {
             gdb_println!(
@@ -972,12 +975,12 @@ pub fn sys_pselect(
     timeout: *mut TimeSpec,
 ) -> isize {
     let token = current_user_token();
-    let process = current_process();
-    let inner = process.acquire_inner_lock();
     let mut ret = 0isize;
 
     let time = translated_refmut(token, timeout);
     if time.tv_sec == 0 && time.tv_nsec == 0 {
+        let process = current_process();
+        let inner = process.acquire_inner_lock();
         ////pselect非阻塞处理 todo todo
         // 处理 read fd set
         if rfds as usize != 0 {
@@ -1066,8 +1069,7 @@ pub fn sys_pselect(
             ret
         );
     } else {
-        //pselect阻塞处理 todo erro fd set 处理
-        drop(inner);
+        // pselect阻塞处理 todo erro fd set 处理
         // 内核保存一份 read_fds
         let rfd_clone: u128;
         if rfds as usize != 0 {
@@ -1091,6 +1093,7 @@ pub fn sys_pselect(
         }
 
         loop {
+            let process = current_process();
             let inner = process.acquire_inner_lock();
             let mut ret = 0isize;
 
@@ -1165,6 +1168,7 @@ pub fn sys_pselect(
                 //     time,
                 // );
                 drop(inner);
+                drop(process);
                 suspend_current_and_run_next();
             } else {
                 gdb_println!(

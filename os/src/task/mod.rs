@@ -34,13 +34,20 @@ pub use task::*;
 
 pub fn suspend_current_and_run_next() {
     wakeup_futex_waiters();
-    // There must be an application running.
     // 将原来的take_current改为current_task，也就是说suspend之后，task仍然保留在processor中
     let task = current_task().unwrap();
 
     // ---- access current TCB exclusively
     let mut task_inner = task.acquire_inner_lock();
+
+    // 在内核态手动处理SIGKILL，否则可能导致进程在内核态卡死
+    if task_inner.killed {
+        drop(task_inner);
+        drop(task);
+        exit_current_and_run_next(-(SIGKILL as i32), false);
+    }
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
     drop(task_inner);
@@ -141,6 +148,8 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
         process_inner.memory_set.recycle_data_pages();
         // drop file descriptors
         process_inner.fd_table.clear();
+        // clear sigactions
+        process_inner.sigactions.clear();
     }
     drop(process);
     // we do not have to save task context
