@@ -1,4 +1,4 @@
-use super::File;
+use super::{File, find_vfile_idx, insert_vfile_idx};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
@@ -232,12 +232,23 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     let pathv = path2vec(path);
 
     // 节点是否存在？
-    if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
+    if let Some(inode) = find_vfile_idx(path) {
+        if flags.contains(OpenFlags::TRUNC) {
+            inode.remove();
+            return do_create_common_file(cur_vfile, &pathv, flags);
+        }
+        let vfile = OSFile::new(readable, writable, inode);
+        if flags.contains(OpenFlags::APPEND) {
+            vfile.set_offset(vfile.file_size());
+        }
+        return Some(Arc::new(vfile));
+    } else if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
         // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
             return do_create_common_file(cur_vfile, &pathv, flags);
         }
+        insert_vfile_idx(path, inode.clone());
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
             vfile.set_offset(vfile.file_size());

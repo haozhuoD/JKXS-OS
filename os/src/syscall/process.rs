@@ -6,7 +6,7 @@ use crate::config::{aligned_up, PAGE_SIZE, FDMAX};
 use crate::console::{
     clear_log_buf, read_all_log_buf, read_clear_log_buf, read_log_buf, unread_size, LOG_BUF_LEN,
 };
-use crate::fs::{open_common_file, OpenFlags};
+use crate::fs::{open_common_file, OpenFlags, print_inner};
 use crate::gdb_println;
 use crate::loader::get_usershell_binary;
 use crate::mm::{
@@ -31,6 +31,7 @@ use super::errorno::{EINVAL, EPERM, ESRCH};
 
 pub fn sys_shutdown() -> ! {
     // sync_all();
+    print_inner();
     shutdown();
 }
 
