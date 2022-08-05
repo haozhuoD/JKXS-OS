@@ -1,5 +1,5 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags, ITimerSpec};
 use crate::mm::PhysPageNum;
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;
@@ -36,6 +36,7 @@ pub struct TaskControlBlockInner {
     pub exit_code: Option<i32>,
     pub pending_signals: VecDeque<u32>,
     pub sigmask: u64,
+    pub itimer: ITimerSpec,
     pub clear_child_tid: Option<ClearChildTid>,
     pub killed: bool,
     performing_signals: Vec<(u32, SAFlags)>,
@@ -107,6 +108,7 @@ impl TaskControlBlock {
                 exit_code: None,
                 pending_signals: VecDeque::new(),
                 sigmask: 0,
+                itimer: ITimerSpec::new(),
                 performing_signals: Vec::new(),
                 trap_cx_backup: Vec::new(),
                 clear_child_tid: None,

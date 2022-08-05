@@ -60,8 +60,8 @@ pub const SYSCALL_GETGID: usize = 176;
 pub const SYSCALL_GETEGID: usize = 177;
 pub const SYSCALL_GETTID: usize = 178;
 pub const SYSCALL_SYSINFO: usize = 179;
-pub const SYS_SENDTO: usize = 206;
-pub const SYS_RECVFROM: usize = 207;
+pub const SYSCALL_SENDTO: usize = 206;
+pub const SYSCALL_RECVFROM: usize = 207;
 pub const SYSCALL_SBRK: usize = 213;
 pub const SYSCALL_BRK: usize = 214;
 pub const SYSCALL_MUNMAP: usize = 215;
@@ -174,6 +174,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
         SYSCALL_GETPGID => sys_getpgid(),
         SYSCALL_UNAME => sys_uname(args[0] as _),
         SYSCALL_GETTIMEOFDAY => sys_get_time(args[0] as _, args[1]),
+        // SYSCALL_GETTIMEOFDAY => sys_get_time_of_day(args[0] as _),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETTID => sys_gettid(),
         SYSCALL_BRK => sys_brk(args[0]),
@@ -210,7 +211,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
         SYSCALL_TOGGLE_TRACE => sys_toggle_trace(),
         SYSCALL_READDIR => sys_readdir(args[0] as _, args[1] as _, args[2]),
         SYSCALL_PRLIMIT => sys_prlimit(args[0] as _, args[1] as _, args[2] as _, args[3] as _),
-        SYS_SENDTO => sys_sendto(
+        SYSCALL_SENDTO => sys_sendto(
             args[0] as _,
             args[1] as _,
             args[2] as _,
@@ -218,7 +219,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
             args[4] as _,
             args[5] as _,
         ),
-        SYS_RECVFROM => sys_recvfrom(
+        SYSCALL_RECVFROM => sys_recvfrom(
             args[0] as _,
             args[1] as _,
             args[2] as _,
@@ -226,6 +227,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
             args[4] as _,
             args[5] as _,
         ),
+        // SYSCALL_GETITIMER=> sys_getitimer(args[0] as _, args[1] as _,),
+        // SYSCALL_SETITIMER=>sys_setitimer(args[0] as _, args[1] as _,args[2] as _,),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

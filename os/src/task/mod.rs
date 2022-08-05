@@ -9,6 +9,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 mod utils;
+mod time_info;
 
 use core::mem::size_of;
 
@@ -31,6 +32,7 @@ pub use process::*;
 pub use processor::*;
 pub use siginfo::*;
 pub use task::*;
+pub use time_info::*;
 
 pub fn suspend_current_and_run_next() {
     wakeup_futex_waiters();
@@ -235,9 +237,11 @@ pub fn perform_signals_of_current() {
             }
         }
         // 如果信号代表当前进程出错，则exit
-        if let Some(msg) = SIGNAL_DFL_EXIT.get(&signum) {
-            error!("[tid={}] {}", current_tid(), msg);
+        if let Some(_msg) = SIGNAL_DFL_EXIT.get(&signum) {
+            // error!("[tid={}] {}", current_tid(), msg);
             drop(process);
+            drop(task_inner);
+            drop(task);
             exit_current_and_run_next(-(signum as i32), false);
         };
     }

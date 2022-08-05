@@ -184,13 +184,6 @@ pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
 pub const SEEK_END: usize = 2;
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct TimeSpec {
-    pub tv_sec: i64,  /* seconds */
-    pub tv_nsec: i64, /* nanoseconds */
-}
-
 // #define FD_SETSIZE 256
 // pub const FD_SETSIZE: usize = 128;
 // typedef struct { uint32_t fd32[FD_SETSIZE/32]; } fd_set;

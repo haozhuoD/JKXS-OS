@@ -1,6 +1,6 @@
 use crate::fs::{
     make_pipe, open_common_file, open_device_file, path2vec, BitOpt, DType, FSDirent, FdSet, File,
-    FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR,
+    FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN, SEEK_CUR,
     SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
@@ -10,7 +10,7 @@ use crate::mm::{
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::syscall::process;
-use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
+use crate::task::{current_process, current_user_token, suspend_current_and_run_next, TimeSpec};
 use crate::timer::{get_time_ns, NSEC_PER_SEC};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -22,8 +22,8 @@ use fat32_fs::DIRENT_SZ;
 use super::errorno::*;
 
 const AT_FDCWD: isize = -100;
-const UTIME_NOW: i64 = (1 << 30) - 1;
-const UTIME_OMIT: i64 = (1 << 30) - 2;
+const UTIME_NOW: usize = (1 << 30) - 1;
+const UTIME_OMIT: usize = (1 << 30) - 2;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -45,7 +45,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         drop(inner);
         drop(process);
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        if fd > 2 {
+        if fd >= 2 {
             gdb_println!(
                 SYSCALL_ENABLE,
                 "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
@@ -863,13 +863,13 @@ fn do_utimensat(file: Arc<OSFile>, times: *const TimeSpec, token: usize) {
         file.set_modification_time(curtime);
     } else {
         let atime_ts = translated_ref(token, times);
-        match atime_ts.tv_nsec {
+        match atime_ts.tv_usec {
             UTIME_NOW => file.set_accessed_time(curtime),
             UTIME_OMIT => (),
             _ => file.set_accessed_time(atime_ts.tv_sec as u64),
         };
         let mtime_ts = translated_ref(token, unsafe { times.add(1) });
-        match mtime_ts.tv_nsec {
+        match mtime_ts.tv_usec {
             UTIME_NOW => file.set_modification_time(curtime),
             UTIME_OMIT => (),
             _ => file.set_modification_time(mtime_ts.tv_sec as u64),
@@ -988,7 +988,7 @@ pub fn sys_pselect(
     let mut ret = 0isize;
 
     let time = translated_refmut(token, timeout);
-    if time.tv_sec == 0 && time.tv_nsec == 0 {
+    if time.tv_sec == 0 && time.tv_usec == 0 {
         let process = current_process();
         let inner = process.acquire_inner_lock();
         ////pselect非阻塞处理 todo todo
