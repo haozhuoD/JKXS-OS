@@ -85,6 +85,8 @@ impl PageTable {
             }
             if !pte.is_valid() {
                 let frame = frame_alloc().unwrap();
+                // 只有第三级页表可置A D 标志位  | PTEFlags::A | PTEFlags::D
+                // *pte = PageTableEntry::new(frame.ppn, PTEFlags::V );
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
                 self.frames.push(frame);
             }
