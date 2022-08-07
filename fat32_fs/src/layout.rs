@@ -218,9 +218,10 @@ impl ShortDirEntry {
 
 		}
 
-		// 没有对拓展名做限制，长度超过3会panic
+		// 扩展名只复制前3字节
 		let mut ext_bytes = [0x20u8; SHORT_EXT_LEN];
-		let _ = &mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+		let extlen = extension.len().min(3);
+		let _ = &mut ext_bytes[0..extlen].copy_from_slice(&extension.to_ascii_uppercase().as_bytes()[0..extlen]);
 
 
 		Self{
