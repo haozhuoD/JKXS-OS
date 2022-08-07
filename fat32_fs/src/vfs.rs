@@ -288,9 +288,11 @@ impl VFile {
         assert!(self.is_dir());
         let (name_, ext_) = name.rsplit_once(".").unwrap_or((name, ""));
         self.read_short_dirent(|short_ent| {
-            if name_.len() > 8 || ext_.len() > 3 {
+            if name_.len() > 8 || ext_.len() > 3 || name_.contains(".") {
+                println!("long = {:#x?}", name);
                 return self.find_long_name(name, short_ent);
             } else {
+                println!("short = {:#x?}", name);
                 return self.find_short_name(name, short_ent);
             }
         })
