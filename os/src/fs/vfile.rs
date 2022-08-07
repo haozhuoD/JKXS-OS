@@ -1,8 +1,9 @@
-use super::{File, find_vfile_idx, insert_vfile_idx};
+use super::{File, find_vfile_idx, insert_vfile_idx, path2abs, remove_vfile_idx};
 use super::{Kstat, S_IFCHR, S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, S_IFREG};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use alloc::{string::String, sync::Arc};
 use bitflags::*;
@@ -239,22 +240,29 @@ fn do_create_common_file(
 }
 
 pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+    let mut wpath;
     let cur_vfile = {
         if cwd == "/" {
+            wpath = Vec::new();
             ROOT_VFILE.clone()
         } else {
-            let wpath = path2vec(cwd);
+            wpath = path2vec(cwd);
             ROOT_VFILE.find_vfile_path(&wpath).unwrap()
         }
     }; // 当前工作路径对应节点
     let (readable, writable) = flags.read_write();
-    // println!("open_file");
 
     let pathv = path2vec(path);
+    let abs_path = if path.starts_with("/") {
+        path.to_string()
+    } else {
+        path2abs(&mut wpath, &pathv)
+    };
 
     // 节点是否存在？
-    if let Some(inode) = find_vfile_idx(path) {
+    if let Some(inode) = find_vfile_idx(&abs_path) {
         if flags.contains(OpenFlags::TRUNC) {
+            remove_vfile_idx(&abs_path);
             inode.remove();
             return do_create_common_file(cur_vfile, &pathv, flags);
         }
@@ -266,10 +274,11 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     } else if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
         // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
+            remove_vfile_idx(&abs_path);
             inode.remove();
             return do_create_common_file(cur_vfile, &pathv, flags);
         }
-        insert_vfile_idx(path, inode.clone());
+        insert_vfile_idx(&abs_path, inode.clone());
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
             vfile.set_offset(vfile.file_size());
