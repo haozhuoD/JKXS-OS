@@ -4,7 +4,7 @@ pub const MEMORY_END: usize = 0xc000_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 
-pub const USER_STACK_SIZE: usize = PAGE_SIZE * 24;
+pub const USER_STACK_SIZE: usize = PAGE_SIZE * 40;
 pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 24;
 pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x8000;
 
