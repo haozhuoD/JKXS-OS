@@ -1,7 +1,7 @@
 use crate::fs::{
     make_pipe, open_common_file, open_device_file, path2vec, BitOpt, DType, FSDirent, FdSet, File,
     FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN, SEEK_CUR,
-    SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, remove_vfile_idx,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -12,7 +12,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::syscall::process;
 use crate::task::{current_process, current_user_token, suspend_current_and_run_next, TimeSpec};
 use crate::timer::{get_time_ns, NSEC_PER_SEC};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -570,12 +570,18 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
         return -EPERM;
     }
     if let Some(osfile) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
+        let abs_path = if path.starts_with("/") {
+            path
+        } else {
+            base_path.to_string() + &path
+        };
+        remove_vfile_idx(&abs_path);
         osfile.remove();
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
             dirfd,
-            path,
+            abs_path,
             0
         );
         return 0;
