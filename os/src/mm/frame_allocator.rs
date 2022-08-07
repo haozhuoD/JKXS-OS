@@ -1,5 +1,8 @@
 use super::{PhysAddr, PhysPageNum};
+use crate::config::FSIMG_START_PAGENUM;
+use crate::config::FSIMG_END_PAGENUM;
 use crate::config::MEMORY_END;
+use crate::config::PAGE_SIZE;
 
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
@@ -67,6 +70,10 @@ impl FrameAllocator for StackFrameAllocator {
         } else if self.current == self.end {
             None
         } else {
+            if self.current >= (FSIMG_START_PAGENUM - 1) && self.current < FSIMG_END_PAGENUM {
+                error!(" -------------------- FrameAllocator outoff 0x9000_0000 ------------------------- ");
+                self.current += FSIMG_END_PAGENUM-FSIMG_START_PAGENUM + 1;
+            }
             self.current += 1;
             Some((self.current - 1).into())
         }
@@ -101,6 +108,7 @@ pub fn init_frame_allocator() {
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
     );
+    // frame_allocator_test();
 }
 
 pub fn frame_alloc() -> Option<FrameTracker> {
@@ -114,13 +122,15 @@ pub fn frame_dealloc(ppn: PhysPageNum) {
 #[allow(unused)]
 pub fn frame_allocator_test() {
     let mut v: Vec<FrameTracker> = Vec::new();
-    for i in 0..5 {
+    // for i in 0..0x10000 {
+    for i in 0..0x10 {
         let frame = frame_alloc().unwrap();
         info!("{:?}", frame);
         v.push(frame);
     }
     v.clear();
-    for i in 0..5 {
+    // for i in 0..0x10000 {
+    for i in 0..0x10 {
         let frame = frame_alloc().unwrap();
         info!("{:?}", frame);
         v.push(frame);
