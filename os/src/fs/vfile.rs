@@ -239,6 +239,7 @@ fn do_create_common_file(
 }
 
 pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+    // info!("cwd = {}, path = {}, flags = {:#x?}", cwd, path, flags);
     let cur_vfile = {
         if cwd == "/" {
             ROOT_VFILE.clone()
@@ -264,7 +265,6 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
         }
         return Some(Arc::new(vfile));
     } else if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
-        // println!("exist");
         if flags.contains(OpenFlags::TRUNC) {
             inode.remove();
             return do_create_common_file(cur_vfile, &pathv, flags);
@@ -279,7 +279,6 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
 
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
-        // println!("don't exist");
         return do_create_common_file(cur_vfile, &pathv, flags);
     }
     None

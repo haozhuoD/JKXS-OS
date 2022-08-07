@@ -56,7 +56,7 @@ impl DLLMem {
             self.name = path.to_string();
             self.data = app_vfile.read_all();
         } else {
-            error!("[execve load_dl] dynamic load dl {} false ... cwd is {}", path, cwd);
+            error!("[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}", path, cwd);
             self.name = "NULL".to_string();
             self.data.clear();
         }
@@ -265,9 +265,13 @@ impl MemorySet {
         };
         let s = s.raw_data(&elf).to_vec();
         let mut s = String::from_utf8(s).unwrap();
+
+        // 移除末尾\0
+        s = s.strip_suffix("\0").unwrap_or(&s).to_string();
+
         // info!("load_linker interp: {:?}", s);
         // 手动转发到 libc.so
-        if s == "/lib/ld-musl-riscv64-sf.so.1\0" {
+        if s == "/lib/ld-musl-riscv64-sf.so.1" {
             s = "libc.so".to_string();
         }
         // info!("load_linker interp: {:?}", s);

@@ -105,7 +105,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     let flags = OpenFlags::from_bits(flags).unwrap();
     gdb_println!(
         SYSCALL_ENABLE,
-        "***sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = ?",
+        "***sys_open_at(dirfd: {}, path: {:#x?}, flags: {:#x?}, mode: {:#x?}) = ?",
         dirfd,
         path,
         flags,
@@ -133,7 +133,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
 
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = {}",
+        "sys_open_at(dirfd: {}, path: {:#x?}, flags: {:#x?}, mode: {:#x?}) = {}",
         dirfd,
         path,
         flags,
