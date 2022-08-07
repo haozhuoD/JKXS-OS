@@ -6,7 +6,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{
     DYNAMIC_LINKER, MEMORY_END, MMIO, PAGE_SIZE, SIGRETURN_TRAMPOLINE, TRAMPOLINE, USER_STACK_BASE,
 };
-use crate::fs::{open_common_file, OpenFlags};
+use crate::fs::{open_common_file, OpenFlags, OSFile};
 use crate::gdb_println;
 use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
@@ -14,6 +14,7 @@ use crate::task::{
     AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_SECURE, AT_UID,
 };
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::arch::asm;
 use riscv::register::satp;
@@ -36,21 +37,49 @@ pub static mut SATP: usize = 0;
 
 // TODO 此处仅仅在内核地址空间中保存一份lic.so, 可使用更优雅的方式解决
 // 还需在动态链接加载其不同时继续进行处理
-pub static KERNEL_DL_DATA: Lazy<RwLock<Vec<u8>>> = Lazy::new(|| RwLock::new(read_dll()));
+pub static KERNEL_DL_DATA: Lazy<RwLock<DLLMem>> = Lazy::new(|| RwLock::new(DLLMem::new()));
 
-fn read_dll() -> Vec<u8> {
-    if let Some(app_vfile) = open_common_file("/", "libc.so", OpenFlags::RDONLY) {
-        return app_vfile.read_all();
-    } else {
-        error!("[execve load_dl] dynamic load dl false");
-        return Vec::new();
+pub struct DLLMem{
+    pub data: Vec<u8>,
+    pub name: String,
+}
+
+impl DLLMem {
+    pub fn new() ->Self {
+        Self {
+            data: Vec::new(),
+            name: "NULL".to_string(),
+        }
+    }
+    pub fn readso(&mut self ,cwd: &str, path: &str){
+        if let Some(app_vfile) = open_common_file(cwd, path, OpenFlags::RDONLY) {
+            self.name = path.to_string();
+            self.data = app_vfile.read_all();
+        } else {
+            error!("[execve load_dl] dynamic load dl {} false ... cwd is {}", path, cwd);
+            self.name = "NULL".to_string();
+            self.data.clear();
+        }
     }
 }
 
-pub fn load_libc_so() {
+// fn read_dll(cwd: &str, path: &str) -> DLLMem {
+//     if let Some(app_vfile) = open_common_file(cwd, path, OpenFlags::RDONLY) {
+//         // let s = "libc.so".to_string();
+//         // let data = app_vfile.read_all();
+//         return
+//             DLLMem::new();
+//     } else {
+//         error!("[execve load_dl] dynamic load dl false");
+//         return DLLMem::new("NULL");
+//     }
+// }
+
+pub fn load_dll() {
+    let dl = KERNEL_DL_DATA.read();
     debug!(
-        "load libc.so to kernel memoryset size:0x{:x} ......",
-        KERNEL_DL_DATA.read().len()
+        "load {} to kernel memoryset size:0x{:x} ......",
+        dl.name ,dl.data.len()
     );
 }
 
@@ -227,9 +256,28 @@ impl MemorySet {
         memory_set
     }
     /// load libc.so(elf) to DYNAMIC_LINKER
-    /// return value 0: erro,   other: ld入口地址
-    pub fn load_dl(&mut self) -> usize {
-        let all_data = KERNEL_DL_DATA.read();
+    /// return value 0: erro,   other: ld入口地址 (&mut self, elf_data: &[u8])
+    pub fn load_dl(&mut self, elf_data: &[u8]) -> usize {
+        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        let s = match elf.find_section_by_name(".interp") {
+            Some(s) => s,
+            None => return 0,
+        };
+        let s = s.raw_data(&elf).to_vec();
+        let mut s = String::from_utf8(s).unwrap();
+        // info!("load_linker interp: {:?}", s);
+        // 手动转发到 libc.so
+        if s == "/lib/ld-musl-riscv64-sf.so.1\0" {
+            s = "libc.so".to_string();
+        }
+        // info!("load_linker interp: {:?}", s);
+        let memdll = &mut KERNEL_DL_DATA.write();
+        if s != memdll.name {
+            // info!("load_linker to mem");
+            memdll.readso("/", s.as_str());
+        }
+
+        let all_data = &memdll.data;
         if all_data.len() == 0 {
             return 0;
         }
@@ -311,38 +359,31 @@ impl MemorySet {
             value: PAGE_SIZE as usize,
         });
 
+        auxv.push(AuxHeader {
+            aux_type: AT_BASE,
+            value: 0 as usize,
+        });
         // todo is_dynamic = 1;
         // .interp: 2 第二个
         // .strtab: ph_count-2 倒数第二个
         // TODO 通过方法寻找？ 可读性更高？
-        let dl_sec = elf.program_header(1).unwrap();
-        if dl_sec.get_type().unwrap() == xmas_elf::program::Type::Interp {
-            _at_base = memory_set.load_dl();
-            if _at_base != 0 {
-                // error!("load_dl finish !");
-                auxv.push(AuxHeader {
-                    aux_type: AT_BASE,
-                    value: DYNAMIC_LINKER as usize,
-                });
-                // println!("chech_addr : {:X} ",at_base);
-                // check
-                // if let Some(chech_addr) = memory_set.page_table.translate_va(DYNAMIC_LINKER.into()){
-                //     println!("chech_addr : {:?} ",chech_addr);
-                // }else {
-                //     error!("check no pass");
-                // }
-
-                _at_base += DYNAMIC_LINKER;
-            } else {
-                error!("dynamic linker error !");
-                return (memory_set, 0, 0, 0, auxv);
-            }
-        } else {
+        // let dl_sec = elf.program_header(1).unwrap();
+        _at_base = memory_set.load_dl(elf_data);
+        if _at_base != 0 {
+            // error!("load_dl finish !");
             auxv.push(AuxHeader {
                 aux_type: AT_BASE,
-                value: 0 as usize,
+                value: DYNAMIC_LINKER as usize,
             });
-            _at_base = 0;
+            // println!("chech_addr : {:X} ",at_base);
+            // check
+            // if let Some(chech_addr) = memory_set.page_table.translate_va(DYNAMIC_LINKER.into()){
+            //     println!("chech_addr : {:?} ",chech_addr);
+            // }else {
+            //     error!("check no pass");
+            // }
+
+            _at_base += DYNAMIC_LINKER;
         }
 
         auxv.push(AuxHeader {
