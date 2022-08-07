@@ -554,11 +554,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
     if path.starts_with("/") {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
-        let dirfd = dirfd as usize;
-        if dirfd >= inner.fd_table.len() {
-            return -EPERM;
-        }
-        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+        if let Some(Some(FileClass::File(osfile))) = inner.fd_table.get(dirfd as usize) {
             if let Some(osfile) = osfile.find(path.as_str(), OpenFlags::empty()) {
                 osfile.remove();
                 gdb_println!(
@@ -834,7 +830,6 @@ pub fn sys_utimensat(
         );
         return -ENOENT;
     }
-    // println!("base_path:{}, path: {}", base_path, path);
     if let Some(f) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
         do_utimensat(f, times, token);
         gdb_println!(

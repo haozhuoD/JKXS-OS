@@ -15,6 +15,10 @@ pub fn insert_vfile_idx(path: &str, vfile: Arc<VFile>) {
     FSIDX.write().insert(path.to_string(), vfile);
 }
 
+pub fn remove_vfile_idx(path: &str) {
+    FSIDX.write().remove(path);
+}
+
 pub fn print_inner() {
     println!("{:#?}", FSIDX.read().keys());
 }
