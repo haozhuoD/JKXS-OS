@@ -4,7 +4,7 @@ use crate::config::CLOCK_FREQ;
 // use crate::fs::TimeSpec;
 use crate::sbi::set_timer;
 use crate::syscall::FUTEX_QUEUE;
-use crate::task::{unblock_task, TimeSpec};
+use crate::task::unblock_task;
 //
 // use crate::task::{add_task, TaskControlBlock};
 // use alloc::collections::BinaryHeap;

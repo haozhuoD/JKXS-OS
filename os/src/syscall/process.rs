@@ -21,7 +21,6 @@ use crate::task::{
 };
 use crate::test::{enable_ttimer_output, stop_ttimer, print_ttimer, start_ttimer};
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC, get_time};
-use crate::trap::page_fault_handler;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -644,7 +643,8 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
             continue;
         }
         // failed
-        if page_fault_handler(&mut inner, VirtAddr::from(vpn).into()) == 0 {
+        let vaddr: usize = VirtAddr::from(vpn).into();
+        if inner.check_lazy(vaddr) == 0 {
             if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
                 continue;
             }

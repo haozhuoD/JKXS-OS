@@ -286,15 +286,9 @@ impl VFile {
     // 通过name查找当前目录下的文件
     pub fn find_vfile_name(&self, name: &str) -> Option<VFile> {
         assert!(self.is_dir());
-        let mut name_ext: Vec<&str> = name.split(".").collect();
-        let name_ = name_ext[0];
-        if name_ext.len() == 1 {
-            name_ext.push("");
-        }
-        let ext_ = name_ext[1];
+        let (name_, ext_) = name.rsplit_once(".").unwrap_or((name, ""));
         self.read_short_dirent(|short_ent| {
-            // TODO: ext_.len() > 3的情况也要处理吗
-            if name_.len() > 8 || ext_.len() > 3 {
+            if name_.len() > 8 || ext_.len() > 3 || name_.contains(".") {
                 return self.find_long_name(name, short_ent);
             } else {
                 return self.find_short_name(name, short_ent);

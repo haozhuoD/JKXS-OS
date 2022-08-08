@@ -1,5 +1,5 @@
 
-use crate::CacheMode;
+use crate::{CacheMode, println};
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -471,7 +471,7 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
@@ -541,7 +541,7 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
@@ -622,7 +622,7 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					panic!("Write error!");

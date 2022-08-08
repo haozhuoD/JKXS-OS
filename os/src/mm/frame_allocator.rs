@@ -2,7 +2,6 @@ use super::{PhysAddr, PhysPageNum};
 use crate::config::FSIMG_START_PAGENUM;
 use crate::config::FSIMG_END_PAGENUM;
 use crate::config::MEMORY_END;
-use crate::config::PAGE_SIZE;
 
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
