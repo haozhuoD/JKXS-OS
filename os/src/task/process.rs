@@ -169,7 +169,7 @@ impl ProcessControlBlock {
 
         ////////////// envp[] ///////////////////
         let mut env: Vec<String> = Vec::new();
-        env.push(String::from("SHELL=/user_shell"));
+        env.push(String::from("SHELL=/bin/sh"));
         env.push(String::from("PWD=/"));
         env.push(String::from("USER=root"));
         env.push(String::from("MOTD_SHOWN=pam"));
@@ -184,8 +184,8 @@ impl ProcessControlBlock {
         env.push(String::from("_=busybox"));
         env.push(String::from("LOGNAME=root"));
         env.push(String::from("HOME=/"));
-        env.push(String::from("PATH=/"));
-        env.push(String::from("LD_LIBRARY_PATH=/"));
+        env.push(String::from("PATH=/bin"));
+        env.push(String::from("LD_LIBRARY_PATH=/lib64"));
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;
 
