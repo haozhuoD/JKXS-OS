@@ -98,10 +98,15 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 }
 
 pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
+    if path as usize == 0 {
+        return -EFAULT;
+    }
     let token = current_user_token();
+    let mut path = translated_str(token, path);
+
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
-    let mut path = translated_str(token, path);
+
     let flags = OpenFlags::from_bits(flags).unwrap();
     gdb_println!(
         SYSCALL_ENABLE,
