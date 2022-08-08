@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use super::File;
+use super::{File, Kstat, S_IFCHR};
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
 use crate::task::suspend_current_and_run_next;
@@ -58,6 +58,11 @@ impl File for Stdin {
     fn write_blocking(&self) -> bool {
         false
     }
+    fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = S_IFCHR;
+        kstat
+    }
 }
 
 impl File for Stdout {
@@ -81,5 +86,10 @@ impl File for Stdout {
     }
     fn write_blocking(&self) -> bool {
         false
+    }
+    fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = S_IFCHR;
+        kstat
     }
 }

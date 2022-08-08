@@ -1,7 +1,7 @@
 use crate::fs::{
-    make_pipe, open_common_file, open_device_file, path2vec, BitOpt, DType, FSDirent, FdSet, File,
-    FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN, SEEK_CUR,
-    SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, remove_vfile_idx,
+    make_pipe, open_common_file, open_device_file, path2vec, remove_vfile_idx, BitOpt, DType,
+    FSDirent, FdSet, File, FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN,
+    SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -45,16 +45,16 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         drop(inner);
         drop(process);
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        if fd >= 2 {
-            gdb_println!(
-                SYSCALL_ENABLE,
-                "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
-                fd,
-                translated_str(token, buf),
-                len,
-                ret
-            );
-        }
+        // if fd >= 2 {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
+            fd,
+            translated_str(token, buf),
+            len,
+            ret
+        );
+        // }
         ret as isize
     } else {
         -EBADF
@@ -82,15 +82,16 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         drop(inner);
         drop(process);
         let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        if fd > 2 {
-            gdb_println!(
-                SYSCALL_ENABLE,
-                "sys_read(fd: {}, buf: *** , len: {}) = {}",
-                fd,
-                len,
-                ret
-            );
-        }
+        // if fd > 2 {
+        gdb_println!(
+            SYSCALL_ENABLE,
+            "sys_read(fd: {}, buf: {:#x?}, len: {}) = {}",
+            fd,
+            translated_str(token, buf),
+            len,
+            ret
+        );
+        // }
         ret as isize
     } else {
         -EBADF
@@ -264,30 +265,27 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let cwd = inner.cwd.clone();
     let mut userbuf = UserBuffer::new(buf_vec);
 
-    let ret = if fd == AT_FDCWD {
-        // fstat_inner(
-        //     open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
-        //     &mut userbuf,
-        // )
-        userbuf.write(open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap().stat().as_bytes());
-        0
-    // } else if fd < 0 || fd >= inner.fd_table.len() as isize {
-    //     -EPERM
-    // } else {
-    //     if let Some(file) = inner.fd_table[fd as usize].clone() {
-    //         match file {
-    //             FileClass::File(f) => fstat_inner(f, &mut userbuf),
-    //             _ => -EPERM,
-    //         }
-    //     } else {
-    //         -EPERM
-    //     }
-    // };
-    } else if let Some(Some(FileClass::File(f))) = inner.fd_table.get(fd as usize) {
-        userbuf.write(f.stat().as_bytes());
-        0
-    } else {
-        -EPERM
+    let ret = match fd {
+        AT_FDCWD => {
+            userbuf.write(
+                open_common_file(&cwd, "", OpenFlags::RDONLY)
+                    .unwrap()
+                    .stat()
+                    .as_bytes(),
+            );
+            0
+        }
+        _ => match inner.fd_table.get(fd as usize) {
+            Some(Some(FileClass::File(f))) => {
+                userbuf.write(f.stat().as_bytes());
+                0
+            }
+            Some(Some(FileClass::Abs(f))) => {
+                userbuf.write(f.stat().as_bytes());
+                0
+            }
+            _ => -EBADF,
+        },
     };
     gdb_println!(
         SYSCALL_ENABLE,

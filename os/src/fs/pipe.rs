@@ -1,4 +1,4 @@
-use super::{File, OpenFlags};
+use super::{File, OpenFlags, Kstat};
 use crate::mm::UserBuffer;
 
 use alloc::sync::{Arc, Weak};
@@ -203,5 +203,8 @@ impl File for Pipe {
             }
         }
         false
+    }
+    fn stat(&self) -> Kstat {
+        panic!("stat pipe: not supported")
     }
 }

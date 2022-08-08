@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 
 use crate::mm::UserBuffer;
 
-use super::{File, path2vec, OpenFlags};
+use super::{File, path2vec, OpenFlags, S_IFCHR, Kstat};
 
 pub struct DevZero;
 pub struct DevNull;
@@ -34,6 +34,11 @@ impl File for DevZero {
     fn write_blocking(&self) -> bool {
         false
     }
+    fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = S_IFCHR;
+        kstat
+    }
 }
 
 impl DevNull {
@@ -62,6 +67,11 @@ impl File for DevNull {
     }
     fn write_blocking(&self) -> bool {
         false
+    }
+    fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = S_IFCHR;
+        kstat
     }
 }
 
@@ -105,5 +115,10 @@ impl File for DevRtc {
     }
     fn write_blocking(&self) -> bool {
         false
+    }
+    fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = S_IFCHR;
+        kstat
     }
 }

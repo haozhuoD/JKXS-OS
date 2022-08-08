@@ -24,6 +24,7 @@ pub trait File: Send + Sync {
     fn write(&self, buf: UserBuffer) -> usize;
     fn read_blocking(&self) -> bool;
     fn write_blocking(&self) -> bool;
+    fn stat(&self) -> Kstat;
 }
 
 pub use finfo::*;
