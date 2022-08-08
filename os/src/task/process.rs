@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
 use super::{add_task, insert_into_tid2task, SigAction};
@@ -9,7 +11,7 @@ use crate::mm::{
 use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
-use crate::trap::{TrapContext, trap_handler};
+use crate::trap::{trap_handler, TrapContext};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -698,7 +700,7 @@ impl ProcessControlBlockInner {
         let mmap_top = self.mmap_area_top;
 
         // debug!("page fault: va = {:#x?}", vaddr);
-        if vaddr >= heap_base && vaddr < heap_top {
+        let ret = if vaddr >= heap_base && vaddr < heap_top {
             // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
             self.lazy_alloc_heap_page(vaddr)
         } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
@@ -706,6 +708,13 @@ impl ProcessControlBlockInner {
             self.lazy_alloc_mmap_page(vaddr)
         } else {
             -1
+        };
+        if ret == 0 {
+            unsafe {
+                asm!("sfence.vma");
+                asm!("fence.i");
+            }
         }
+        ret
     }
 }
