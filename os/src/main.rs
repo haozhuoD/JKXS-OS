@@ -86,9 +86,9 @@ pub fn rust_main() -> ! {
     // }
 
     *(BOOT_CORE_READY.write()) = true;
-    wakeup_other_cores(hartid);
+    // wakeup_other_cores(hartid);
 
-    while *(BOOT_COUNT.lock()) != 2 {};
+    // while *(BOOT_COUNT.lock()) != 2 {};
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
