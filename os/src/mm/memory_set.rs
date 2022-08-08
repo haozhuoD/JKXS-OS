@@ -6,7 +6,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{
     DYNAMIC_LINKER, MEMORY_END, MMIO, PAGE_SIZE, SIGRETURN_TRAMPOLINE, TRAMPOLINE, USER_STACK_BASE,
 };
-use crate::fs::{open_common_file, OpenFlags, OSFile};
+use crate::fs::{open_common_file, OpenFlags};
 use crate::gdb_println;
 use crate::monitor::{MAPPING_ENABLE, QEMU};
 use crate::task::{
