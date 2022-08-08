@@ -415,18 +415,18 @@ pub fn busybox_lua_test() {
 
 pub fn lmbench_test() {
     // let mut apps = Vec::new();
-    let app_name = "./lmbench_testcode.sh\0";
-    // apps.push("./lmbench_testcode.sh\0");
-    let pid = fork();
-    if pid == 0 {
-        println!("{}",app_name);
-        exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
-    } else {
-        let mut exit_code = 0;
-        waitpid(pid as usize, &mut exit_code);
-    }
+    // let app_name = "./lmbench_testcode.sh\0";
+    // // apps.push("./lmbench_testcode.sh\0");
+    // let pid = fork();
+    // if pid == 0 {
+    //     println!("{}",app_name);
+    //     exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
+    // } else {
+    //     let mut exit_code = 0;
+    //     waitpid(pid as usize, &mut exit_code);
+    // }
 
-    // let mut apps = Vec::new();
+    let mut apps = Vec::new();
     // // ++++++
     // apps.push(String::from("busybox\0echo\0latency\0measurements")); 
     // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0null")); 
@@ -439,7 +439,7 @@ pub fn lmbench_test() {
     // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0open\0/var/tmp/lmbench")); 
     // apps.push(String::from("lmbench_all\0lat_select\0-n\0100\0-P\01\0file")); 
     // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0install")); 
-    // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0catch")); 
+    apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0catch")); 
     // // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0prot\0lat_sig")); 
     // // apps.push(String::from("lmbench_all\0lat_pipe\0-P\01")); 
     // apps.push(String::from("lmbench_all\0lat_proc\0-P\01\0fork")); 
@@ -462,16 +462,17 @@ pub fn lmbench_test() {
     // apps.push(String::from("lmbench_all\0bw_mmap_rd\0-P\01\0512k\0open2close\0/var/tmp/XXX")); 
     // apps.push(String::from("busybox\0echo\0context\0switch\0overhead")); 
     // apps.push(String::from("lmbench_all\0lat_ctx\0-P\01\0-s\032\02\04\08\016\024\032\064\096")); 
-    // for app_name in apps {
-    //     let (args_copy, args_addr) = str2args_0(&app_name);
-    //     let pid = fork();
-    //     if pid == 0 {
-    //         exec(args_copy[0].as_str(), args_addr.as_slice());
-    //     } else {
-    //         let mut exit_code = 0;
-    //         waitpid(pid as usize, &mut exit_code);
-    //     }
-    // }
+    for app_name in apps {
+        let (args_copy, args_addr) = str2args_0(&app_name);
+        let pid = fork();
+        if pid == 0 {
+            println!("test start {} ......",app_name);
+            exec(args_copy[0].as_str(), args_addr.as_slice());
+        } else {
+            let mut exit_code = 0;
+            waitpid(pid as usize, &mut exit_code);
+        }
+    }
 }
 
 pub fn load_libc_test_cmds() -> Vec<String> {
