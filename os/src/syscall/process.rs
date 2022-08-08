@@ -730,54 +730,54 @@ pub fn sys_prlimit(pid:usize, resource:usize, rlimit:*const RLimit64, old_rlimit
     ret
 }
 
-// pub fn sys_getitimer(which: isize, curr_value: *mut ITimerSpec) -> isize{
-//     let token = current_user_token();
-//     if curr_value as usize != 0{
-//         let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
-//         let u_itimer = translated_refmut(token, curr_value);
-//         if !itimer.is_zero(){
-//             itimer.it_value = itimer.it_value - crate::timer::get_timespec();
-//         }
-//         // userbuf.write(itimer.as_bytes());
-//         u_itimer.it_value = itimer.it_value;
-//         u_itimer.it_interval = itimer.it_interval;
+pub fn sys_getitimer(which: isize, curr_value: *mut ITimerSpec) -> isize{
+    let token = current_user_token();
+    if curr_value as usize != 0{
+        let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+        let u_itimer = translated_refmut(token, curr_value);
+        if !itimer.is_zero(){
+            itimer.it_value = itimer.it_value - crate::timer::get_timespec();
+        }
+        // userbuf.write(itimer.as_bytes());
+        u_itimer.it_value = itimer.it_value;
+        u_itimer.it_interval = itimer.it_interval;
 
-//         gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {:?}) = {},", which, u_itimer, 0);
+        gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {:?}) = {},", which, u_itimer, 0);
 
-//         0
-//     }
-//     else{
-//         gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {}) = {},", which, 0, 0);
-//         -1
-//     }
-// }
+        0
+    }
+    else{
+        gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {}) = {},", which, 0, 0);
+        -1
+    }
+}
 
-// pub fn sys_setitimer(which: isize, new_value: *mut ITimerSpec, old_value: *mut ITimerSpec) -> isize{
-//     let token = current_user_token();
-//     if old_value as usize != 0{
-//         let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
-//         // let mut buf_vec = translated_byte_buffer(token, old_value, size_of::<ITimerSpec>());
-//         // 使用UserBuffer结构，以便于跨页读写
-//         // let mut userbuf = UserBuffer::new(buf_vec);
-//         let u_old_itimer = translated_refmut(token, old_value);
-//         if !itimer.is_zero(){
-//             itimer.it_value = itimer.it_value - crate::timer::get_timespec();
-//         }
-//         // itimer_old = itimer;
-//         u_old_itimer.it_interval = itimer.it_interval;
-//         u_old_itimer.it_value = itimer.it_value;
-//         // userbuf.write(itimer.as_bytes());
-//         gdb_println!(SYSCALL_ENABLE, "----old_itimer: {:?} ---- task old_itimer: {:?} ", u_old_itimer, itimer);
-//     }
-//     // let mut itimer = ITimerSpec::new();
-//     let u_new_itimer = translated_refmut(token, old_value);
-//     let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
-//     itimer.it_interval = u_new_itimer.it_interval;
-//     itimer.it_value = u_new_itimer.it_value;
-//     gdb_println!(SYSCALL_ENABLE, "sys_setitimer(which: {}, new_itimer: {:?}, old_itimer: {:?}) = {}", which, u_new_itimer, old_value, 0);
-//     if !itimer.it_value.is_zero(){
-//         itimer.it_value = itimer.it_value + crate::timer::get_timespec();
-//     }
-//     // current_task().unwrap().acquire_inner_lock().itimer = itimer;
-//     0
-// }
+pub fn sys_setitimer(which: isize, new_value: *mut ITimerSpec, old_value: *mut ITimerSpec) -> isize{
+    let token = current_user_token();
+    if old_value as usize != 0{
+        let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+        // let mut buf_vec = translated_byte_buffer(token, old_value, size_of::<ITimerSpec>());
+        // 使用UserBuffer结构，以便于跨页读写
+        // let mut userbuf = UserBuffer::new(buf_vec);
+        let u_old_itimer = translated_refmut(token, old_value);
+        if !itimer.is_zero(){
+            itimer.it_value = itimer.it_value - crate::timer::get_timespec();
+        }
+        // itimer_old = itimer;
+        u_old_itimer.it_interval = itimer.it_interval;
+        u_old_itimer.it_value = itimer.it_value;
+        // userbuf.write(itimer.as_bytes());
+        gdb_println!(SYSCALL_ENABLE, "----old_itimer: {:?} ---- task old_itimer: {:?} ", u_old_itimer, itimer);
+    }
+    // let mut itimer = ITimerSpec::new();
+    let u_new_itimer = translated_refmut(token, old_value);
+    let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+    itimer.it_interval = u_new_itimer.it_interval;
+    itimer.it_value = u_new_itimer.it_value;
+    gdb_println!(SYSCALL_ENABLE, "sys_setitimer(which: {}, new_itimer: {:?}, old_itimer: {:?}) = {}", which, u_new_itimer, old_value, 0);
+    if !itimer.it_value.is_zero(){
+        itimer.it_value = itimer.it_value + crate::timer::get_timespec();
+    }
+    // current_task().unwrap().acquire_inner_lock().itimer = itimer;
+    0
+}
