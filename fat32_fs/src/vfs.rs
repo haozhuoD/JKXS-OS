@@ -117,10 +117,10 @@ impl VFile {
 
     // 获取短文件名目录项所在的扇区和偏移
     pub fn get_pos(&self, offset: usize) -> (usize, usize) {
-        let (_, sector, offset) = self.read_short_dirent(|s_ent: &ShortDirEntry| {
+        let (_, sec, off) = self.read_short_dirent(|s_ent: &ShortDirEntry| {
             s_ent.get_pos(offset, &self.fs, &self.fs.get_fat(), &self.block_device)
         });
-        (sector, offset)
+        (sec, off)
     }
     
     // 通过长文件名name查找目录dir_ent下的目录项
@@ -226,38 +226,6 @@ impl VFile {
         if dir_ent.first_cluster() == 2 && name == ".." {
             return Some(self.get_fs().get_root_vfile(&self.get_fs()));
         }
-        // let name_upper = name.to_ascii_uppercase();
-        // let mut short_ent = ShortDirEntry::empty();
-        // let mut offset = 0;
-        // let mut read_sz: usize;
-        // loop {
-        //     read_sz = dir_ent.read_at(
-        //         offset, 
-        //         short_ent.as_bytes_mut(), 
-        //         &self.fs, 
-        //         &self.fs.get_fat(), 
-        //         &self.block_device
-        //     );
-        //     if read_sz != DIRENT_SZ || short_ent.is_empty() {
-        //         return None;
-        //     }
-        //     if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {
-        //         let (short_sector, short_offset) = self.get_pos(offset);
-        //         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
-        //         return Some(
-        //             VFile::new(
-        //                 String::from(name), 
-        //                 short_sector, 
-        //                 short_offset, 
-        //                 long_pos_vec, 
-        //                 short_ent.attribute(), 
-        //                 self.fs.clone(), 
-        //                 self.block_device.clone()
-        //             )
-        //         );
-        //     }
-        //     offset += DIRENT_SZ;
-        // }
         let (offset, attribute) = dir_ent.find_short_name(
             0,
             name,
@@ -265,7 +233,7 @@ impl VFile {
             &self.fs.get_fat(),
             &self.block_device
         );
-        if offset == EMPTY_DIRENT {
+        if offset < 0 {
             return None;
         }
         let (short_sector, short_offset) = self.get_pos(offset as usize);
@@ -341,27 +309,34 @@ impl VFile {
         self.set_size(new_size);
     }
 
-    // 在当前目录下查找可用目录项，返回offset，簇不够时也会返回相应的offset
-    // TODO：为什么簇不够时也要返回相应的offset
-    fn find_free_dirent(&self) -> Option<usize> {
+    // 在当前目录下查找可用目录项，返回offset，簇不够时也会返回相应的offset用于创建新目录项
+    fn find_free_dirent(&self) -> usize {
         assert!(self.is_dir());
-        let mut offset = 0;
-        loop {
-            let mut dirent = ShortDirEntry::empty();
-            let read_sz = self.read_short_dirent(|short_ent| {
-                short_ent.read_at(
-                    offset, 
-                    dirent.as_bytes_mut(), 
-                    &self.fs, 
-                    &self.fs.get_fat(), 
-                    &self.block_device
-                )
-            });
-            if dirent.is_empty() || read_sz == 0 {
-                return Some(offset);
-            }
-            offset += DIRENT_SZ;
-        }
+        // let mut offset = 0;
+        // loop {
+        //     let mut dirent = ShortDirEntry::empty();
+        //     let read_sz = self.read_short_dirent(|short_ent| {
+        //         short_ent.read_at(
+        //             offset, 
+        //             dirent.as_bytes_mut(), 
+        //             &self.fs, 
+        //             &self.fs.get_fat(), 
+        //             &self.block_device
+        //         )
+        //     });
+        //     if dirent.is_empty() || read_sz == 0 {
+        //         return Some(offset);
+        //     }
+        //     offset += DIRENT_SZ;
+        // }
+        self.read_short_dirent(|short_ent| {
+            short_ent.find_free_dirent(
+                0,
+                &self.fs,
+                &self.fs.get_fat(),
+                &self.block_device
+            )
+        })
     }
 
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
@@ -394,7 +369,7 @@ impl VFile {
         // TODO:是否需要检测同名文件
         // println!("creating file {}", name);
         assert!(self.is_dir());
-        let mut dirent_offset = self.find_free_dirent()?;
+        let mut dirent_offset = self.find_free_dirent();
         let (name_, ext_) = self.fs.split_name_ext(name);
         let mut short_ent = ShortDirEntry::new(name_, ext_, attribute);
         let checksum = short_ent.checksum();

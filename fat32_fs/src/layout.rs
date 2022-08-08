@@ -393,7 +393,7 @@ impl ShortDirEntry {
 		let fat_reader = fat.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
-		let cluster_index = manager.cluster_of_offset(offset);
+		let cluster_index = offset / bytes_per_cluster;
 		let curr_cluster = fat_reader.get_cluster_at(
 			self.first_cluster(), 
 			cluster_index, 
@@ -471,7 +471,7 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
@@ -541,7 +541,68 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
+				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					panic!("Can not find the short dirent");
+					// break;
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		(short_offset, short_attr)
+	}
+
+	pub fn find_free_dirent(
+		&self,
+		offset: usize,
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice> 
+	) -> usize {
+		assert!(self.is_dir());
+		let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		// 边界检查
+		let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		if curr_offset >= end {
+			return end;
+		}
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			return 0;
+		}
+
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+
+			let short_offset = get_info_block_cache(  // 目录项通过Info block cache读取
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.read()
+			.read(0, |dirent_blk: &DirentBlock| {
+				dirent_blk.iter().enumerate()
+					.find(|&(_, short_ent)| short_ent.is_empty())
+					.map(|pair| pair.0 * DIRENT_SZ + (curr_offset / bytes_per_sector) * bytes_per_sector)
+			});
+
+			if short_offset.is_some() {
+				return short_offset.unwrap();
+			}
+			if end_current_block == end {
+				break;
+			}
+			curr_offset = end_current_block;
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
@@ -551,7 +612,7 @@ impl ShortDirEntry {
 				curr_sector += 1;
 			}
 		}
-		(short_offset, short_attr)
+		curr_offset
 	}
 
 	// 以偏移量写文件，需要保证offset开始的区间在文件范围内
@@ -622,7 +683,7 @@ impl ShortDirEntry {
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
+			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					panic!("Write error!");
