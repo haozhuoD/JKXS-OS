@@ -948,26 +948,48 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
     return -ENOENT;
 }
 
-pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: i32) -> isize {
+pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: *const u64) -> isize {
     let token = current_user_token();
-    let process = current_process();
-    let inner = process.acquire_inner_lock();
-
     let mut ret = 0isize;
 
-    for i in 0..nfds {
-        let mut pollfd = translated_refmut(token, unsafe { fds.add(i) });
-        if let Some(f) = inner.fd_table.get(pollfd.fd as usize) {
-            if f.is_some() {
-                pollfd.revents |= POLLIN;
-                ret += 1;
+    let expire_time = match timeout as usize {
+        0 => usize::MAX, // inf
+        _ => {
+            let sec = *translated_ref(token, timeout);
+            let nsec = *translated_ref(token, unsafe { timeout.add(1) });
+            get_time_ns() + sec as usize * NSEC_PER_SEC + nsec as usize
+        }
+    };
+
+    loop {
+        let process = current_process();
+        let inner = process.acquire_inner_lock();
+        for i in 0..nfds {
+            let mut pollfd = translated_refmut(token, unsafe { fds.add(i) });
+            if let Some(Some(fi)) = inner.fd_table.get(pollfd.fd as usize) {
+                let f = match fi {
+                    FileClass::File(p) => p.clone(),
+                    FileClass::Abs(p) => p.clone(),
+                };
+                if !f.read_blocking() {
+                    pollfd.revents |= POLLIN;
+                    ret += 1;
+                } else {
+                    pollfd.revents &= !POLLIN;
+                }
             }
         }
+        drop(inner);
+        drop(process);
+        if ret > 0 || get_time_ns() > expire_time {
+            break;
+        }
+        suspend_current_and_run_next();
     }
 
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_ppoll(fds: {:#x?}, nfds = {:x?}, timeout: {}) = {}",
+        "sys_ppoll(fds: {:#x?}, nfds = {:x?}, timeout: {:#x?}) = {}",
         fds,
         nfds,
         timeout,

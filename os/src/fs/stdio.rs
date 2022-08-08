@@ -1,4 +1,7 @@
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+use spin::Mutex;
+use spin::lazy::Lazy;
 
 use super::{File, Kstat, S_IFCHR};
 use crate::mm::UserBuffer;
@@ -9,10 +12,18 @@ pub struct Stdin;
 
 pub struct Stdout;
 
+pub static STDIN_BUF: Lazy<Mutex<VecDeque<u8>>> = Lazy::new(|| Mutex::new(VecDeque::new()));
+
 const LF: usize = 0x0a;
 const CR: usize = 0x0d;
 // const DL: usize = 0x7f;
 // const BS: usize = 0x08;
+
+impl Stdin {
+    pub fn new() -> Self {
+        Self
+    }
+}
 
 impl File for Stdin {
     fn readable(&self) -> bool {
@@ -24,26 +35,15 @@ impl File for Stdin {
     fn read(&self, mut user_buf: UserBuffer) -> usize {
         // assert_eq!(user_buf.len(), 1);
         // busy loop
-        let mut c: usize;
         let mut count: usize = 0;
         let mut buf = Vec::new();
         while count < user_buf.len() {
-            c = console_getchar();
-            match c {
-                // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
-                0 | 256.. => {
-                    suspend_current_and_run_next();
-                    continue;
-                }
-                LF | CR => {
-                    buf.push(CR as u8);
-                    count += 1;
-                    break;
-                }
-                _ => {
-                    buf.push(c as u8);
-                    count += 1;
-                }
+            if !self.read_blocking() {
+                let c = STDIN_BUF.lock().pop_front().unwrap();
+                buf.push(c);
+                count += 1;
+            } else {
+                suspend_current_and_run_next();
             }
         }
         user_buf.write(buf.as_slice());
@@ -53,7 +53,19 @@ impl File for Stdin {
         panic!("Cannot write to stdin!");
     }
     fn read_blocking(&self) -> bool {
-        false
+        let mut stdin_buf_locked = STDIN_BUF.lock();
+        if !stdin_buf_locked.is_empty() {
+            return false;
+        }
+        let c = console_getchar();
+        match c {
+            // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
+            0 | 256.. => true,
+            _ => {
+                stdin_buf_locked.push_back(c as u8);
+                false
+            }
+        }
     }
     fn write_blocking(&self) -> bool {
         false
@@ -62,6 +74,12 @@ impl File for Stdin {
         let mut kstat = Kstat::new();
         kstat.st_mode = S_IFCHR;
         kstat
+    }
+}
+
+impl Stdout {
+    pub fn new() -> Self {
+        Self
     }
 }
 

@@ -92,11 +92,11 @@ impl ProcessControlBlock {
                 fd_max: FDMAX,
                 fd_table: vec![
                     // 0 -> stdin
-                    Some(FileClass::Abs(Arc::new(Stdin))),
+                    Some(FileClass::Abs(Arc::new(Stdin::new()))),
                     // 1 -> stdout
-                    Some(FileClass::Abs(Arc::new(Stdout))),
+                    Some(FileClass::Abs(Arc::new(Stdout::new()))),
                     // 2 -> stderr
-                    Some(FileClass::Abs(Arc::new(Stdout))),
+                    Some(FileClass::Abs(Arc::new(Stdout::new()))),
                 ],
                 sigactions: BTreeMap::new(),
                 tasks: Vec::new(),
