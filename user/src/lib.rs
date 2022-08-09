@@ -334,6 +334,23 @@ pub fn str2args(s: &str) -> (Vec<String>, Vec<*const u8>) {
     (args_copy, args_addr)
 }
 
+pub fn str2args_0(s: &str) -> (Vec<String>, Vec<*const u8>) {
+    let args_copy: Vec<String> = s
+        .split('\0')
+        .map(|s1| {
+            let mut string = String::new();
+            string.push_str(&s1);
+            string.push('\0');
+            string
+        })
+        .collect();
+
+    let mut args_addr: Vec<*const u8> = args_copy.iter().map(|arg| arg.as_ptr()).collect();
+    args_addr.push(core::ptr::null::<u8>());
+
+    (args_copy, args_addr)
+}
+
 pub fn preliminary_test() {
     let mut preliminary_apps = Vec::new();
     preliminary_apps.push("times\0");
@@ -397,13 +414,64 @@ pub fn busybox_lua_test() {
 }
 
 pub fn lmbench_test() {
-    let app_name = "./lmbench_testcode.sh\0";
-    let pid = fork();
-    if pid == 0 {
-        exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
-    } else {
-        let mut exit_code = 0;
-        waitpid(pid as usize, &mut exit_code);
+    // let mut apps = Vec::new();
+    // let app_name = "./lmbench_testcode.sh\0";
+    // // apps.push("./lmbench_testcode.sh\0");
+    // let pid = fork();
+    // if pid == 0 {
+    //     println!("{}",app_name);
+    //     exec(app_name, &[app_name.as_ptr(), core::ptr::null::<u8>()]);
+    // } else {
+    //     let mut exit_code = 0;
+    //     waitpid(pid as usize, &mut exit_code);
+    // }
+
+    let mut apps = Vec::new();
+    // // ++++++
+    // apps.push(String::from("busybox\0echo\0latency\0measurements")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0null")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0read")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0write")); 
+    // apps.push(String::from("busybox\0mkdir\0-p\0/var/tmp")); 
+    // apps.push(String::from("busybox\0touch\0/var/tmp/lmbench")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0stat\0/var/tmp/lmbench")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0fstat\0/var/tmp/lmbench")); 
+    // apps.push(String::from("lmbench_all\0lat_syscall\0-P\01\0open\0/var/tmp/lmbench")); 
+    // apps.push(String::from("lmbench_all\0lat_select\0-n\0100\0-P\01\0file")); 
+    // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0install")); 
+    apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0catch")); 
+    // // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0prot\0lat_sig")); 
+    // // apps.push(String::from("lmbench_all\0lat_pipe\0-P\01")); 
+    // apps.push(String::from("lmbench_all\0lat_proc\0-P\01\0fork")); 
+    // apps.push(String::from("lmbench_all\0lat_proc\0-P\01\0exec")); 
+    // // apps.push(String::from("busybox\0cp\0hello\0/tmp")); 
+    // apps.push(String::from("lmbench_all\0lmdd\0label=\"File /var/tmp/XXX write bandwidth:\"\0of=/var/tmp/XXX\0move=16m\0fsync=1\0print=3")); 
+    // apps.push(String::from("lmbench_all\0lat_pagefault\0-P\01\0/var/tmp/XXX")); 
+    // apps.push(String::from("lmbench_all\0lat_mmap\0-P\01\0512k\0/var/tmp/XXX")); 
+
+    // apps.push(String::from("lmbench_all\0lat_sig\0-P\01\0prot\0lat_sig")); 
+    // apps.push(String::from("lmbench_all\0lat_pipe\0-P\01")); 
+
+    // apps.push(String::from("busybox\0echo\0file\0system\0latency")); 
+    // apps.push(String::from("lmbench_all\0lat_fs\0/var/tmp")); 
+    // apps.push(String::from("busybox echo\0Bandwidth\0measurements")); 
+    // apps.push(String::from("lmbench_all\0bw_pipe\0-P\01")); 
+    // apps.push(String::from("lmbench_all\0bw_file_rd\0-P\01\0512k\0io_only\0/var/tmp/XXX")); 
+    // apps.push(String::from("lmbench_all\0bw_file_rd\0-P\01\0512k\0open2close\0/var/tmp/XXX")); 
+    // apps.push(String::from("lmbench_all\0bw_mmap_rd\0-P\01\0512k\0mmap_only\0/var/tmp/XXX")); 
+    // apps.push(String::from("lmbench_all\0bw_mmap_rd\0-P\01\0512k\0open2close\0/var/tmp/XXX")); 
+    // apps.push(String::from("busybox\0echo\0context\0switch\0overhead")); 
+    // apps.push(String::from("lmbench_all\0lat_ctx\0-P\01\0-s\032\02\04\08\016\024\032\064\096")); 
+    for app_name in apps {
+        let (args_copy, args_addr) = str2args_0(&app_name);
+        let pid = fork();
+        if pid == 0 {
+            println!("test start {} ......",app_name);
+            exec(args_copy[0].as_str(), args_addr.as_slice());
+        } else {
+            let mut exit_code = 0;
+            waitpid(pid as usize, &mut exit_code);
+        }
     }
 }
 

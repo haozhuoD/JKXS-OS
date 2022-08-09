@@ -244,6 +244,7 @@ fn do_create_common_file(
 }
 
 pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
+    // info!("cwd = {}, path = {}, flags = {:#x?}", cwd, path, flags);
     let mut wpath;
     let cur_vfile = {
         if cwd == "/" {

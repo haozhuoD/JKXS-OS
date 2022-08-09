@@ -1,11 +1,11 @@
 FAT32_DIR="../fat32-fuse"
-FS_IMG="${FAT32_DIR}/fs.img"
+FS_IMG="${FAT32_DIR}/fs-img"
 
 rm -rf ${FAT32_DIR}
 mkdir -p ${FAT32_DIR}
 if test ! -e ${FAT32_DIR}/${FS_IMG}
 then
-    dd if=/dev/zero of=${FAT32_DIR}/${FS_IMG} bs=1k count=512k
+    dd if=/dev/zero of=${FAT32_DIR}/${FS_IMG} bs=1k count=64k
 fi
 
 sudo chmod 777 ${FS_IMG}
@@ -24,6 +24,8 @@ fi
 sudo mount ${FS_IMG} ${FAT32_DIR}/fs
 sudo rm -f ${FAT32_DIR}/fs/*
 
+# sudo cp -r ../user/rootfs/* ${FAT32_DIR}/fs/
+
 for programname in $(ls ../user/src/bin)
 do
     # if [ $programname != "initproc.rs" ] && [ $programname != "user_shell.rs" ]
@@ -32,19 +34,19 @@ do
     # fi
 done
 
-# for programname in $(ls ../user/riscv64)
-# do 
-#     sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
-# done
+# # for programname in $(ls ../user/riscv64)
+# # do 
+# #     sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
+# # done
 
 for programname in $(ls ../user/busybox_lua_testsuites)
 do 
     sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
 done
 
-for programname in $(ls ../user/libc-tests)
-do 
-    sudo cp ../user/libc-tests/$programname ${FAT32_DIR}/fs/"$programname"
-done
+# for programname in $(ls ../user/libc-tests)
+# do 
+#     sudo cp ../user/libc-tests/$programname ${FAT32_DIR}/fs/"$programname"
+# done
 
 sudo umount ${FAT32_DIR}/fs

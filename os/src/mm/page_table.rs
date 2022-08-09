@@ -1,3 +1,5 @@
+use crate::task::current_process;
+
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -138,9 +140,26 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
-    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
-        self.find_pte(va.clone().floor()).map(|pte| {
-            let aligned_pa: PhysAddr = pte.ppn().into();
+    /// Todo: multi-borrowing problem?
+    pub fn translate_vpn_with_lazycheck(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
+        let re_check: _ = |vpn: VirtPageNum| match current_process()
+            .acquire_inner_lock()
+            .check_lazy(VirtAddr::from(vpn).into())
+        {
+            0 => Some(self.translate(vpn).unwrap().ppn()),
+            _ => None,
+        };
+        match self.translate(vpn) {
+            Some(pte) => match pte.is_valid() {
+                true => Some(pte.ppn()),
+                false => re_check(vpn),
+            },
+            None => re_check(vpn),
+        }
+    }
+    pub fn translate_va_with_lazycheck(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.translate_vpn_with_lazycheck(va.floor()).map(|ppn| {
+            let aligned_pa: PhysAddr = ppn.into();
             let offset = va.page_offset();
             let aligned_pa_usize: usize = aligned_pa.into();
             (aligned_pa_usize + offset).into()
@@ -159,10 +178,14 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     while start < end {
         let start_va = VirtAddr::from(start);
         let mut vpn = start_va.floor();
-        let ppn = page_table.translate(vpn).unwrap().ppn();
+        let ppn = page_table.translate_vpn_with_lazycheck(vpn).unwrap();
         vpn.step();
         let mut end_va: VirtAddr = vpn.into();
         end_va = end_va.min(VirtAddr::from(end));
+        // info!(
+        //     "start_va = {:#x?}, end_va = {:#x?}, vpn = {:#x?}, ppn = {:#x?}",
+        //     start_va, end_va, vpn, ppn
+        // );
         if end_va.page_offset() == 0 {
             v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
         } else {
@@ -180,7 +203,7 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let mut va = ptr as usize;
     loop {
         let ch: u8 = *(page_table
-            .translate_va(VirtAddr::from(va))
+            .translate_va_with_lazycheck(VirtAddr::from(va))
             .unwrap()
             .get_mut());
         if ch == 0 {
@@ -196,7 +219,7 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
 pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
     let page_table = PageTable::from_token(token);
     page_table
-        .translate_va(VirtAddr::from(ptr as usize))
+        .translate_va_with_lazycheck(VirtAddr::from(ptr as usize))
         .unwrap()
         .get_ref()
 }
@@ -205,7 +228,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;
     page_table
-        .translate_va(VirtAddr::from(va))
+        .translate_va_with_lazycheck(VirtAddr::from(va))
         .unwrap()
         .get_mut()
 }

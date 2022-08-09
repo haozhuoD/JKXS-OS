@@ -4,8 +4,9 @@ use crate::{
     monitor::{QEMU, SYSCALL_ENABLE},
     task::{
         current_process, current_task, current_user_token, is_signal_valid, tid2task, SigAction,
-        UContext, SIG_DFL, SAFlags, SIGKILL,
-    },
+        UContext, SIG_DFL, SAFlags, SIGKILL, suspend_current_and_run_next,
+    }, 
+    syscall::sys_sleep,
 };
 
 use super::errorno::{EINVAL, ESRCH};
@@ -110,6 +111,10 @@ pub fn sys_sigaction(
 }
 
 pub fn sys_sigreturn() -> isize {
+    #[cfg(feature = "sig_delay")]
+    for _ in 0..15 {
+        suspend_current_and_run_next();
+    }
     let token = current_user_token();
     let task = current_task().unwrap();
     let mut task_inner = task.acquire_inner_lock();
