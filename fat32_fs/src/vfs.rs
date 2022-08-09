@@ -265,7 +265,7 @@ impl VFile {
             &self.fs.get_fat(),
             &self.block_device
         );
-        if offset == EMPTY_DIRENT {
+        if offset < 0 {
             return None;
         }
         let (short_sector, short_offset) = self.get_pos(offset as usize);

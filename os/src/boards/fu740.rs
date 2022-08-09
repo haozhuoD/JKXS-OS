@@ -1,4 +1,4 @@
-pub const CLOCK_FREQ: usize = 1200000; //???
+pub const CLOCK_FREQ: usize =  1000000;//1000000000; // 1G hz
 
 pub const MMIO: &[(usize, usize)] = &[
     // we don't need clint in S priv when running

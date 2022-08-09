@@ -24,25 +24,25 @@ fi
 sudo mount ${FS_IMG} ${FAT32_DIR}/fs
 sudo rm -f ${FAT32_DIR}/fs/*
 
-sudo cp -r ../user/rootfs/* ${FAT32_DIR}/fs/
+# sudo cp -r ../user/rootfs/* ${FAT32_DIR}/fs/
 
-# for programname in $(ls ../user/src/bin)
-# do
-#     # if [ $programname != "initproc.rs" ] && [ $programname != "user_shell.rs" ]
-#     # then 
-#     sudo cp ../user/target/riscv64gc-unknown-none-elf/release/${programname%.rs} ../fat32-fuse/fs/${programname%.rs}
-#     # fi
-# done
+for programname in $(ls ../user/src/bin)
+do
+    # if [ $programname != "initproc.rs" ] && [ $programname != "user_shell.rs" ]
+    # then 
+    sudo cp ../user/target/riscv64gc-unknown-none-elf/release/${programname%.rs} ../fat32-fuse/fs/${programname%.rs}
+    # fi
+done
 
 # # for programname in $(ls ../user/riscv64)
 # # do 
 # #     sudo cp ../user/riscv64/$programname ${FAT32_DIR}/fs/"$programname"
 # # done
 
-# for programname in $(ls ../user/busybox_lua_testsuites)
-# do 
-#     sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
-# done
+for programname in $(ls ../user/busybox_lua_testsuites)
+do 
+    sudo cp ../user/busybox_lua_testsuites/$programname ${FAT32_DIR}/fs/"$programname"
+done
 
 # for programname in $(ls ../user/libc-tests)
 # do 
