@@ -112,7 +112,7 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     #[cfg(feature = "sig_delay")]
-    for _ in 0..3 {
+    for _ in 0..1 {
         suspend_current_and_run_next();
     }
     let token = current_user_token();
