@@ -263,7 +263,7 @@ impl fmt::Display for LogLevel {
 pub fn set_log_color(ll: LogLevel) {
     match ll {
         LogLevel::Verbose => set_color(FG_B_BLACK, BG_DEFAULT),
-        LogLevel::Debug => set_color(FG_DEFAULT, BG_DEFAULT),
+        LogLevel::Debug => set_color(FG_B_YELLOW, BG_DEFAULT),
         LogLevel::Info => set_color(FG_B_GREEN, BG_DEFAULT),
         LogLevel::Warning => set_color(FG_B_YELLOW, BG_DEFAULT),
         LogLevel::Error => set_color(FG_B_RED, BG_DEFAULT),
