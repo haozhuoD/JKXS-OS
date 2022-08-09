@@ -597,10 +597,10 @@ impl ShortDirEntry {
 			if short_offset.is_some() {
 				return short_offset.unwrap();
 			}
+			curr_offset = end_current_block;
 			if end_current_block == end {
 				break;
 			}
-			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
 			if curr_offset % bytes_per_cluster == 0 {
 				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);

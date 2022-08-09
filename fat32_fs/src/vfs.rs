@@ -325,7 +325,7 @@ impl VFile {
         //         )
         //     });
         //     if dirent.is_empty() || read_sz == 0 {
-        //         return Some(offset);
+        //         return offset;
         //     }
         //     offset += DIRENT_SZ;
         // }
