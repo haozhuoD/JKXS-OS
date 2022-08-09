@@ -227,8 +227,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
             args[4] as _,
             args[5] as _,
         ),
-        // SYSCALL_GETITIMER=> sys_getitimer(args[0] as _, args[1] as _,),
-        // SYSCALL_SETITIMER=>sys_setitimer(args[0] as _, args[1] as _,args[2] as _,),
+        SYSCALL_GETITIMER=> sys_getitimer(args[0] as _, args[1] as _,),
+        SYSCALL_SETITIMER=>sys_setitimer(args[0] as _, args[1] as _,args[2] as _,),
         _ => {
             gdb_println!(
                 SYSCALL_ENABLE,

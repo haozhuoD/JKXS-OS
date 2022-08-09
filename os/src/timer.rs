@@ -1,10 +1,9 @@
 // use core::cmp::Ordering;
-
+use crate::task::TimeSpec;
 use crate::config::CLOCK_FREQ;
-// use crate::fs::TimeSpec;
 use crate::sbi::set_timer;
 use crate::syscall::FUTEX_QUEUE;
-use crate::task::{unblock_task, TimeSpec};
+use crate::task::unblock_task;
 //
 // use crate::task::{add_task, TaskControlBlock};
 // use alloc::collections::BinaryHeap;
@@ -24,15 +23,15 @@ pub fn get_time_us() -> usize {
     time::read() * 10 / (CLOCK_FREQ / 100000)
 }
 
-// pub fn get_timespec() -> TimeSpec {
-//     let ticks = get_time();
-//     let sec = ticks/CLOCK_FREQ;
-//     let usec = (ticks%CLOCK_FREQ) * USEC_PER_SEC / CLOCK_FREQ;
-//     TimeSpec{
-//         tv_sec:sec,
-//         tv_usec:usec
-//     }
-// }
+pub fn get_timespec() -> TimeSpec {
+    let ticks = get_time();
+    let sec = ticks/CLOCK_FREQ;
+    let usec = (ticks%CLOCK_FREQ) * USEC_PER_SEC / CLOCK_FREQ;
+    TimeSpec{
+        tv_sec:sec,
+        tv_usec:usec
+    }
+}
 
 pub fn get_time_ns() -> usize {
     time::read() * 10000 / (CLOCK_FREQ / 100000)

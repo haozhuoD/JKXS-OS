@@ -1,5 +1,4 @@
 mod context;
-mod page_fault;
 
 use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
@@ -75,7 +74,7 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::LoadPageFault) => {
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
-            if page_fault_handler(&mut process_inner, stval) == -1 {
+            if process_inner.check_lazy(stval) == -1 {
                 // error!(
                 //     "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 //     current_tid(),
@@ -88,10 +87,6 @@ pub fn trap_handler() -> ! {
                 //     debug!("x[{}] = {:#x?}", i, v);
                 // }
                 current_add_signal(SIGSEGV);
-            }
-            unsafe {
-                asm!("sfence.vma");
-                asm!("fence.i");
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
@@ -167,5 +162,4 @@ pub fn trap_from_kernel() -> ! {
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 
-pub use self::page_fault::*;
 pub use context::TrapContext;

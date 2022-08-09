@@ -3,7 +3,7 @@ TARGET := riscv64gc-unknown-none-elf
 MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
-FS_IMG := ../fat32-fuse/fs.img
+FS_IMG := ../fat32-fuse/fs-img
 SDCARD := /dev/sdb
 CPUS ?= 2
 	
@@ -139,17 +139,24 @@ HANDIN_BIN := ../os.bin
 handin-fu740: build
 	@cp $(KERNEL_BIN) $(HANDIN_BIN)
 
-local: user-apps
-	@echo Platform: fu740
-	@cp src/linker-fu740.ld src/linker.ld
-	@cargo build $(BUILD_MODE) --features "local_fu740" --offline
-	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
-	@rm src/linker.ld
-	cp /home/dhz/workspace/oscomp-2022/os/target/riscv64gc-unknown-none-elf/$(MODE)/os.bin ./
+# local: user-apps
+# 	@echo Platform: fu740
+# 	@cp src/linker-fu740.ld src/linker.ld
+# 	@cargo build $(BUILD_MODE) --features "local_fu740" --offline
+# 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
+# 	@rm src/linker.ld
+# 	cp /home/dhz/workspace/oscomp-2022/os/target/riscv64gc-unknown-none-elf/$(MODE)/os.bin ./
+
+local: 
+	make -C .. all
 
 move:
 	rm -f ~/nfs/os.bin
-	sudo cp ./os.bin ~/nfs	
+	sudo cp ../os.bin ~/nfs	
+
+move-fsimg:
+	rm -f ~/nfs/fs-img
+	sudo cp $(FS_IMG) ~/nfs
 
 showmount:
 	showmount -e 10.251.176.187

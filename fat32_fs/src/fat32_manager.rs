@@ -277,13 +277,7 @@ impl FAT32Manager {
 
     // 拆分文件名和扩展名
     pub fn split_name_ext<'a>(&self, name: &'a str) -> (&'a str, &'a str) {
-        let mut name_ext: Vec<&str> = name.split(".").collect();
-        let name_ = name_ext[0];
-        if name_ext.len() == 1 {
-            name_ext.push("");
-        }
-        let ext_ = name_ext[1];
-        (name_, ext_)
+        name.rsplit_once(".").unwrap_or((name, ""))
     }
 
     // 将fsinfo写回磁盘
