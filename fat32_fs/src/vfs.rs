@@ -360,14 +360,14 @@ impl VFile {
 
     // 在当前目录下创建文件
     pub fn create(&self, name: &str, attribute: u8) -> Option<Arc<VFile>> {
-        // TODO:是否需要检测同名文件
         // println!("creating file {}", name);
         assert!(self.is_dir());
         let mut dirent_offset = self.find_free_dirent();
         let (name_, ext_) = self.fs.split_name_ext(name);
         let mut short_ent = ShortDirEntry::new(name_, ext_, attribute);
-        let checksum = short_ent.checksum();
+        let mut long_pos_vec = Vec::new();
         if name_.len() > 8 || ext_.len() > 3 {
+            let checksum = short_ent.checksum();
             let mut name_vec = self.fs.long_name_split(name, true);
             let long_ent_count = name_vec.len();
             let mut long_ent = LongDirEntry::empty();
@@ -386,6 +386,7 @@ impl VFile {
                     self.write_at(dirent_offset, long_ent.as_bytes_mut()),
                     DIRENT_SZ
                 );
+                long_pos_vec.push(self.get_pos(dirent_offset));
                 dirent_offset += DIRENT_SZ;
             }
         }
@@ -394,9 +395,18 @@ impl VFile {
             self.write_at(dirent_offset, short_ent.as_bytes_mut()),
             DIRENT_SZ
         );
+        let (short_sector, short_offset) = self.get_pos(dirent_offset);
         // 如果是目录类型，需要创建.和..
-        // TODO:用更好的方法构造vfile
-        let vfile = self.find_vfile_name(name)?;
+        // let vfile = self.find_vfile_name(name)?;
+        let vfile = VFile::new(
+            String::from(name), 
+            short_sector, 
+            short_offset, 
+            long_pos_vec, 
+            attribute as u8, 
+            self.fs.clone(), 
+            self.block_device.clone()
+        );
         if attribute == ATTRIBUTE_DIRECTORY {
             let mut self_dir = ShortDirEntry::new(".", "", ATTRIBUTE_DIRECTORY);
             let mut parent_dir = ShortDirEntry::new("..", "", ATTRIBUTE_DIRECTORY);
@@ -629,7 +639,6 @@ impl VFile {
         if first_cluster == 0 {
             return 0;
         }
-        let all_clusters = self.fs.get_fat().read().get_all_clusters(first_cluster, &self.block_device);
         if self.is_dir() {
             let mut offset = 2 * DIRENT_SZ;
             let mut short_ent = ShortDirEntry::empty();
@@ -672,6 +681,7 @@ impl VFile {
                 offset += DIRENT_SZ;
             }
         }
+        let all_clusters = self.fs.get_fat().read().get_all_clusters(first_cluster, &self.block_device);
         let len = all_clusters.len();
         self.fs.dealloc_cluster(all_clusters);
         len
