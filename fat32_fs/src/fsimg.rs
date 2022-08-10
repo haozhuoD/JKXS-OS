@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use spin::Lazy;
 use crate::BlockDevice;
 
@@ -52,14 +53,16 @@ impl BlockCache {
 
 pub struct BlockCacheManager {
     start_sector: usize,
-    queue: Vec<(usize, Arc<RwLock<BlockCache>>)>,
+    // queue: Vec<(usize, Arc<RwLock<BlockCache>>)>,
+    queue: BTreeMap<usize, Arc<RwLock<BlockCache>>>,
 }
 
 impl BlockCacheManager {
     pub fn new() -> Self {
         Self {
             start_sector: 0,
-            queue: Vec::new(),
+            // queue: Vec::new(),
+            queue: BTreeMap::new(),
         }
     }
 
@@ -75,26 +78,36 @@ impl BlockCacheManager {
         &self, 
         block_id: usize
     ) -> Option<Arc<RwLock<BlockCache>>> {
-        if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
-            Some(Arc::clone(&pair.1))
-        } else {
-            None
-        }
+        // if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
+        //     Some(Arc::clone(&pair.1))
+        // } else {
+        //     None
+        // }
+        self.queue.get(&block_id).map(|blk| Arc::clone(blk))
     }
 
     pub fn get_block_cache(
         &mut self,
         block_id: usize,
     ) -> Arc<RwLock<BlockCache>> {
-        if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
-            Arc::clone(&pair.1)
-        } else {
-            let block_cache = Arc::new(RwLock::new(BlockCache::new(
-                block_id,
-            )));
-            self.queue.push((block_id, Arc::clone(&block_cache)));
-            block_cache
-        }
+        // if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
+        //     Arc::clone(&pair.1)
+        // } else {
+        //     let block_cache = Arc::new(RwLock::new(BlockCache::new(
+        //         block_id,
+        //     )));
+        //     self.queue.push((block_id, Arc::clone(&block_cache)));
+        //     block_cache
+        // }
+        self.queue.get(&block_id)
+            .map(|blk| Arc::clone(blk))
+            .unwrap_or_else(|| {
+                let block_cache = Arc::new(RwLock::new(BlockCache::new(
+                    block_id,
+                )));
+                self.queue.insert(block_id, Arc::clone(&block_cache));
+                block_cache
+            })
     }
 }
 
