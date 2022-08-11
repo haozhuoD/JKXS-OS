@@ -517,8 +517,8 @@ impl MemorySet {
                 let src_ppn = user_space.translate(vpn).unwrap().ppn();
                 let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
                 dst_ppn
-                    .get_bytes_array_u64()
-                    .copy_from_slice(src_ppn.get_bytes_array_u64());
+                    .slice_u64()
+                    .copy_from_slice(src_ppn.slice_u64());
             }
         }
         // 复制mmap区域
@@ -534,8 +534,8 @@ impl MemorySet {
                 let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
                 // debug!("mmap copy: src_ppn = {:#x?},  dst_ppn {:#x}", src_ppn.0, dst_ppn.0);
                 dst_ppn
-                    .get_bytes_array_u64()
-                    .copy_from_slice(src_ppn.get_bytes_array_u64());
+                    .slice_u64()
+                    .copy_from_slice(src_ppn.slice_u64());
             }
         }
         // 复制heap区域
@@ -548,8 +548,8 @@ impl MemorySet {
                 .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
             // copy data from another space
             let src_ppn = user_space.translate(vpn).unwrap().ppn();
-            ppn.get_bytes_array_u64()
-                .copy_from_slice(src_ppn.get_bytes_array_u64());
+            ppn.slice_u64()
+                .copy_from_slice(src_ppn.slice_u64());
         }
         memory_set
     }
@@ -736,7 +736,7 @@ impl MapArea {
                 .translate(current_vpn)
                 .unwrap()
                 .ppn()
-                .get_bytes_array_u8()[offset..offset + copy_len];
+                .slice_u8()[offset..offset + copy_len];
             // println!("offset = {:#x?}, copy_len = {:#x?}, start = {:#x?}", offset, copy_len, start);
             dst.copy_from_slice(src);
             start += copy_len;

@@ -15,11 +15,7 @@ pub struct FrameTracker {
 impl FrameTracker {
     pub fn new(ppn: PhysPageNum) -> Self {
         // page cleaning
-        let bytes_array = ppn.get_bytes_array_u64();
-        for i in bytes_array {
-            cnt += 1;
-            *i = 0x19260817;
-        }
+        ppn.clear_page();
         Self { ppn }
     }
 }

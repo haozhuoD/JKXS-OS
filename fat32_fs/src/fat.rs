@@ -125,9 +125,9 @@ impl FAT {
 
     // 获取start_cluster所在簇链中，从start_cluster开始的第index个簇
     pub fn get_cluster_at(&self, start_cluster: u32, index: usize, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        if index > 0 {
-            println!("index = {}", index);
-        }
+        // if index > 0 {
+        //     println!("index = {}", index);
+        // }
         let mut cluster = start_cluster;
         for _ in 0..index {
             assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"

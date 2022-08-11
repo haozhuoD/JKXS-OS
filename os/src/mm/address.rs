@@ -168,11 +168,11 @@ impl PhysPageNum {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
     }
-    pub fn get_bytes_array_u64(&self) -> &'static mut [u64] {
+    pub fn slice_u64(&self) -> &'static mut [u64] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u64, PAGE_SIZE / core::mem::size_of::<u64>()) }
     }
-    pub fn get_bytes_array_u8(&self) -> &'static mut [u8] {
+    pub fn slice_u8(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, PAGE_SIZE / core::mem::size_of::<u8>()) }
     }
@@ -181,7 +181,7 @@ impl PhysPageNum {
         pa.get_mut()
     }
     pub fn clear_page(&self) {
-        for x in self.get_bytes_array_u64() {
+        for x in self.slice_u64() {
             *x = 0;
         }
     }
