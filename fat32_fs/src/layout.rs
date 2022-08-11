@@ -1,5 +1,5 @@
 
-use crate::{CacheMode, println};
+use crate::CacheMode;
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -327,29 +327,17 @@ impl ShortDirEntry {
 
 		let ext_len = (0usize..SHORT_EXT_LEN).find(|i| self.extension[*i] == 0x20u8)
 			.unwrap_or(SHORT_EXT_LEN);
-		let extension = core::str::from_utf8(&self.extension[..ext_len]).unwrap();
 		if ext_len == 0 {
 			name.to_string().to_ascii_lowercase()
 		} else {
+			let extension = core::str::from_utf8(&self.extension[..ext_len]).unwrap();
 			format!("{}.{}", name.to_ascii_lowercase(), extension.to_ascii_lowercase())
 		}
 	}
 
 	pub fn checksum(&self) -> u8 {
-		let mut name_buff = [0u8; 11];
-		let _ = &mut name_buff[0..8].copy_from_slice(&self.name[..]);
-		let _ = &mut name_buff[8..11].copy_from_slice(&self.extension[..]);
-		let mut checksum: u32 = 0;
-		for i in 0..11 {
-			if checksum & 1 == 0 {
-				checksum = (checksum >> 1) + name_buff[i] as u32;
-			} else {
-				checksum = 0x80 + (checksum >> 1) + name_buff[i] as u32;
-			}
-			checksum = checksum & 0xFF;
-		}
-		checksum as u8
-
+		self.name.iter().chain(self.extension.iter())
+            .fold(0, |acc, &ch| acc.rotate_right(1).wrapping_add(ch))
 	}
 
 	pub fn set_size(&mut self, size: u32) {
@@ -368,7 +356,7 @@ impl ShortDirEntry {
 
 	// 获取文件起始簇号,在文件尚未分配簇时为0
 	pub fn first_cluster(&self) -> u32 {
-		((self.first_cluster_high as u32) << 16) + (self.first_cluster_low as u32)
+		((self.first_cluster_high as u32) << 16) | (self.first_cluster_low as u32)
 	}
 
 	pub fn delete(&mut self) {
