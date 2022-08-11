@@ -7,3 +7,4 @@
 3. 内联优化：常用的函数，如current_trap_cx()等可改为内联函数；
 4. current_trap_cx()也有些慢了。是否可以利用gp？
 5. trap陷入时sx是否有必要保存？
+6. trap_cx的内容是否可以简化？如core_id等是否需要？
