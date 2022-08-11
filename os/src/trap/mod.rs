@@ -2,7 +2,7 @@ mod context;
 
 use crate::config::TRAMPOLINE;
 use crate::multicore::get_hartid;
-use crate::syscall::{syscall, SYSCALL_SIGRETURN};
+use crate::syscall::{SYSCALL_SIGRETURN, SYSCALL_TABLE};
 use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_trap_cx_user_va,
@@ -57,11 +57,24 @@ pub fn trap_handler() -> ! {
             if cx.x[17] == SYSCALL_SIGRETURN {
                 is_sigreturn = true;
             }
-            let result = syscall(
-                cx.x[17],
-                [cx.x[10], cx.x[11], cx.x[12], cx.x[13], cx.x[14], cx.x[15]],
-                cx.sepc
-            );
+            let result: usize;
+            unsafe {
+                let sysptr = SYSCALL_TABLE[cx.x[17]];
+                asm!(
+                    "jalr {s}",
+                    s = in(reg) sysptr,
+                    inlateout("x10") cx.x[10] => result,
+                    in("x11") cx.x[11],
+                    in("x12") cx.x[12],
+                    in("x13") cx.x[13],
+                    in("x14") cx.x[14],
+                    in("x15") cx.x[15],
+                );
+            }
+            // let result = syscall(
+            //     cx.x[17],
+            //     [cx.x[10], cx.x[11], cx.x[12], cx.x[13], cx.x[14], cx.x[15]],
+            // );
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             cx.x[10] = result as usize;

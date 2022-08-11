@@ -17,7 +17,7 @@ use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec,
+    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx,
 };
 use crate::test::{enable_ttimer_output, stop_ttimer, print_ttimer, start_ttimer};
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC, get_time};
@@ -27,6 +27,14 @@ use alloc::vec::Vec;
 // use fat32_fs::sync_all;
 
 use super::errorno::{EINVAL, EPERM, ESRCH};
+
+pub fn sys_unknown() -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "Unsupported syscall_id: {}", current_trap_cx().x[17]
+    );
+    0
+}
 
 pub fn sys_shutdown() -> ! {
     // sync_all();
