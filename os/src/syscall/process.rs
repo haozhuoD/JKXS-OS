@@ -14,10 +14,11 @@ use crate::mm::{
     UserBuffer, VirtAddr, VirtPageNum,
 };
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
+use crate::multicore::get_hartid;
 use crate::sbi::shutdown;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx,
+    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx, __FA,
 };
 use crate::test::{enable_ttimer_output, stop_ttimer, print_ttimer, start_ttimer};
 use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC, get_time};
@@ -213,13 +214,20 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     // run usershell
     if cwd == "/" && path == "user_shell" {
         let process = current_process();
-        let exec_ret = process.exec(get_usershell_binary(), &args_vec);
-        if exec_ret != 0 {
-            return -1;
-        }
-        unsafe {
-            asm!("sfence.vma");
-            asm!("fence.i");
+        match process.exec(get_usershell_binary(), &args_vec) {
+            Some(task) => {
+                task.acquire_inner_lock().__save_info_to_fast_access();
+                unsafe {
+                    __FA[get_hartid()].__user_token = process.acquire_inner_lock().get_user_token();
+                }
+                unsafe {
+                    asm!("sfence.vma");
+                    asm!("fence.i");
+                }
+                // return argc because cx.x[10] will be covered with it later
+                return 0
+            },
+            None => return -EPERM
         }
         return 0;
     }
@@ -235,17 +243,20 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
-        let exec_ret = process.exec(all_data.as_slice(), &args_vec);
-        if exec_ret != 0 {
-            -EPERM
-        } else {
-            unsafe {
-                asm!("sfence.vma");
-                asm!("fence.i");
-            }
-            // return argc because cx.x[10] will be covered with it later
-            0
-        }
+        match process.exec(all_data.as_slice(), &args_vec) {
+            Some(task) => {
+                task.acquire_inner_lock().__save_info_to_fast_access();
+                unsafe {
+                    __FA[get_hartid()].__user_token = process.acquire_inner_lock().get_user_token();
+                }
+                unsafe {
+                    asm!("sfence.vma");
+                    asm!("fence.i");
+                }
+                // return argc because cx.x[10] will be covered with it later
+                0
+            },
+            None => -EPERM}
     } else {
         -EPERM
     };
@@ -403,7 +414,7 @@ pub fn sys_getppid() -> isize {
     let parent = current_process()
         .acquire_inner_lock()
         .parent
-        .clone()
+        .as_ref()
         .unwrap()
         .upgrade();
     let ret = parent.unwrap().getpid() as isize;

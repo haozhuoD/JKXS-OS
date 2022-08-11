@@ -145,13 +145,13 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> isize {
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> Option<Arc<TaskControlBlock>> {
         assert_eq!(self.acquire_inner_lock().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
             MemorySet::from_elf(elf_data);
         if (ustack_base == 0) && (entry_point == 0) && (uheap_base == 0) {
-            return -1;
+            return None;
         }
         let new_token = memory_set.token();
         // substitute memory_set
@@ -320,7 +320,8 @@ impl ProcessControlBlock {
         trap_cx.x[12] = envp_base;
         trap_cx.x[13] = auxv_base;
         *task_inner.get_trap_cx() = trap_cx;
-        0
+        drop(task_inner);
+        Some(task.clone())
     }
 
     /// Only support processes with a single thread.
