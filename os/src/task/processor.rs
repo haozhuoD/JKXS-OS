@@ -11,7 +11,6 @@ use alloc::sync::Arc;
 use spin::{Lazy, RwLock};
 
 pub struct Processor {
-    __debug_tid: RwLock<usize>,
     inner: RefCell<ProcessorInner>,
 }
 
@@ -20,12 +19,27 @@ pub struct ProcessorInner {
     idle_task_cx: TaskContext,
 }
 
+pub static mut __FA: [FastAccessStruct; MAX_CPU_NUM] = [FastAccessStruct {
+    __tid: 0,
+    __trap_cx_va: 0,
+    __trap_cx_pa: 0,
+    __user_token: 0,
+}; MAX_CPU_NUM];
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct FastAccessStruct {
+    pub __tid: usize,
+    pub __trap_cx_va: usize,
+    pub __trap_cx_pa: usize,
+    pub __user_token: usize,
+}
+
 unsafe impl Sync for Processor {}
 
 impl Processor {
     pub fn new() -> Self {
         Self {
-            __debug_tid: RwLock::new(0),
             inner: RefCell::new(ProcessorInner {
                 current: None,
                 idle_task_cx: TaskContext::zero_init(),
@@ -147,11 +161,16 @@ pub fn run_tasks() {
 
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-            // access coming task TCB exclusively
+
+            unsafe {
+                let user_token = task.process.upgrade().unwrap().acquire_inner_lock().get_user_token();
+                __FA[get_hartid()].__user_token = user_token;
+            }
+
             let mut task_inner = task.acquire_inner_lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
-            *(PROCESSORS[get_hartid()].__debug_tid.write()) = task_inner.gettid();
+            task_inner.__save_info_to_fast_access();
             drop(task_inner);
             // release coming task TCB manually
             // println!("[cpu {}] switch to process {}", get_hartid(), task.process.upgrade().unwrap().getpid());
@@ -184,29 +203,22 @@ pub fn current_process() -> Arc<ProcessControlBlock> {
 
 #[inline(always)]
 pub fn current_tid() -> usize {
-    *(PROCESSORS[get_hartid()].__debug_tid.read())
+    unsafe { __FA[get_hartid()].__tid }
 }
 
 #[inline(always)]
 pub fn current_user_token() -> usize {
-    let task = current_task().unwrap();
-    task.get_user_token()
+    unsafe { __FA[get_hartid()].__user_token }
 }
 
 #[inline(always)]
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task().unwrap().acquire_inner_lock().get_trap_cx()
+    unsafe { (__FA[get_hartid()].__trap_cx_pa as *mut TrapContext).as_mut().unwrap() }
 }
 
 #[inline(always)]
 pub fn current_trap_cx_user_va() -> usize {
-    current_task()
-        .unwrap()
-        .acquire_inner_lock()
-        .res
-        .as_ref()
-        .unwrap()
-        .trap_cx_user_va()
+    unsafe { __FA[get_hartid()].__trap_cx_va }
 }
 
 #[inline(always)]

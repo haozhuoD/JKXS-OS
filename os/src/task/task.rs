@@ -1,6 +1,8 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags, ITimerSpec};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags, ITimerSpec, __FA};
+use crate::config::PAGE_SIZE;
 use crate::mm::PhysPageNum;
+use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
@@ -82,6 +84,16 @@ impl TaskControlBlockInner {
 
     pub fn get_relative_tid(&self) -> usize {
         self.res.as_ref().unwrap().rel_tid
+    }
+
+    pub fn __save_info_to_fast_access(&self) {
+        let hartid = get_hartid();
+        unsafe {
+            let p = &mut __FA[hartid];
+            p.__tid = self.gettid();
+            p.__trap_cx_pa = usize::from(self.trap_cx_ppn) * PAGE_SIZE;
+            p.__trap_cx_va = self.res.as_ref().unwrap().trap_cx_user_va();
+        }
     }
 }
 
