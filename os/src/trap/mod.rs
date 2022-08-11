@@ -7,7 +7,6 @@ use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_trap_cx_user_va,
 };
-use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, print_ttimer};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use riscv::register::{
@@ -42,7 +41,6 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
-    disable_ttimer_output();
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -128,19 +126,15 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    start_ttimer();
     // 处理当前进程的信号
     if !is_sigreturn {
         perform_signals_of_current();
     }
-    stop_ttimer();
-    print_ttimer("signal");
     trap_return();
 }
 
 #[no_mangle]
 pub fn trap_return() -> ! {
-    start_ttimer();
     set_user_trap_entry();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
@@ -152,9 +146,6 @@ pub fn trap_return() -> ! {
 
     // 设置core_id
     current_trap_cx().core_id = get_hartid();
-
-    stop_ttimer();
-    print_ttimer("trap_return");
 
     unsafe {
         asm!(

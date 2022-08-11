@@ -172,27 +172,33 @@ pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
         .take_current()
 }
 
+#[inline(always)]
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSORS[get_hartid()].inner_exclusive_access().current()
 }
 
+#[inline(always)]
 pub fn current_process() -> Arc<ProcessControlBlock> {
     current_task().unwrap().process.upgrade().unwrap()
 }
 
+#[inline(always)]
 pub fn current_tid() -> usize {
     *(PROCESSORS[get_hartid()].__debug_tid.read())
 }
 
+#[inline(always)]
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
 }
 
+#[inline(always)]
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task().unwrap().acquire_inner_lock().get_trap_cx()
 }
 
+#[inline(always)]
 pub fn current_trap_cx_user_va() -> usize {
     current_task()
         .unwrap()
@@ -203,6 +209,7 @@ pub fn current_trap_cx_user_va() -> usize {
         .trap_cx_user_va()
 }
 
+#[inline(always)]
 pub fn current_kstack_top() -> Option<usize> {
     // backtrace时一些核心可能没有current_task
     if let Some(task) = current_task() {
