@@ -72,6 +72,7 @@ pub fn rust_main() -> ! {
     fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
+    syscall::init();
     timer::set_next_trigger();
     fs::list_apps();
     fs::init_rootfs();
