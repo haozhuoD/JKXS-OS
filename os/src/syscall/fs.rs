@@ -261,7 +261,6 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let inner = process.acquire_inner_lock();
-    let cwd = inner.cwd.clone();
     let mut userbuf = UserBuffer::new(buf_vec);
 
     let ret = if fd == AT_FDCWD {
@@ -269,6 +268,7 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
         //     open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
         //     &mut userbuf,
         // )
+        let cwd = inner.cwd.clone();
         userbuf.write(open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap().stat().as_bytes());
         0
     // } else if fd < 0 || fd >= inner.fd_table.len() as isize {
