@@ -7,7 +7,6 @@ use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_trap_cx_user_va,
 };
-use crate::test::{disable_ttimer_output, start_ttimer, stop_ttimer, print_ttimer};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use riscv::register::{
@@ -42,10 +41,8 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
-    disable_ttimer_output();
     set_kernel_trap_entry();
     let scause = scause::read();
-    let stval = stval::read();
     let mut is_sigreturn = false;
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
@@ -85,6 +82,7 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
+            let stval = stval::read();
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
             if process_inner.check_lazy(stval) == -1 {
@@ -103,6 +101,7 @@ pub fn trap_handler() -> ! {
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
+            let stval = stval::read();
             error!(
                 "[tid={}] {:?} in application, bad addr(stval) = {:#x}, bad instruction(sepc) = {:#x}, kernel killed it.",
                 current_tid(),
@@ -121,6 +120,7 @@ pub fn trap_handler() -> ! {
             suspend_current_and_run_next();
         }
         _ => {
+            let stval = stval::read();
             panic!(
                 "Unsupported trap {:?}, stval = {:#x}!",
                 scause.cause(),
@@ -128,19 +128,15 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    start_ttimer();
     // 处理当前进程的信号
     if !is_sigreturn {
         perform_signals_of_current();
     }
-    stop_ttimer();
-    print_ttimer("signal");
     trap_return();
 }
 
 #[no_mangle]
 pub fn trap_return() -> ! {
-    start_ttimer();
     set_user_trap_entry();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
@@ -152,9 +148,6 @@ pub fn trap_return() -> ! {
 
     // 设置core_id
     current_trap_cx().core_id = get_hartid();
-
-    stop_ttimer();
-    print_ttimer("trap_return");
 
     unsafe {
         asm!(

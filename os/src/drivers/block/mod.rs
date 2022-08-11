@@ -4,11 +4,9 @@ mod sdcard;
 mod sleep;
 mod spi;
 mod virtio_blk;
-mod virtio_fsimg;
 
 pub use sdcard::SDCardWrapper;
 pub use virtio_blk::VirtIOBlock;
-pub use virtio_fsimg::VirtIOFSImg;
 use spin::Lazy;
 
 use crate::board::BlockDeviceImpl;
