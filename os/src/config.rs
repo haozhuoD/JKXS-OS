@@ -3,7 +3,7 @@
 pub const FSIMG_START_PAGENUM : usize = 0x9000_0;
 pub const FSIMG_END_PAGENUM : usize = 0xb000_0;
 
-pub const MEMORY_END: usize = 0xc000_0000;
+pub const MEMORY_END: usize = 0xb000_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 
