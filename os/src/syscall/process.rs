@@ -140,14 +140,13 @@ pub fn sys_clone(
         let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
         let mut new_task_inner = new_task.acquire_inner_lock();
         let new_tid = new_task_inner.gettid();
-        let current_process_inner = current_process.acquire_inner_lock();
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
-            *translated_refmut(current_process_inner.get_user_token(), ptid_ptr) =
+            *translated_refmut(current_user_token(), ptid_ptr) =
                 new_tid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
-                current_process_inner.get_user_token(),
+                current_user_token(),
                 ctid_ptr,
             ),
             addr: ctid_ptr as usize});
