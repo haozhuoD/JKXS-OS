@@ -32,7 +32,7 @@ impl Pipe {
     }
 }
 
-const RING_BUFFER_SIZE: usize = 1024;
+const RING_BUFFER_SIZE: usize = 0x20000;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
@@ -123,8 +123,8 @@ impl File for Pipe {
         let mut read_size = 0usize;
         loop {
             let mut ring_buffer = self.buffer.lock();
-            let loop_read = ring_buffer.available_read();
-            if loop_read == 0 {
+            let available = ring_buffer.available_read();
+            if available == 0 {
                 if ring_buffer.all_write_ends_closed() || read_size > 0 || self.nonblock {
                     return read_size;
                 }
@@ -133,7 +133,7 @@ impl File for Pipe {
                 continue;
             }
             // read at most loop_read bytes
-            for _ in 0..loop_read {
+            for _ in 0..available {
                 if let Some(byte_ref) = buf_iter.next() {
                     unsafe {
                         *byte_ref = ring_buffer.read_byte();
@@ -154,8 +154,8 @@ impl File for Pipe {
         let mut write_size = 0usize;
         loop {
             let mut ring_buffer = self.buffer.lock();
-            let loop_write = ring_buffer.available_write();
-            if loop_write == 0 {
+            let available = ring_buffer.available_write();
+            if available == 0 {
                 if self.nonblock {
                     return write_size;
                 }
@@ -164,7 +164,7 @@ impl File for Pipe {
                 continue;
             }
             // write at most loop_write bytes
-            for _ in 0..loop_write {
+            for _ in 0..available {
                 if let Some(byte_ref) = buf_iter.next() {
                     ring_buffer.write_byte(unsafe { *byte_ref });
                     write_size += 1;
