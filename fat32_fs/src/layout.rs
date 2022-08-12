@@ -1,4 +1,3 @@
-
 use crate::CacheMode;
 use crate::fat::END_CLUSTER;
 
@@ -9,6 +8,7 @@ use super:: {
 	get_info_block_cache,
 	fat32_manager::FAT32Manager,
 	fat::*,
+	chain::*,
 };
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -376,16 +376,31 @@ impl ShortDirEntry {
 		offset: usize,
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice>
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> (u32, usize, usize) {
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		// let bytes_per_sector = manager.bytes_per_sector() as usize;
+		// let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		// let cluster_index = offset / bytes_per_cluster;
+		// let curr_cluster = fat_reader.get_cluster_at(
+		// 	self.first_cluster(), 
+		// 	cluster_index, 
+		// 	block_device
+		// );
+		// let curr_sector = manager.first_sector_of_cluster(curr_cluster)
+		// 							+ (offset - cluster_index as usize * bytes_per_cluster)
+		// 							/ bytes_per_sector;
+		// (curr_cluster, curr_sector, offset % bytes_per_sector)
+		let chain_reader = chain.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let cluster_index = offset / bytes_per_cluster;
-		let curr_cluster = fat_reader.get_cluster_at(
+		let curr_cluster = chain_reader.get_cluster_at(
 			self.first_cluster(), 
 			cluster_index, 
-			block_device
+			block_device,
+			fat
 		);
 		let curr_sector = manager.first_sector_of_cluster(curr_cluster)
 									+ (offset - cluster_index as usize * bytes_per_cluster)
@@ -400,16 +415,19 @@ impl ShortDirEntry {
 		buf: &mut [u8],
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice> 
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> usize {
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		let chain_reader = chain.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let mut curr_offset = offset;
 		let end: usize;
 		// 边界检查
 		if self.is_dir() {
-			let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			// let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			let size = bytes_per_cluster * chain_reader.cluster_count(self.first_cluster(), block_device, fat) as usize;
 			end = (offset + buf.len()).min(size);
 		} else {
 			end = (offset + buf.len()).min(self.size_in_bytes as usize);
@@ -418,7 +436,8 @@ impl ShortDirEntry {
 			return 0;
 		}
 
-		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 			return 0;
 		}
@@ -460,7 +479,8 @@ impl ShortDirEntry {
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
 			if curr_offset % bytes_per_cluster == 0 {
-				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain_reader.get_next_cluster(curr_cluster, block_device, fat);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
 				}
@@ -479,19 +499,23 @@ impl ShortDirEntry {
 		name: &str,
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice> 
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> (isize, isize) {
 		assert!(self.is_dir());
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		let chain_reader = chain.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let mut curr_offset = offset;
 		// 边界检查
-		let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		// let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		let end = bytes_per_cluster * chain_reader.cluster_count(self.first_cluster(), block_device, fat) as usize;
 		if curr_offset >= end {
 			return (EMPTY_DIRENT, EMPTY_DIRENT);
 		}
-		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 			return (EMPTY_DIRENT, EMPTY_DIRENT);
 		}
@@ -530,7 +554,8 @@ impl ShortDirEntry {
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
 			if curr_offset % bytes_per_cluster == 0 {
-				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain_reader.get_next_cluster(curr_cluster, block_device, fat);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					panic!("Can not find the short dirent");
 					// break;
@@ -548,19 +573,23 @@ impl ShortDirEntry {
 		offset: usize,
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice> 
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> usize {
 		assert!(self.is_dir());
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		let chain_reader = chain.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let mut curr_offset = offset;
 		// 边界检查
-		let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		// let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		let end = bytes_per_cluster * chain_reader.cluster_count(self.first_cluster(), block_device, fat) as usize;
 		if curr_offset >= end {
 			return end;
 		}
-		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 			return 0;
 		}
@@ -591,7 +620,8 @@ impl ShortDirEntry {
 			}
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
 			if curr_offset % bytes_per_cluster == 0 {
-				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain_reader.get_next_cluster(curr_cluster, block_device, fat);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					break;  // TODO: panic?
 				}
@@ -610,26 +640,35 @@ impl ShortDirEntry {
 		buf: &[u8],
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice> 
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> usize {
 		// 不会修改文件size，因此不用获取FAT写锁
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		let chain_reader = chain.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let mut curr_offset = offset;
 		let end: usize;
 		// 边界检查
 		if self.is_dir() {
-			let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			// let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			let size = bytes_per_cluster * chain_reader.cluster_count(self.first_cluster(), block_device, fat) as usize;
 			end = (offset + buf.len()).min(size);
 		} else {
 			end = (offset + buf.len()).min(self.size_in_bytes as usize);
 		}
 		assert!(curr_offset <= end);
 
-		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		// let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-			panic!("Write error!");
+			panic!("Write error! chain is {:?}, chain_map is {:?}, offset = {}, fc = {}", 
+				chain.read().chain,
+				chain.read().chain_map,
+				offset,
+				self.first_cluster(),
+			);
 		}
 		let mut curr_cluster = curr_cluster;
 		let mut curr_sector = curr_sector;
@@ -672,7 +711,8 @@ impl ShortDirEntry {
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
 			if curr_offset % bytes_per_cluster == 0 {
-				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain_reader.get_next_cluster(curr_cluster, block_device, fat);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 					panic!("Write error!");
 				}
