@@ -1,4 +1,5 @@
 use alloc::{sync::Arc, vec::Vec};
+use spin::RwLock;
 
 use crate::println;
 
@@ -7,6 +8,7 @@ use super::{
     BlockDevice,
     CacheMode,
     get_info_block_cache,
+    chain::*,
 };
 
 const FAT_ENTRY_PER_SEC: u32 = BLOCK_SZ as u32 / 4;
@@ -97,7 +99,13 @@ impl FAT {
     }
 
     // 设置簇curr_cluster的下一个簇为next_cluster
-    pub fn set_next_cluster(&self, curr_cluster: u32, next_cluster: u32, block_device: &Arc<dyn BlockDevice>) {
+    pub fn set_next_cluster(
+        &self,
+        curr_cluster: u32,
+        next_cluster: u32,
+        block_device: &Arc<dyn BlockDevice>,
+        chain: &Arc<RwLock<Chain>>,
+    ) {
         assert!(curr_cluster < self.max_cluster && curr_cluster > 1, "The current cluster number is out of range!");
         let (fat1_sec, fat2_sec, offset) = self.cluster_position(curr_cluster);
         get_info_block_cache(
@@ -108,26 +116,39 @@ impl FAT {
             .modify(offset as usize, |val: &mut u32| {
                 *val = next_cluster;
         });
-        get_info_block_cache(
-            fat2_sec as usize, 
-            Arc::clone(block_device), 
-            CacheMode::READ)
-            .write()
-            .modify(offset as usize, |val: &mut u32| {
-                *val = next_cluster;
-        });
+        let mut chain_writer = chain.write();
+        let mut index = chain_writer.chain.len();
+        if index == 0 {
+            chain_writer.chain.push(curr_cluster);
+            chain_writer.chain_map.insert(curr_cluster, 0);
+            index += 1;
+        }
+        if next_cluster != FREE_CLUSTER && next_cluster < END_CLUSTER {
+            chain_writer.chain.push(next_cluster);
+            chain_writer.chain_map.insert(next_cluster, index);
+        }
+        // get_info_block_cache(
+        //     fat2_sec as usize, 
+        //     Arc::clone(block_device), 
+        //     CacheMode::READ)
+        //     .write()
+        //     .modify(offset as usize, |val: &mut u32| {
+        //         *val = next_cluster;
+        // });
     }
 
     // 设置当前簇为结束簇
-    pub fn set_end_cluster(&self, curr_cluster: u32, block_device: &Arc<dyn BlockDevice>) {
-        self.set_next_cluster(curr_cluster, END_CLUSTER, block_device);
+    pub fn set_end_cluster(
+        &self,
+        curr_cluster: u32,
+        block_device: &Arc<dyn BlockDevice>,
+        chain: &Arc<RwLock<Chain>>,
+    ) {
+        self.set_next_cluster(curr_cluster, END_CLUSTER, block_device, chain);
     }
 
     // 获取start_cluster所在簇链中，从start_cluster开始的第index个簇
     pub fn get_cluster_at(&self, start_cluster: u32, index: usize, block_device: &Arc<dyn BlockDevice>) -> u32 {
-        // if index > 0 {
-        //     println!("index = {}", index);
-        // }
         let mut cluster = start_cluster;
         for _ in 0..index {
             assert!(cluster < self.max_cluster, "The current cluster number {} exceeds the maximum cluster number {}!"
