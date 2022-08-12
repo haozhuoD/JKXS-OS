@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
@@ -21,11 +22,11 @@ use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
+    pub pid: AtomicUsize,
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub struct ProcessControlBlockInner {
-    pub pid: usize,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -77,13 +78,17 @@ impl ProcessControlBlock {
         self.inner.lock()
     }
 
+    pub fn getpid(&self) -> usize {
+        self.pid.load(Ordering::Relaxed)
+    }
+
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
         let process = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: None,
@@ -132,7 +137,8 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
-        process_inner.pid = task_inner.gettid();
+        // set pid
+        process.pid.store(task_inner.gettid(), Ordering::Relaxed);
         process_inner.tasks.push(Some(Arc::clone(&task)));
 
         drop(task_inner);
@@ -344,8 +350,8 @@ impl ProcessControlBlock {
 
         // create child process pcb
         let child = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
@@ -383,7 +389,7 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
         let task_inner = task.acquire_inner_lock();
-        child_inner.pid = task_inner.gettid();
+        child.pid.store(task_inner.gettid(), Ordering::Relaxed);
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
@@ -413,7 +419,7 @@ impl ProcessControlBlock {
         stack: usize,
         newtls: usize,
     ) -> Arc<TaskControlBlock> {
-        let pid = self.acquire_inner_lock().pid;
+        let pid = self.getpid();
         // only the main thread can create a sub-thread
         assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0);
         // create main thread of child process
@@ -670,10 +676,6 @@ impl ProcessControlBlock {
         let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
-    }
-
-    pub fn getpid(&self) -> usize {
-        self.acquire_inner_lock().pid
     }
 }
 
