@@ -17,6 +17,7 @@
     .globl __alltraps
     .globl __restore
     .globl __sigreturn
+    .globl __trap_from_kernel
     .align 2
 __alltraps:
     csrrw sp, sscratch, sp
@@ -104,3 +105,7 @@ __sigreturn:
     li a7, 139
     # syscall SIGRETURN
     ecall
+
+    .align 2
+__trap_from_kernel:
+    call trap_from_kernel

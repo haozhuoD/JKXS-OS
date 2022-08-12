@@ -170,11 +170,13 @@ impl PageTable {
     }
 }
 
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> UserBuffVec {
     let page_table = PageTable::from_token(token);
     let mut start = ptr as usize;
     let end = start + len;
-    let mut v = Vec::new();
+    let mut v = [(0, 0); USERBUF_MAX_SIZE];
+
+    let mut i = 0;
     while start < end {
         let start_va = VirtAddr::from(start);
         let mut vpn = start_va.floor();
@@ -186,14 +188,16 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         //     "start_va = {:#x?}, end_va = {:#x?}, vpn = {:#x?}, ppn = {:#x?}",
         //     start_va, end_va, vpn, ppn
         // );
-        if end_va.page_offset() == 0 {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
+        let pa_slice = if end_va.page_offset() == 0 {
+            &ppn.slice_u8()[start_va.page_offset()..]
         } else {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
-        }
+            &ppn.slice_u8()[start_va.page_offset()..end_va.page_offset()]
+        };
+        v[i] = (pa_slice.as_ptr() as usize, pa_slice.as_ptr() as usize + pa_slice.len());
+        i += 1;
         start = end_va.into();
     }
-    v
+    UserBuffVec { bufs: v, sz: i }
 }
 
 /// Load a string from other address spaces into kernel space without an end `\0`.
@@ -233,20 +237,35 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .get_mut()
 }
 
-#[derive(Debug)]
+const USERBUF_MAX_SIZE: usize = 10;
+
+/// 保存物理地址范围
+pub struct UserBuffVec {
+    pub bufs: [(usize, usize); USERBUF_MAX_SIZE],
+    pub sz: usize,
+}
+
+impl UserBuffVec {
+    pub fn from_single_slice(buf: &'static mut [u8]) -> Self {
+        let mut bufs = [(0, 0); USERBUF_MAX_SIZE];
+        bufs[0] = (buf.as_ptr() as usize, buf.as_ptr() as usize + buf.len());
+        Self { bufs, sz: 1 }
+    }
+}
+
 pub struct UserBuffer {
-    pub buffers: Vec<&'static mut [u8]>,
+    pub bufvec: UserBuffVec,
 }
 
 impl UserBuffer {
-    pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
-        Self { buffers }
+    pub fn new(bufvec: UserBuffVec) -> Self {
+        Self { bufvec }
     }
 
     pub fn len(&self) -> usize {
         let mut total: usize = 0;
-        for b in self.buffers.iter() {
-            total += b.len();
+        for b in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
+            total += b.1 - b.0;
         }
         total
     }
@@ -258,10 +277,9 @@ impl UserBuffer {
             return 0;
         }
         let mut current = 0;
-        for sub_buf in self.buffers.iter_mut() {
-            let sblen = (*sub_buf).len();
-            for j in 0..sblen {
-                (*sub_buf)[j] = buf[current];
+        for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
+            for pa in (sub_buf.0)..(sub_buf.1) {
+                unsafe { *(pa as *mut u8) = buf[current]; }
                 current += 1;
                 if current == len {
                     return len;
@@ -272,9 +290,13 @@ impl UserBuffer {
     }
 
     pub fn clear(&mut self) -> usize {
-        self.buffers.iter_mut().for_each(|buf| {
-            buf.fill(0);
-        });
+        self.bufvec.bufs[0..(self.bufvec.sz)]
+            .iter_mut()
+            .for_each(|buf| {
+                unsafe {
+                    core::slice::from_raw_parts_mut(buf.0 as *mut u8, buf.1 - buf.0).fill(0)
+                }
+            });
         self.len()
     }
 }
@@ -284,33 +306,33 @@ impl IntoIterator for UserBuffer {
     type IntoIter = UserBufferIterator;
     fn into_iter(self) -> Self::IntoIter {
         UserBufferIterator {
-            buffers: self.buffers,
-            current_buffer: 0,
-            current_idx: 0,
+            bufvec: self.bufvec,
+            i: 0,
+            j: 0,
         }
     }
 }
 
 pub struct UserBufferIterator {
-    buffers: Vec<&'static mut [u8]>,
-    current_buffer: usize,
-    current_idx: usize,
+    bufvec: UserBuffVec,
+    i: usize,
+    j: usize,
 }
 
 impl Iterator for UserBufferIterator {
     type Item = *mut u8;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_buffer >= self.buffers.len() {
+        if self.i >= self.bufvec.sz {
             None
         } else {
-            let r = &mut self.buffers[self.current_buffer][self.current_idx] as *mut _;
-            if self.current_idx + 1 == self.buffers[self.current_buffer].len() {
-                self.current_idx = 0;
-                self.current_buffer += 1;
+            let r = self.bufvec.bufs[self.i].0 + self.j;
+            if r + 1 == self.bufvec.bufs[self.i].1 {
+                self.j = 0;
+                self.i += 1;
             } else {
-                self.current_idx += 1;
+                self.j += 1;
             }
-            Some(r)
+            Some(r as *mut _)
         }
     }
 }

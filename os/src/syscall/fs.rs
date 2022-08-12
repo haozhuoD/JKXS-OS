@@ -1,11 +1,12 @@
 use crate::fs::{
-    make_pipe, open_common_file, open_device_file, path2vec, BitOpt, DType, FSDirent, FdSet, File,
-    FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN, SEEK_CUR,
-    SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, remove_vfile_idx,
+    make_pipe, open_common_file, open_device_file, path2vec, remove_vfile_idx, BitOpt, DType,
+    FSDirent, FdSet, File, FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN,
+    SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use crate::gdb_println;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+    UserBuffVec,
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
@@ -269,7 +270,12 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
         //     &mut userbuf,
         // )
         let cwd = inner.cwd.clone();
-        userbuf.write(open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap().stat().as_bytes());
+        userbuf.write(
+            open_common_file(&cwd, "", OpenFlags::RDONLY)
+                .unwrap()
+                .stat()
+                .as_bytes(),
+        );
         0
     // } else if fd < 0 || fd >= inner.fd_table.len() as isize {
     //     -EPERM
@@ -756,15 +762,25 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
         }
 
         // sendfile
+        // 这里我们仍然采用UserBuffer，虽然实际上没有移入用户空间
         let mut buf = vec![0u8; count];
-        let userbuf_read = UserBuffer::new(vec![unsafe {
-            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), count)
-        }]);
+
+        let buf_vec_read = unsafe {
+            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
+                buf.as_mut_slice().as_mut_ptr(),
+                count,
+            ))
+        };
+        let buf_vec_write = unsafe {
+            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
+                buf.as_mut_slice().as_mut_ptr(),
+                count,
+            ))
+        };
+        let userbuf_read = UserBuffer::new(buf_vec_read);
         let read_cnt = fin_inner.read(userbuf_read);
 
-        let userbuf_write = UserBuffer::new(vec![unsafe {
-            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), read_cnt)
-        }]);
+        let userbuf_write = UserBuffer::new(buf_vec_write);
         let ret = fout_inner.write(userbuf_write) as isize;
         gdb_println!(
             SYSCALL_ENABLE,
