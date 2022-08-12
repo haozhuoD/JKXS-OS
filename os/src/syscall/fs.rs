@@ -763,25 +763,32 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
 
         // sendfile
         // 这里我们仍然采用UserBuffer，虽然实际上没有移入用户空间
-        let mut buf = vec![0u8; count];
+        let mut buf = vec![0u8; 0x2000];
 
         let buf_vec_read = unsafe {
             UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
                 buf.as_mut_slice().as_mut_ptr(),
-                count,
+                buf.as_slice().len(),
             ))
         };
-        let buf_vec_write = unsafe {
-            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
-                buf.as_mut_slice().as_mut_ptr(),
-                count,
-            ))
-        };
+
         let userbuf_read = UserBuffer::new(buf_vec_read);
         let read_cnt = fin_inner.read(userbuf_read);
 
+        if read_cnt > buf.len() {
+            panic!("sendfile buffer overflow");
+        }
+
+        let buf_vec_write = unsafe {
+            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
+                buf.as_mut_slice().as_mut_ptr(),
+                read_cnt,
+            ))
+        };
+    
         let userbuf_write = UserBuffer::new(buf_vec_write);
         let ret = fout_inner.write(userbuf_write) as isize;
+
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_sendfile(out_fd = {}, in_fd = {}, offset = {:#x?}, count = {}) = {}",
