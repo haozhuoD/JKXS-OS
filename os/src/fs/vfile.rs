@@ -349,8 +349,10 @@ impl File for OSFile {
     fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = inner.vfile.read_at(inner.offset, *slice);
+        for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter_mut() {
+            let read_size = inner.vfile.read_at(inner.offset, unsafe {
+                core::slice::from_raw_parts_mut(slice.0 as *mut u8, slice.1 - slice.0)
+            });
             if read_size == 0 {
                 break;
             }
@@ -362,9 +364,11 @@ impl File for OSFile {
     fn write(&self, buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = inner.vfile.write_at(inner.offset, *slice);
-            assert_eq!(write_size, slice.len());
+        for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter() {
+            let write_size = inner.vfile.write_at(inner.offset, unsafe {
+                core::slice::from_raw_parts(slice.0 as *const u8, slice.1 - slice.0)
+            });
+            assert_eq!(write_size, slice.1 - slice.0);
             inner.offset += write_size;
             total_write_size += write_size;
         }

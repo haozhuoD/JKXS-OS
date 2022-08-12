@@ -1,8 +1,10 @@
 mod context;
 
 use crate::config::TRAMPOLINE;
+use crate::gdb_println;
+use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::multicore::get_hartid;
-use crate::syscall::{SYSCALL_SIGRETURN, SYSCALL_TABLE};
+use crate::syscall::{SYSCALL_SIGRETURN, SYSCALL_TABLE, SYSCALL_READ, SYSCALL_WRITE, SYSCALL_READDIR};
 use crate::task::{
     current_add_signal, current_process, current_tid, current_trap_cx,
     current_user_token, perform_signals_of_current, suspend_current_and_run_next, SIGILL, SIGSEGV, current_trap_cx_user_va,
@@ -21,9 +23,13 @@ pub fn init() {
     set_kernel_trap_entry();
 }
 
+extern "C" {
+    fn __trap_from_kernel();
+}
+
 fn set_kernel_trap_entry() {
     unsafe {
-        stvec::write(trap_from_kernel as usize, TrapMode::Direct);
+        stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
     }
 }
 
@@ -50,11 +56,25 @@ pub fn trap_handler() -> ! {
             let mut cx = current_trap_cx();
             // debug!("syscall sepc = {:#x?}", cx.sepc);
             cx.sepc += 4;
+            let syscall_id = cx.x[17];
             // get system call return value
-            if cx.x[17] == SYSCALL_SIGRETURN {
+            if syscall_id == SYSCALL_SIGRETURN {
                 is_sigreturn = true;
             }
             let result: usize;
+            
+            if ((syscall_id != SYSCALL_READ && syscall_id != SYSCALL_WRITE) || (cx.x[10] > 2))
+                && syscall_id != SYSCALL_READDIR
+            {
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "\x1b[034msyscall({}), args = {:x?}, sepc = {:#x?}\x1b[0m",
+                    syscall_id,
+                    [cx.x[10], cx.x[11], cx.x[12], cx.x[13], cx.x[14], cx.x[15]],
+                    cx.sepc - 4
+                );
+            }
+
             unsafe {
                 let sysptr = SYSCALL_TABLE[cx.x[17]];
                 asm!(

@@ -13,7 +13,7 @@ use riscv::register::time;
 // pub const MSEC_PER_SEC: usize = 1000;
 pub const USEC_PER_SEC: usize = 1000000;
 pub const NSEC_PER_SEC: usize = USEC_PER_SEC * 1000;
-pub const TICKS_PER_SEC: usize = 100;
+pub const TICKS_PER_SEC: usize = 10;
 
 pub fn get_time() -> usize {
     time::read()
