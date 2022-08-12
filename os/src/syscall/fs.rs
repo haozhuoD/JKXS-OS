@@ -152,11 +152,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
 pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
-    if fd >= inner.fd_table.len() {
-        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
-        return -EPERM;
-    }
-    if inner.fd_table[fd].is_none() {
+    if fd >= inner.fd_table.len() || inner.fd_table[fd].is_none() {
         gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
         return -EPERM;
     }

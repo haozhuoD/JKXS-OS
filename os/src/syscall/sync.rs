@@ -227,7 +227,7 @@ pub fn futex_wake(uaddr: usize, nr_wake: u32) -> isize {
     let nr_wake = nr_wake.min(waiters as u32);
     // debug!("futex_wake: uaddr: {:x?}, nr_wake: {:x?}", uaddr, nr_wake);
 
-    let mut wakeup_queue = Vec::new();
+    let mut wakeup_queue = Vec::with_capacity(20);
     (0..nr_wake as usize).for_each(|_| {
         // 加入唤醒队列中，但需要等到释放完锁之后才能唤醒
         let task = fq_lock.pop_front().unwrap().task;
@@ -260,8 +260,8 @@ pub fn futex_requeue(uaddr: usize, nr_wake: u32, uaddr2: usize, nr_limit: u32) -
     }
     let nr_wake = nr_wake.min(waiters as u32);
 
-    let mut wakeup_q = Vec::new();
-    let mut requeue_q = Vec::new();
+    let mut wakeup_q = Vec::with_capacity(20);
+    let mut requeue_q = Vec::with_capacity(20);
 
     (0..nr_wake as usize).for_each(|_| {
         // prepare to wake-up

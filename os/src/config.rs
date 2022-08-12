@@ -31,15 +31,15 @@ pub use crate::board::{CLOCK_FREQ, MMIO};
 
 #[allow(unused)]
 pub fn aligned_up(addr: usize) -> usize {
-    (addr + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE
+    ((addr + PAGE_SIZE - 1) >> PAGE_SIZE_BITS) << PAGE_SIZE_BITS
 }
 
 #[allow(unused)]
 pub fn aligned_down(addr: usize) -> usize {
-    addr / PAGE_SIZE * PAGE_SIZE
+    (addr >> PAGE_SIZE_BITS) << PAGE_SIZE_BITS
 }
 
 #[allow(unused)]
 pub fn is_aligned(addr: usize) -> bool {
-    addr % PAGE_SIZE == 0
+    (addr & 0x0fff) == 0
 }

@@ -19,7 +19,7 @@ impl RecycleAllocator {
     pub fn new() -> Self {
         RecycleAllocator {
             current: 0,
-            recycled: Vec::new(),
+            recycled: Vec::with_capacity(0x1000),
         }
     }
     pub fn alloc(&mut self) -> usize {

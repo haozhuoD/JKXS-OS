@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 
 use crate::mm::UserBuffer;
 
-use super::{File, path2vec, OpenFlags};
+use super::{File, OpenFlags};
 
 pub struct DevZero;
 pub struct DevNull;
@@ -65,16 +65,18 @@ impl File for DevNull {
     }
 }
 
-pub fn open_device_file(_cwd: &str, path: &str, _flags: OpenFlags) -> Option<Arc<dyn File + Send + Sync>> {
+pub fn open_device_file(
+    _cwd: &str,
+    path: &str,
+    _flags: OpenFlags,
+) -> Option<Arc<dyn File + Send + Sync>> {
     // warning: just a fake implementation
-    let pathv = path2vec(path);
-    if let Some(&fname) = pathv.last() {
-        match fname {
-            "zero" => Some(Arc::new(DevZero::new())),
-            "null" => Some(Arc::new(DevNull::new())),
-            "rtc" => Some(Arc::new(DevRtc::new())),
-            _ => None
-        }
+    if path.ends_with("zero") {
+        Some(Arc::new(DevZero::new()))
+    } else if path.ends_with("null") {
+        Some(Arc::new(DevNull::new()))
+    } else if path.ends_with("rtc") {
+        Some(Arc::new(DevRtc::new()))
     } else {
         None
     }

@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
@@ -21,11 +22,11 @@ use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
+    pub pid: AtomicUsize,
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub struct ProcessControlBlockInner {
-    pub pid: usize,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -77,17 +78,21 @@ impl ProcessControlBlock {
         self.inner.lock()
     }
 
+    pub fn getpid(&self) -> usize {
+        self.pid.load(Ordering::Relaxed)
+    }
+
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
         let process = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: None,
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: vec![
@@ -99,7 +104,7 @@ impl ProcessControlBlock {
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
                 sigactions: BTreeMap::new(),
-                tasks: Vec::new(),
+                tasks: Vec::with_capacity(10),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
@@ -132,7 +137,8 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
-        process_inner.pid = task_inner.gettid();
+        // set pid
+        process.pid.store(task_inner.gettid(), Ordering::Relaxed);
         process_inner.tasks.push(Some(Arc::clone(&task)));
 
         drop(task_inner);
@@ -172,7 +178,7 @@ impl ProcessControlBlock {
         let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
 
         ////////////// envp[] ///////////////////
-        let mut env: Vec<String> = Vec::new();
+        let mut env: Vec<String> = Vec::with_capacity(30);
         env.push(String::from("SHELL=/bin/sh"));
         env.push(String::from("PWD=/"));
         env.push(String::from("USER=root"));
@@ -333,7 +339,7 @@ impl ProcessControlBlock {
         // 因此后面不需要再allow_user_res了
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
         // copy fd table
-        let mut new_fd_table = Vec::new();
+        let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
             if let Some(file) = fd {
                 new_fd_table.push(Some(file.clone()));
@@ -344,17 +350,17 @@ impl ProcessControlBlock {
 
         // create child process pcb
         let child = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: new_fd_table,
                 sigactions: parent.sigactions.clone(),
-                tasks: Vec::new(),
+                tasks: Vec::with_capacity(10),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
@@ -383,7 +389,7 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
         let task_inner = task.acquire_inner_lock();
-        child_inner.pid = task_inner.gettid();
+        child.pid.store(task_inner.gettid(), Ordering::Relaxed);
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
@@ -413,7 +419,7 @@ impl ProcessControlBlock {
         stack: usize,
         newtls: usize,
     ) -> Arc<TaskControlBlock> {
-        let pid = self.acquire_inner_lock().pid;
+        let pid = self.getpid();
         // only the main thread can create a sub-thread
         assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0);
         // create main thread of child process
@@ -670,10 +676,6 @@ impl ProcessControlBlock {
         let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
-    }
-
-    pub fn getpid(&self) -> usize {
-        self.acquire_inner_lock().pid
     }
 }
 

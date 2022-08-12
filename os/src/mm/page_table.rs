@@ -1,3 +1,4 @@
+use crate::config::{aligned_up, aligned_down, PAGE_SIZE};
 use crate::task::current_process;
 
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
@@ -56,7 +57,7 @@ impl PageTableEntry {
 
 pub struct PageTable {
     root_ppn: PhysPageNum,
-    frames: Vec<FrameTracker>,
+    frames: Option<Vec<FrameTracker>>,
 }
 
 /// Assume that it won't oom when creating/mapping.
@@ -65,14 +66,14 @@ impl PageTable {
         let frame = frame_alloc().unwrap();
         PageTable {
             root_ppn: frame.ppn,
-            frames: vec![frame],
+            frames: Some(vec![frame]),
         }
     }
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
-            frames: Vec::new(),
+            frames: None,
         }
     }
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
@@ -90,7 +91,7 @@ impl PageTable {
                 // 只有第三级页表可置A D 标志位  | PTEFlags::A | PTEFlags::D
                 // *pte = PageTableEntry::new(frame.ppn, PTEFlags::V );
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
-                self.frames.push(frame);
+                self.frames.as_mut().unwrap().push(frame);
             }
             ppn = pte.ppn();
         }
@@ -193,7 +194,10 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> UserB
         } else {
             &ppn.slice_u8()[start_va.page_offset()..end_va.page_offset()]
         };
-        v[i] = (pa_slice.as_ptr() as usize, pa_slice.as_ptr() as usize + pa_slice.len());
+        v[i] = (
+            pa_slice.as_ptr() as usize,
+            pa_slice.as_ptr() as usize + pa_slice.len(),
+        );
         i += 1;
         start = end_va.into();
     }
@@ -203,18 +207,26 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> UserB
 /// Load a string from other address spaces into kernel space without an end `\0`.
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
-    let mut string = String::new();
-    let mut va = ptr as usize;
+    let mut string = String::with_capacity(128);
+    let mut start_va = ptr as usize;
+    let mut done = false;
     loop {
-        let ch: u8 = *(page_table
-            .translate_va_with_lazycheck(VirtAddr::from(va))
+        let start_pa: usize = page_table
+            .translate_va_with_lazycheck(VirtAddr::from(start_va))
             .unwrap()
-            .get_mut());
-        if ch == 0 {
+            .into();
+        for pa in start_pa..aligned_down(start_pa) + PAGE_SIZE {
+            let ch = unsafe {*(pa as *mut u8)};
+            if ch == 0 {
+                done = true;
+                break;
+            }
+            string.push(ch as char);
+        }
+        if done {
             break;
         }
-        string.push(ch as char);
-        va += 1;
+        start_va = aligned_down(start_va) + PAGE_SIZE;
     }
     string
 }
@@ -279,7 +291,9 @@ impl UserBuffer {
         let mut current = 0;
         for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
             for pa in (sub_buf.0)..(sub_buf.1) {
-                unsafe { *(pa as *mut u8) = buf[current]; }
+                unsafe {
+                    *(pa as *mut u8) = buf[current];
+                }
                 current += 1;
                 if current == len {
                     return len;
@@ -292,10 +306,8 @@ impl UserBuffer {
     pub fn clear(&mut self) -> usize {
         self.bufvec.bufs[0..(self.bufvec.sz)]
             .iter_mut()
-            .for_each(|buf| {
-                unsafe {
-                    core::slice::from_raw_parts_mut(buf.0 as *mut u8, buf.1 - buf.0).fill(0)
-                }
+            .for_each(|buf| unsafe {
+                core::slice::from_raw_parts_mut(buf.0 as *mut u8, buf.1 - buf.0).fill(0)
             });
         self.len()
     }

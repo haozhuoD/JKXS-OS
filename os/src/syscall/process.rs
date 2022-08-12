@@ -1,6 +1,7 @@
 use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
+use core::sync::atomic::Ordering;
 
 use crate::config::{aligned_up, PAGE_SIZE, FDMAX, CLOCK_FREQ};
 use crate::console::{
@@ -158,9 +159,10 @@ pub fn sys_clone(
         let new_task = new_process_inner.get_task(0);
         let mut new_task_inner = new_task.acquire_inner_lock();
 
+        let new_pid = new_process.getpid() as u32;
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
             *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
-            new_process_inner.pid as u32;
+            new_pid;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
@@ -171,9 +173,9 @@ pub fn sys_clone(
         }
         if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid_ptr as usize != 0 {
             *translated_refmut(new_process_inner.get_user_token(), ctid_ptr) =
-            new_process_inner.pid as u32;
+            new_pid;
         }
-        new_process_inner.pid
+        new_pid as usize
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -195,7 +197,7 @@ pub fn sys_clone(
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
     let mut path = translated_str(token, path);
-    let mut args_vec: Vec<String> = Vec::new();
+    let mut args_vec: Vec<String> = Vec::with_capacity(16);
 
     loop {
         let arg_str_ptr = *translated_ref(token, args);
@@ -415,8 +417,9 @@ pub fn sys_getppid() -> isize {
         .parent
         .as_ref()
         .unwrap()
-        .upgrade();
-    let ret = parent.unwrap().getpid() as isize;
+        .upgrade()
+        .unwrap();
+    let ret = parent.pid.load(Ordering::Relaxed) as isize;
     gdb_println!(SYSCALL_ENABLE, "sys_getppid() = {}", ret);
     ret
 }
