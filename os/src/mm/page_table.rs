@@ -56,7 +56,7 @@ impl PageTableEntry {
 
 pub struct PageTable {
     root_ppn: PhysPageNum,
-    frames: Vec<FrameTracker>,
+    frames: Option<Vec<FrameTracker>>,
 }
 
 /// Assume that it won't oom when creating/mapping.
@@ -65,14 +65,14 @@ impl PageTable {
         let frame = frame_alloc().unwrap();
         PageTable {
             root_ppn: frame.ppn,
-            frames: vec![frame],
+            frames: Some(vec![frame]),
         }
     }
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
-            frames: Vec::new(),
+            frames: None,
         }
     }
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
@@ -90,7 +90,7 @@ impl PageTable {
                 // 只有第三级页表可置A D 标志位  | PTEFlags::A | PTEFlags::D
                 // *pte = PageTableEntry::new(frame.ppn, PTEFlags::V );
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V | PTEFlags::A | PTEFlags::D);
-                self.frames.push(frame);
+                self.frames.as_mut().unwrap().push(frame);
             }
             ppn = pte.ppn();
         }
