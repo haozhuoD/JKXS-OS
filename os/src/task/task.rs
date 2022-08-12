@@ -121,8 +121,8 @@ impl TaskControlBlock {
                 pending_signals: VecDeque::new(),
                 sigmask: 0,
                 itimer: ITimerSpec::new(),
-                performing_signals: Vec::new(),
-                trap_cx_backup: Vec::new(),
+                performing_signals: Vec::with_capacity(64),
+                trap_cx_backup: Vec::with_capacity(1),
                 clear_child_tid: None,
                 killed: false
             })),

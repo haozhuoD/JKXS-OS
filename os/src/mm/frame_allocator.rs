@@ -57,7 +57,7 @@ impl FrameAllocator for StackFrameAllocator {
         Self {
             current: 0,
             end: 0,
-            recycled: Vec::new(),
+            recycled: Vec::with_capacity(0x10000),
         }
     }
     fn alloc(&mut self) -> Option<PhysPageNum> {

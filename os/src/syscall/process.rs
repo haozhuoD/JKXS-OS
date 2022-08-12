@@ -197,7 +197,7 @@ pub fn sys_clone(
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
     let mut path = translated_str(token, path);
-    let mut args_vec: Vec<String> = Vec::new();
+    let mut args_vec: Vec<String> = Vec::with_capacity(16);
 
     loop {
         let arg_str_ptr = *translated_ref(token, args);

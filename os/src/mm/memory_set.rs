@@ -47,7 +47,7 @@ pub struct DLLMem{
 impl DLLMem {
     pub fn new() ->Self {
         Self {
-            data: Vec::new(),
+            data: Vec::with_capacity(0x1000),
             name: "NULL".to_string(),
         }
     }
@@ -101,9 +101,9 @@ impl MemorySet {
     pub fn new_bare() -> Self {
         Self {
             page_table: PageTable::new(),
-            areas: Vec::new(),
+            areas: Vec::with_capacity(0x100),
             heap_frames: BTreeMap::new(),
-            mmap_areas: Vec::new(),
+            mmap_areas: Vec::with_capacity(0x100),
         }
     }
     pub fn token(&self) -> usize {
@@ -334,7 +334,7 @@ impl MemorySet {
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
-        let mut auxv: Vec<AuxHeader> = Vec::new();
+        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_sigreturn_trampoline();

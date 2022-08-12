@@ -92,7 +92,7 @@ impl ProcessControlBlock {
                 is_zombie: false,
                 memory_set,
                 parent: None,
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: vec![
@@ -104,7 +104,7 @@ impl ProcessControlBlock {
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
                 sigactions: BTreeMap::new(),
-                tasks: Vec::new(),
+                tasks: Vec::with_capacity(10),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
@@ -178,7 +178,7 @@ impl ProcessControlBlock {
         let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
 
         ////////////// envp[] ///////////////////
-        let mut env: Vec<String> = Vec::new();
+        let mut env: Vec<String> = Vec::with_capacity(30);
         env.push(String::from("SHELL=/bin/sh"));
         env.push(String::from("PWD=/"));
         env.push(String::from("USER=root"));
@@ -339,7 +339,7 @@ impl ProcessControlBlock {
         // 因此后面不需要再allow_user_res了
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
         // copy fd table
-        let mut new_fd_table = Vec::new();
+        let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
             if let Some(file) = fd {
                 new_fd_table.push(Some(file.clone()));
@@ -355,12 +355,12 @@ impl ProcessControlBlock {
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: new_fd_table,
                 sigactions: parent.sigactions.clone(),
-                tasks: Vec::new(),
+                tasks: Vec::with_capacity(10),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
