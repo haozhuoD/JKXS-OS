@@ -317,7 +317,7 @@ impl VFile {
             // let final_cluster = fat_writer.get_final_cluster(first_cluster, &self.block_device);
             // fat_writer.set_next_cluster(final_cluster, cluster, &self.block_device);
             let fat = self.fs.get_fat();
-            let final_cluster = self.chain.read().get_final_cluster(
+            let final_cluster = self.chain.write().get_final_cluster(
                 first_cluster, 
                 &self.block_device, 
                 &fat
@@ -601,7 +601,7 @@ impl VFile {
             short_ent.clear();
         });
         // let all_clusters = self.fs.get_fat().read().get_all_clusters(first_cluster, &self.block_device);
-        let all_clusters = self.chain.read().get_all_clusters(
+        let all_clusters = self.chain.write().get_all_clusters(
             first_cluster,
             &self.block_device,
             &self.fs.get_fat(),
@@ -715,7 +715,7 @@ impl VFile {
             }
         }
         // let all_clusters = self.fs.get_fat().read().get_all_clusters(first_cluster, &self.block_device);
-        let all_clusters = self.chain.read().get_all_clusters(
+        let all_clusters = self.chain.write().get_all_clusters(
             first_cluster,
             &self.block_device,
             &self.fs.get_fat(),
