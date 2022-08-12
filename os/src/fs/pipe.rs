@@ -159,11 +159,8 @@ impl File for Pipe {
             let mut ring_buffer_lock = self.buffer.lock();
             let available = ring_buffer_lock.available_write();
             if available == 0 {
-<<<<<<< HEAD
                 if self.nonblock {
-=======
-                if self.nonblock{
->>>>>>> 9e9d7e283c63c58e8a696c1f857758ff442ce300
+
                     return write_size;
                 }
                 drop(ring_buffer_lock);
