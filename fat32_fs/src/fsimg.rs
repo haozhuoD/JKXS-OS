@@ -53,7 +53,7 @@ impl BlockCache {
 
 const MAX_BLK_ID: usize = 65536;
 pub struct BlockCacheManager {
-    start_sector: usize,
+    // start_sector: usize,
     // queue: Vec<(usize, Arc<RwLock<BlockCache>>)>,
     list: Vec<Arc<RwLock<BlockCache>>>
 }
@@ -61,7 +61,7 @@ pub struct BlockCacheManager {
 impl BlockCacheManager {
     pub fn new() -> Self {
         Self {
-            start_sector: 0,
+            // start_sector: 0,
             // queue: Vec::new(),
             list: (0..MAX_BLK_ID).map(|block_id| {
                 Arc::new(RwLock::new(BlockCache::new(block_id)))
@@ -69,13 +69,13 @@ impl BlockCacheManager {
         }
     }
 
-    pub fn set_start_sector(&mut self, start_sector: usize) {
-        self.start_sector = start_sector;
-    }
+    // pub fn set_start_sector(&mut self, start_sector: usize) {
+    //     self.start_sector = start_sector;
+    // }
 
-    pub fn get_start_sector(&self) -> usize {
-        self.start_sector
-    }
+    // pub fn get_start_sector(&self) -> usize {
+    //     self.start_sector
+    // }
 
     pub fn get_block_cache(
         &self, 
@@ -85,8 +85,8 @@ impl BlockCacheManager {
     }
 }
 
-pub static BLOCK_CACHE_MANAGER: Lazy<RwLock<BlockCacheManager>> =
-    Lazy::new(|| RwLock::new(BlockCacheManager::new()));
+pub static BLOCK_CACHE_MANAGER: Lazy<BlockCacheManager> =
+    Lazy::new(|| BlockCacheManager::new());
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum CacheMode {
@@ -97,23 +97,26 @@ pub enum CacheMode {
 pub fn get_data_block_cache(
     block_id: usize,
     _: Arc<dyn BlockDevice>,
-    rw_mode: CacheMode,
+    _: CacheMode,
 ) -> Arc<RwLock<BlockCache>> {
-    let phy_blk_id = BLOCK_CACHE_MANAGER.read().get_start_sector() + block_id;
-    BLOCK_CACHE_MANAGER.read().get_block_cache(phy_blk_id)
+    // let phy_blk_id = BLOCK_CACHE_MANAGER.get_start_sector() + block_id;
+    // BLOCK_CACHE_MANAGER.get_block_cache(phy_blk_id)
+    BLOCK_CACHE_MANAGER.get_block_cache(block_id)
 }
 
 pub fn get_info_block_cache(
     block_id: usize,
     _: Arc<dyn BlockDevice>,
-    rw_mode: CacheMode,
+    _: CacheMode,
 ) -> Arc<RwLock<BlockCache>> {
-    let phy_blk_id = BLOCK_CACHE_MANAGER.read().get_start_sector() + block_id;
-    BLOCK_CACHE_MANAGER.read().get_block_cache(phy_blk_id)
+    // let phy_blk_id = BLOCK_CACHE_MANAGER.get_start_sector() + block_id;
+    // BLOCK_CACHE_MANAGER.get_block_cache(phy_blk_id)
+    BLOCK_CACHE_MANAGER.get_block_cache(block_id)
 }
 
 pub fn set_start_sector(start_sector: usize) {
-    BLOCK_CACHE_MANAGER
-        .write()
-        .set_start_sector(start_sector);
+    // BLOCK_CACHE_MANAGER
+    //     .write()
+    //     .set_start_sector(start_sector);
+    return ;
 }

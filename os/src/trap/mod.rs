@@ -43,7 +43,6 @@ pub fn enable_timer_interrupt() {
 pub fn trap_handler() -> ! {
     set_kernel_trap_entry();
     let scause = scause::read();
-    let stval = stval::read();
     let mut is_sigreturn = false;
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
@@ -83,6 +82,7 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
+            let stval = stval::read();
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
             if process_inner.check_lazy(stval) == -1 {
@@ -101,6 +101,7 @@ pub fn trap_handler() -> ! {
             }
         }
         Trap::Exception(Exception::IllegalInstruction) => {
+            let stval = stval::read();
             error!(
                 "[tid={}] {:?} in application, bad addr(stval) = {:#x}, bad instruction(sepc) = {:#x}, kernel killed it.",
                 current_tid(),
@@ -119,6 +120,7 @@ pub fn trap_handler() -> ! {
             suspend_current_and_run_next();
         }
         _ => {
+            let stval = stval::read();
             panic!(
                 "Unsupported trap {:?}, stval = {:#x}!",
                 scause.cause(),

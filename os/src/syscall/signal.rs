@@ -112,10 +112,10 @@ pub fn sys_sigaction(
 
 pub fn sys_sigreturn() -> isize {
     #[cfg(feature = "sig_delay")]
-    suspend_current_and_run_next();
-    // for _ in 0..1 {
-    //     suspend_current_and_run_next();
-    // }
+    for _ in 0..2 {
+        suspend_current_and_run_next();
+    }
+    // suspend_current_and_run_next();
     let token = current_user_token();
     let task = current_task().unwrap();
     let mut task_inner = task.acquire_inner_lock();
