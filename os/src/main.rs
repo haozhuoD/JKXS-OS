@@ -89,7 +89,7 @@ pub fn rust_main() -> ! {
     // }
 
     BOOT_CORE_READY.store(true, Ordering::Release);
-    wakeup_other_cores(hartid);
+    // wakeup_other_cores(hartid);
 
     task::run_tasks();
     panic!("Unreachable in rust_main!");

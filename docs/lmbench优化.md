@@ -20,3 +20,8 @@
 - [X] Pagetable::from_token，是否还需要frames这个vec？
 - [X] translated_str不需要逐字节翻译页表
 - [X] Vec初始化时预留容量
+  内存可做的优化
+
+## fs可做的优化
+
+- [ ] 缓存读写锁数组可以换成Atomic？

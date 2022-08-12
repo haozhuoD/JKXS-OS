@@ -35,7 +35,7 @@ pub use task::*;
 pub use time_info::*;
 
 pub fn suspend_current_and_run_next() {
-    wakeup_futex_waiters();
+    // wakeup_futex_waiters();
     // 将原来的take_current改为current_task，也就是说suspend之后，task仍然保留在processor中
     let task = current_task().unwrap();
 
