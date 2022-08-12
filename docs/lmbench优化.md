@@ -17,7 +17,6 @@
 - [ ] frame_allocator的大锁是否可以去掉？
 - [ ] heap_allocator太慢
 - [X] 减少不必要的Vec使用？（需要alloc和dealloc）
-- [ ] Pagetable::from_token，是否还需要frames这个vec？
-- [ ] translated_str不需要逐字节翻译页表
-
-## open/close优化
+- [X] Pagetable::from_token，是否还需要frames这个vec？
+- [X] translated_str不需要逐字节翻译页表
+- [X] Vec初始化时预留容量
