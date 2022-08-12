@@ -160,7 +160,6 @@ impl File for Pipe {
             let available = ring_buffer_lock.available_write();
             if available == 0 {
                 if self.nonblock {
-
                     return write_size;
                 }
                 drop(ring_buffer_lock);
