@@ -71,8 +71,10 @@ impl File for Stdout {
         panic!("Cannot read from stdout!");
     }
     fn write(&self, user_buf: UserBuffer) -> usize {
-        for buffer in user_buf.buffers.iter() {
-            print!("{}", core::str::from_utf8(*buffer).unwrap());
+        for buffer in user_buf.bufvec.bufs[0..user_buf.bufvec.sz].iter() {
+            print!("{}", core::str::from_utf8(unsafe {
+                core::slice::from_raw_parts(buffer.0 as *const u8, buffer.1 - buffer.0)
+            }).unwrap());
         }
         user_buf.len()
     }
