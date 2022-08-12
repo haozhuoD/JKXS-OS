@@ -31,23 +31,6 @@ impl Chain {
         }
     }
 
-    // // 设置簇curr_cluster的下一个簇为next_cluster
-    // pub fn set_next_cluster(
-    //     &mut self,
-    //     curr_cluster: u32,
-    //     next_cluster: u32,
-    //     block_device: &Arc<dyn BlockDevice>,
-    //     fat: &Arc<RwLock<FAT>>,
-    // ) {
-    //     // right ?
-    //     if next_cluster < END_CLUSTER {
-    //         let index = self.chain.len();
-    //         self.chain.push(next_cluster);
-    //         self.chain_map.insert(next_cluster, index);
-    //     }
-    //     fat.write().set_next_cluster(curr_cluster, next_cluster, block_device);
-    // }
-
     // 获取start_cluster所在簇链中，从start_cluster开始的第index个簇
     pub fn get_cluster_at(
         &self,
@@ -70,10 +53,11 @@ impl Chain {
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> u32 {
-        let len = self.chain.len();
-        self.chain.get(len-1).copied().unwrap_or_else(|| {
+        if let Some(_) = self.chain_map.get(&start_cluster) {
+            self.chain.get(self.chain.len()-1).copied().unwrap()
+        } else {
             fat.read().get_final_cluster(start_cluster, block_device)
-        })
+        }
     }
 
     // 获取start_cluster为首的簇链上的所有簇号
@@ -83,7 +67,7 @@ impl Chain {
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> Vec<u32> {
-        if self.chain.len() > 0 {
+        if let Some(_) = self.chain_map.get(&start_cluster) {
             self.chain.clone()
         } else {
             fat.read().get_all_clusters(start_cluster, block_device)
@@ -97,11 +81,11 @@ impl Chain {
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> u32 {
-        let len = self.chain.len();
-        if len == 0 {
-            return fat.read().cluster_count(start_cluster, block_device);
+        if let Some(_) = self.chain_map.get(&start_cluster) {
+            self.chain.len() as u32
+        } else {
+            fat.read().cluster_count(start_cluster, block_device)
         }
-        len as u32
     }
 
     pub fn clear_all(&mut self) {
