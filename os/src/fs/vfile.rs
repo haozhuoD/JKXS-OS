@@ -36,7 +36,7 @@ impl OSFile {
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.lock();
         let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::with_capacity(0x1000000);
+        let mut v: Vec<u8> = Vec::with_capacity(0x10000);
         loop {
             let len = inner.vfile.read_at(inner.offset, &mut buffer);
             if len == 0 {

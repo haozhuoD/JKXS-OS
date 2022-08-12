@@ -9,7 +9,7 @@ pub const PAGE_SIZE_BITS: usize = 0xc;
 
 pub const USER_STACK_SIZE: usize = PAGE_SIZE * 40;
 pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 24;
-pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x2000;
+pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x4000;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 pub const SIGRETURN_TRAMPOLINE: usize = TRAMPOLINE - PAGE_SIZE;
