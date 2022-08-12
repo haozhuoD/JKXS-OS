@@ -237,7 +237,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .get_mut()
 }
 
-const USERBUF_MAX_SIZE: usize = 10;
+const USERBUF_MAX_SIZE: usize = 18;
 
 /// 保存物理地址范围
 pub struct UserBuffVec {
