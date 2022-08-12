@@ -199,11 +199,10 @@ impl FAT32Manager {
         }
     }
 
-    // 在FAT表上分配num个簇，成功时返回第一个簇，失败时返回None
-    pub fn alloc_cluster(&self, num: u32, chain: &Arc<RwLock<Chain>>) -> Option<u32> {
+    // 在FAT表上分配num个簇，成功时返回第一个簇和最后一个簇，失败时返回None
+    pub fn alloc_cluster(&self, num: u32, chain: &Arc<RwLock<Chain>>) -> Option<(u32, u32)> {
         let free_clusters = self.free_cluster_count();
         if num > free_clusters {
-            println!("num: {}", num);
             return None;
         }
         let fat_writer = self.fat.write();
@@ -218,13 +217,13 @@ impl FAT32Manager {
             curr_cluster = next_clutser;
         }
         // 填写最后一个FAT表项
-        fat_writer.set_end_cluster(curr_cluster, &self.block_device, chain);
+        // fat_writer.set_end_cluster(curr_cluster, &self.block_device, chain);
         // 修改FSInfo块
         let mut fsinfo_writer = self.fsinfo.write();
         fsinfo_writer.write_free_cluster_count(free_clusters - num);
         fsinfo_writer.write_last_alloc_cluster(curr_cluster);
 
-        Some(first_free_cluster)
+        Some((first_free_cluster, curr_cluster))
     }
 
     // 簇的去分配，仅修改FAT表，不更改数据区
