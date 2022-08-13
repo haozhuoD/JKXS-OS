@@ -103,9 +103,20 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
             let stval = stval::read();
+            let is_store = scause.cause() == Trap::Exception(Exception::StoreFault) || scause.cause() == Trap::Exception(Exception::StorePageFault);
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
-            if process_inner.check_lazy(stval) == -1 {
+            let ret_lazy = process_inner.check_lazy(stval);
+            let mut ret_cow:isize = 0;
+            if is_store && ret_lazy==-1 {
+                // info!("[tid={}] is_store cow_handle start ... vaddr:0x{:x}",current_tid(),stval);
+                ret_cow = process_inner.cow_handle(stval);
+            }
+            // let erro =( is_store && (ret_cow==0) ) ? false : (ret_lazy == -1);
+            let erro =if is_store && (ret_cow==0) { false } else {ret_lazy == -1};
+            if erro {    
+                // info!("ret_lazy = {}",ret_lazy);
+                // info!("is_store = {}  ret_cow = {} ",is_store, ret_cow);
                 // error!(
                 //     "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 //     current_tid(),
