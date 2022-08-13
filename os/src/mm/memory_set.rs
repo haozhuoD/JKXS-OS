@@ -380,12 +380,9 @@ impl MemorySet {
             aux_type: AT_BASE,
             value: 0 as usize,
         });
-        // todo is_dynamic = 1;
-        // .interp: 2 第二个
-        // .strtab: ph_count-2 倒数第二个
-        // TODO 通过方法寻找？ 可读性更高？
-        // let dl_sec = elf.program_header(1).unwrap();
-        _at_base = memory_set.load_dl(elf_data);
+        // 不加载dll
+        // _at_base = memory_set.load_dl(elf_data);
+        _at_base = 0;
         if _at_base != 0 {
             // error!("load_dl finish !");
             auxv.push(AuxHeader {
