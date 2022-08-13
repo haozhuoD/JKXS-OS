@@ -6,6 +6,7 @@ use spin::{Lazy, Mutex, RwLock};
 
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    waiting_queue: VecDeque<Arc<TaskControlBlock>>,
 }
 
 /// A simple FIFO scheduler.
@@ -13,13 +14,17 @@ impl TaskManager {
     pub fn new() -> Self {
         Self {
             ready_queue: VecDeque::new(),
+            waiting_queue: VecDeque::new(),
         }
     }
-    pub fn add(&mut self, task: Arc<TaskControlBlock>) {
+    pub fn add_to_ready_queue(&mut self, task: Arc<TaskControlBlock>) {
         self.ready_queue.push_back(task);
     }
-    pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
+    pub fn fetch_from_ready_queue(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.ready_queue.pop_front()
+    }
+    pub fn add_to_waiting_queue(&mut self, task: Arc<TaskControlBlock>) {
+        self.waiting_queue.push_back(task);
     }
 }
 
@@ -30,11 +35,30 @@ pub static TID2TCB: Lazy<RwLock<BTreeMap<usize, Arc<TaskControlBlock>>>> =
     Lazy::new(|| RwLock::new(BTreeMap::new()));
 
 pub fn add_task(task: Arc<TaskControlBlock>) {
-    TASK_MANAGER.lock().add(task);
+    TASK_MANAGER.lock().add_to_ready_queue(task);
 }
 
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-    TASK_MANAGER.lock().fetch()
+    TASK_MANAGER.lock().fetch_from_ready_queue()
+}
+
+pub fn block_task(task: Arc<TaskControlBlock>) {
+    TASK_MANAGER.lock().add_to_waiting_queue(task);
+}
+
+pub fn unblock_task(task: Arc<TaskControlBlock>) {
+    let mut mlock = TASK_MANAGER.lock();
+    let p = mlock
+        .waiting_queue
+        .iter()
+        .enumerate()
+        .find(|(_, t)| Arc::ptr_eq(t, &task))
+        .map(|(idx, t)| (idx, t.clone()));
+
+    if let Some((idx, task)) = p {
+        mlock.waiting_queue.remove(idx);
+        mlock.add_to_ready_queue(task);
+    }
 }
 
 #[allow(unused)]
@@ -42,22 +66,22 @@ pub fn task_count() -> usize {
     TASK_MANAGER.lock().ready_queue.clone().into_iter().count()
 }
 
-#[allow(unused)]
-pub fn pid2process(pid: usize) -> Option<Arc<ProcessControlBlock>> {
-    let map = PID2PCB.read();
-    map.get(&pid).map(Arc::clone)
-}
+// #[allow(unused)]
+// pub fn pid2process(pid: usize) -> Option<Arc<ProcessControlBlock>> {
+//     let map = PID2PCB.read();
+//     map.get(&pid).map(Arc::clone)
+// }
 
-pub fn insert_into_pid2process(pid: usize, process: Arc<ProcessControlBlock>) {
-    PID2PCB.write().insert(pid, process);
-}
+// pub fn insert_into_pid2process(pid: usize, process: Arc<ProcessControlBlock>) {
+//     PID2PCB.write().insert(pid, process);
+// }
 
-pub fn remove_from_pid2process(pid: usize) {
-    let mut map = PID2PCB.write();
-    if map.remove(&pid).is_none() {
-        panic!("cannot find pid {} in pid2process!", pid);
-    }
-}
+// pub fn remove_from_pid2process(pid: usize) {
+//     let mut map = PID2PCB.write();
+//     if map.remove(&pid).is_none() {
+//         panic!("cannot find pid {} in pid2process!", pid);
+//     }
+// }
 
 pub fn tid2task(tid: usize) -> Option<Arc<TaskControlBlock>> {
     let map = TID2TCB.read();

@@ -1,7 +1,6 @@
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
 use super::{add_task, insert_into_tid2task, SigAction};
 use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
@@ -144,7 +143,7 @@ impl ProcessControlBlock {
         drop(task_inner);
         drop(process_inner);
 
-        insert_into_pid2process(process.getpid(), Arc::clone(&process));
+        // insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
         process
@@ -406,7 +405,7 @@ impl ProcessControlBlock {
         }
 
         drop(task_inner);
-        insert_into_pid2process(child.getpid(), Arc::clone(&child));
+        // insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler
         add_task(task);
         child

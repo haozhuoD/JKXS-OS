@@ -574,9 +574,11 @@ impl MemorySet {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
+
     pub fn recycle_data_pages(&mut self) {
-        //*self = Self::new_bare();
         self.areas.clear();
+        self.mmap_areas.clear();
+        self.heap_frames.clear();
     }
 
     /// 插入一个mmap区域
