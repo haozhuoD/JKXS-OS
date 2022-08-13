@@ -1,3 +1,4 @@
+use super::frame_allocator::{frame_add_ref, frame_enquire_ref, frame_reduce_ref};
 use super::mmap::MmapArea;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
@@ -47,7 +48,7 @@ pub struct DLLMem{
 impl DLLMem {
     pub fn new() ->Self {
         Self {
-            data: Vec::new(),
+            data: Vec::with_capacity(0x1000),
             name: "NULL".to_string(),
         }
     }
@@ -101,9 +102,9 @@ impl MemorySet {
     pub fn new_bare() -> Self {
         Self {
             page_table: PageTable::new(),
-            areas: Vec::new(),
+            areas: Vec::with_capacity(0x100),
             heap_frames: BTreeMap::new(),
-            mmap_areas: Vec::new(),
+            mmap_areas: Vec::with_capacity(0x100),
         }
     }
     pub fn token(&self) -> usize {
@@ -133,18 +134,30 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// 在 MemorySet.page_table 中为 MapArea 创建页表 , 页属性为MapArea 对应的属性( R W X U )
+    /// 可选是否向相应MapArea页表指向区域写入数据
     /// 添加了offset字段以解决内存不对齐的问题
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>, offset: usize) {
+        // 为 MapArea 建立页表,分配页框并分配物理内存
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
             map_area.copy_data(&mut self.page_table, data, offset);
         }
+        // 将MapArea 加入对应MemorySet
         self.areas.push(map_area);
     }
+    /// 将MapArea 加入对应MemorySet
+    fn push_mapped(&mut self, map_area: MapArea) {
+        self.areas.push(map_area);
+    }
+    // fn push_mmap_mapped_areas(&mut self, mmap_area: MmapArea){
+    //     // 将MapArea 加入对应MemorySet
+    //     self.mmap_areas.push(mmap_area);
+    // }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
         gdb_println!(
-            MAPPING_ENABLE,
+            crate::monitor::SYSCALL_ENABLE,
             "map_trampoline onepage va[0x{:X}-] -> pa[0x{:X}-]",
             TRAMPOLINE,
             strampoline as usize
@@ -334,7 +347,7 @@ impl MemorySet {
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
-        let mut auxv: Vec<AuxHeader> = Vec::new();
+        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_sigreturn_trampoline();
@@ -516,6 +529,7 @@ impl MemorySet {
             for vpn in area.vpn_range {
                 let src_ppn = user_space.translate(vpn).unwrap().ppn();
                 let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+                // debug!("cp src_ppn:{:?} , dst_ppn:{:?}",src_ppn,dst_ppn);
                 dst_ppn
                     .slice_u64()
                     .copy_from_slice(src_ppn.slice_u64());
@@ -553,6 +567,158 @@ impl MemorySet {
         }
         memory_set
     }
+
+
+
+    pub fn cow_from_existed_user(user_space: &mut MemorySet, heap_start: usize) -> MemorySet{
+        // This part is not for Copy on Write.
+        // Including:   Trampoline
+        //              Trap_Context
+        //              User_Stack
+        let mut memory_set = Self::new_bare();
+        // map trampoline
+        memory_set.map_sigreturn_trampoline();
+        memory_set.map_trampoline();
+        // copy trap_context/user_stack
+        for area in user_space.areas.iter() {
+            // 若为 elf 相应逻辑段, 直接跳过交由 cow 处理
+            let parent_area_start = area.vpn_range.get_start();
+            if parent_area_start < heap_start.into()  {
+                continue ; 
+            }
+            // error!("cp area_start:{:?} , area_end:{:?}",area.vpn_range.get_start(),area.vpn_range.get_end());
+            // copy trap_context/user_stack
+            let new_area = MapArea::from_another(area);
+            memory_set.push(new_area, None, 0);
+            // copy data from another space
+            for vpn in area.vpn_range {
+                let src_ppn = user_space.translate(vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+                dst_ppn
+                    .slice_u64()
+                    .copy_from_slice(src_ppn.slice_u64());
+            }
+        }
+
+        // COW start 
+        // 父进程页表、area
+        let parent_areas = &user_space.areas;
+        let parent_page_table = &mut user_space.page_table;
+
+        // elf 相应逻辑段进行elf处理
+        for area in parent_areas.iter() {
+            // 跳过 trap_context/ user_stack
+            let parent_area_start = area.vpn_range.get_start();
+            if parent_area_start >= heap_start.into()  {
+                continue ; 
+            }
+            // error!("cow-elf area_start:{:?} , area_end:{:?}",area.vpn_range.get_start(),area.vpn_range.get_end());
+            // cow 处理elf逻辑段
+            let mut new_area = MapArea::from_another(area);
+            // 复制页表项并插入
+            for vpn in area.vpn_range {
+                // 设置相同页表（指向同一块内存）
+                // 同时修改父子进程的页属性为只读
+                // 获取父进程 页表项 
+                let pte = parent_page_table.translate(vpn).unwrap();
+                let pte_flags = pte.flags() & !PTEFlags::W;
+                let ppn = pte.ppn();
+                // 增加内存页引用计数
+                frame_add_ref(ppn);
+                // 并设置为只读属性
+                parent_page_table.set_flag(vpn, pte_flags);
+                parent_page_table.set_cow(vpn);
+                // 设置子进程页表项目
+                memory_set.page_table.map(vpn, ppn, pte_flags);
+                memory_set.page_table.set_cow(vpn);
+                new_area.insert_tracker(vpn, ppn);
+            }
+            memory_set.push_mapped(new_area);
+        }
+        
+        // // todo cow 处理mmap区域
+        for area in user_space.mmap_areas.iter() {
+            // error!("cp mmap");
+            // 建立新的mmap_area，有vpn范围和dataframes（没有数据）
+            let new_area = MmapArea::from_another(area);
+            // 建立页表映射（物理页帧自动分配），同时添加dataframes
+            memory_set.push_and_map_mmap_area(new_area);
+            // 拷贝数据
+            for vpn in area.data_frames.keys() {
+                // debug!("mmap vpn copy {:#x}", vpn.0);
+                let src_ppn = user_space.translate(*vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
+                // debug!("mmap copy: src_ppn = {:#x?},  dst_ppn {:#x}", src_ppn.0, dst_ppn.0);
+                // debug!("cp src_ppn:{:?} , dst_ppn:{:?}",src_ppn,dst_ppn);
+                dst_ppn
+                    .slice_u64()
+                    .copy_from_slice(src_ppn.slice_u64());
+            }
+            // error!("cow-mmap area_start:{:?} , area_end:{:?}",area ,area.vpn_range.get_end());
+            // 建立新的mmap_area
+            // let mut new_area = MmapArea::from_another(area);
+            // for vpn in area.data_frames.keys() {
+            //      // 设置相同页表（指向同一块内存）
+            //     // 同时修改父子进程的页属性为只读
+            //     // 获取父进程 页表项 
+            //     let vpn_ = *vpn;
+            //     let pte = parent_page_table.translate(vpn_).unwrap();
+            //     let pte_flags = pte.flags() & !PTEFlags::W;
+            //     let ppn = pte.ppn();
+            //     // 增加内存页引用计数
+            //     frame_add_ref(ppn);
+            //     // 并设置为只读属性
+            //     parent_page_table.set_flag(vpn_, pte_flags);
+            //     parent_page_table.set_cow(vpn_);
+            //     // 设置子进程页表项目
+            //     memory_set.page_table.map(vpn_, ppn, pte_flags);
+            //     memory_set.page_table.set_cow(vpn_);
+            //     new_area.insert_tracker(vpn_, ppn);
+            // }
+            // memory_set.push_mmap_mapped_areas(new_area);
+        }
+        // TODO cow 处理heap区域
+        for &vpn in user_space.heap_frames.keys() {
+            // error!("cp heap");
+            let frame = frame_alloc().unwrap();
+            let ppn = frame.ppn;
+            memory_set.heap_frames.insert(vpn, frame);
+            memory_set
+                .page_table
+                .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            // copy data from another space
+            let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            ppn.slice_u64()
+                .copy_from_slice(src_ppn.slice_u64());
+        }
+        memory_set
+    }
+    pub fn cow_alloc(&mut self, vpn: VirtPageNum, former_ppn:PhysPageNum) {
+        if frame_enquire_ref(former_ppn) == 1 {
+            // info!("cow_alloc ref only 1 , vpn:{:?}, former_ppn:{:?}",vpn, former_ppn);
+            // 引用计数为1 无需复制, 清除cow flag 添加 W flag
+            self.page_table.reset_cow(vpn);
+            self.page_table.set_flag(
+                vpn, 
+                self.page_table.translate(vpn).unwrap().flags() | PTEFlags::W
+            );
+            return 
+        }
+        // info!("cow_alloc ref = 2");
+        // frame_reduce_ref(former_ppn);
+        let frame = frame_alloc().unwrap();
+        let ppn = frame.ppn;
+        self.page_table.cow_remap(vpn, ppn, former_ppn);
+        // info!("cow_remapping  vpn:{:?}, former_ppn:{:?}, ppn:{:?}",vpn, former_ppn, ppn);
+        for area in self.areas.iter_mut() {
+            let head_vpn = area.vpn_range.get_start();
+            let tail_vpn = area.vpn_range.get_end();
+            if vpn <= tail_vpn && vpn >= head_vpn {
+                area.data_frames.insert(vpn, frame);
+                break;
+            }
+        }
+    }
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
@@ -574,9 +740,11 @@ impl MemorySet {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
+
     pub fn recycle_data_pages(&mut self) {
-        //*self = Self::new_bare();
         self.areas.clear();
+        self.mmap_areas.clear();
+        self.heap_frames.clear();
     }
 
     /// 插入一个mmap区域
@@ -690,6 +858,11 @@ impl MapArea {
             map_perm: another.map_perm,
         }
     }
+    /// 仅在Btree中插入 映射
+    pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
+        self.data_frames.insert(vpn, FrameTracker::from_ppn(ppn));
+    }
+    // 建立页框并分配物理内存
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {

@@ -36,7 +36,7 @@ impl OSFile {
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.lock();
         let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
+        let mut v: Vec<u8> = Vec::with_capacity(0x10000);
         loop {
             let len = inner.vfile.read_at(inner.offset, &mut buffer);
             if len == 0 {
@@ -265,7 +265,7 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     let mut wpath;
     let cur_vfile = {
         if cwd == "/" {
-            wpath = Vec::new();
+            wpath = Vec::with_capacity(32);
             ROOT_VFILE.clone()
         } else {
             wpath = path2vec(cwd);

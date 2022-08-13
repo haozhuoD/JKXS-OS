@@ -32,7 +32,7 @@ pub fn heap_test() {
     assert_eq!(*a, 5);
     assert!(bss_range.contains(&(a.as_ref() as *const _ as usize)));
     drop(a);
-    let mut v: Vec<usize> = Vec::new();
+    let mut v: Vec<usize> = Vec::with_capacity(0x1000);
     for i in 0..500 {
         v.push(i);
     }

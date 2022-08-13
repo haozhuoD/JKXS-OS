@@ -32,7 +32,7 @@ impl Pipe {
     }
 }
 
-const RING_BUFFER_SIZE: usize = 1024;
+const RING_BUFFER_SIZE: usize = 0x20000;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
@@ -119,24 +119,26 @@ impl File for Pipe {
     }
     fn read(&self, buf: UserBuffer) -> usize {
         assert!(self.readable());
+        let l = buf.len();
         let mut buf_iter = buf.into_iter();
         let mut read_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_read = ring_buffer.available_read();
-            if loop_read == 0 {
-                if ring_buffer.all_write_ends_closed() || read_size > 0 || self.nonblock {
+            let mut ring_buffer_lock = self.buffer.lock();
+            let available = ring_buffer_lock.available_read();
+            if available == 0 {
+                if ring_buffer_lock.all_write_ends_closed() || read_size > 0 || self.nonblock {
                     return read_size;
                 }
-                drop(ring_buffer);
+                drop(ring_buffer_lock);
+                // debug!("read suspend, buf.len = {}, c = {}", l, read_size);
                 suspend_current_and_run_next();
                 continue;
             }
             // read at most loop_read bytes
-            for _ in 0..loop_read {
+            for _ in 0..available {
                 if let Some(byte_ref) = buf_iter.next() {
                     unsafe {
-                        *byte_ref = ring_buffer.read_byte();
+                        *byte_ref = ring_buffer_lock.read_byte();
                     }
                     read_size += 1;
                 } else {
@@ -147,30 +149,35 @@ impl File for Pipe {
     }
     fn write(&self, buf: UserBuffer) -> usize {
         assert!(self.writable());
+        let l = buf.len();
         if buf.len() == 0 {
             return 0;
         }
         let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_write = ring_buffer.available_write();
-            if loop_write == 0 {
+            let mut ring_buffer_lock = self.buffer.lock();
+            let available = ring_buffer_lock.available_write();
+            if available == 0 {
                 if self.nonblock {
                     return write_size;
                 }
-                drop(ring_buffer);
+                drop(ring_buffer_lock);
+                // debug!("write suspend, buf.len = {}, c = {}", l, write_size);
                 suspend_current_and_run_next();
                 continue;
             }
             // write at most loop_write bytes
-            for _ in 0..loop_write {
+            for _ in 0..available {
                 if let Some(byte_ref) = buf_iter.next() {
-                    ring_buffer.write_byte(unsafe { *byte_ref });
+                    ring_buffer_lock.write_byte(unsafe { *byte_ref });
                     write_size += 1;
                 } else {
                     return write_size;
                 }
+            }
+            if write_size == l {
+                return write_size;
             }
         }
     }

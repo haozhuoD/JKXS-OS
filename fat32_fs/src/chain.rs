@@ -1,7 +1,7 @@
 use alloc::{vec::Vec, collections::BTreeMap, sync::Arc};
 use spin::RwLock;
 
-use crate::{FAT, BlockDevice, println};
+use crate::{FAT, BlockDevice};
 const END_CLUSTER: u32 = 0x0FFFFFF8;
 
 pub struct Chain {
@@ -33,36 +33,40 @@ impl Chain {
 
     // 获取start_cluster所在簇链中，从start_cluster开始的第index个簇
     pub fn get_cluster_at(
-        &self,
+        &mut self,
         start_cluster: u32,
         index: usize,
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> u32 {
-        if let Some(&start_idx) = self.chain_map.get(&start_cluster) {
-            self.chain.get(start_idx+index).copied().unwrap()
+        if let Some(_) = self.chain_map.get(&start_cluster) {
+            self.chain.get(index).copied().unwrap()
         } else {
-            fat.read().get_cluster_at(start_cluster, index, block_device)
+            // fat.read().get_cluster_at(start_cluster, index, block_device)
+            self.generate_chain(start_cluster, block_device, fat);
+            self.chain[index]
         }
     }
 
     // 获取start_cluster所在簇链的结束簇的簇号
     pub fn get_final_cluster(
-        &self,
+        &mut self,
         start_cluster: u32,
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> u32 {
         if let Some(_) = self.chain_map.get(&start_cluster) {
-            self.chain.get(self.chain.len()-1).copied().unwrap()
+            self.chain[self.chain.len()-1]
         } else {
-            fat.read().get_final_cluster(start_cluster, block_device)
+            // fat.read().get_final_cluster(start_cluster, block_device)
+            self.generate_chain(start_cluster, block_device, fat);
+            self.chain[self.chain.len()-1]
         }
     }
 
     // 获取start_cluster为首的簇链上的所有簇号
     pub fn get_all_clusters(
-        &self,
+        &mut self,
         start_cluster: u32,
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
@@ -70,21 +74,28 @@ impl Chain {
         if let Some(_) = self.chain_map.get(&start_cluster) {
             self.chain.clone()
         } else {
-            fat.read().get_all_clusters(start_cluster, block_device)
+            // fat.read().get_all_clusters(start_cluster, block_device)
+            self.generate_chain(start_cluster, block_device, fat);
+            self.chain.clone()
         }
     }
 
     // 获取start_cluster所在簇链上簇的个数
     pub fn cluster_count(
-        &self,
+        &mut self,
         start_cluster: u32,
         block_device: &Arc<dyn BlockDevice>,
         fat: &Arc<RwLock<FAT>>,
     ) -> u32 {
+        if start_cluster == 0 || start_cluster == 1 {
+            return 0;
+        }
         if let Some(_) = self.chain_map.get(&start_cluster) {
             self.chain.len() as u32
         } else {
-            fat.read().cluster_count(start_cluster, block_device)
+            // fat.read().cluster_count(start_cluster, block_device)
+            self.generate_chain(start_cluster, block_device, fat);
+            self.chain.len() as u32
         }
     }
 
@@ -93,4 +104,20 @@ impl Chain {
         self.chain_map.clear();
     }
 
+    fn generate_chain(
+        &mut self,
+        start_cluster: u32,
+        block_device: &Arc<dyn BlockDevice>,
+        fat: &Arc<RwLock<FAT>>
+    ) {
+        self.chain = fat.read().get_all_clusters(start_cluster, block_device);
+        self.generate_map();
+    }
+
+    fn generate_map(&mut self) {
+        (0..self.chain.len())
+            .for_each(|i| { 
+                self.chain_map.insert(self.chain[i], i); 
+            });
+    }
 }

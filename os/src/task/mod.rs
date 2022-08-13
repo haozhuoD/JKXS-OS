@@ -8,15 +8,17 @@ mod siginfo;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-mod utils;
 mod time_info;
+mod utils;
 
 use core::mem::size_of;
 
 use crate::{
     config::SIGRETURN_TRAMPOLINE,
     loader::get_initproc_binary,
-    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake, timer::wakeup_futex_waiters,
+    mm::{translated_byte_buffer, translated_refmut, UserBuffer},
+    syscall::futex_wake,
+    timer::wakeup_futex_waiters,
 };
 use alloc::sync::Arc;
 use manager::fetch_task;
@@ -35,7 +37,7 @@ pub use task::*;
 pub use time_info::*;
 
 pub fn suspend_current_and_run_next() {
-    wakeup_futex_waiters();
+    // wakeup_futex_waiters();
     // 将原来的take_current改为current_task，也就是说suspend之后，task仍然保留在processor中
     let task = current_task().unwrap();
 
@@ -69,8 +71,6 @@ pub fn suspend_current_and_run_next() {
 }
 
 pub fn block_current_and_run_next() {
-    // There must be an application running.
-    // 将原来的take_current改为current_task，也就是说blocking之后，task仍然保留在processor中
     let task = current_task().unwrap();
 
     // ---- access current TCB exclusively
@@ -78,20 +78,13 @@ pub fn block_current_and_run_next() {
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Blocking;
+    block_task(task.clone());
+
     drop(task_inner);
     drop(task);
 
     // jump to scheduling cycle
     schedule(task_cx_ptr);
-}
-
-/// 需要保证该task目前没有上锁
-pub fn unblock_task(task: Arc<TaskControlBlock>) {
-    let mut task_inner = task.acquire_inner_lock();
-    assert!(task_inner.task_status == TaskStatus::Blocking);
-    task_inner.task_status = TaskStatus::Ready;
-    drop(task_inner);
-    add_task(task);
 }
 
 pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
@@ -103,24 +96,25 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     // do futex_wake if clear_child_tid is set
     if let Some(p) = &task_inner.clear_child_tid {
         // debug!("p = {:#x?}", p);
-        *translated_refmut(process.acquire_inner_lock().get_user_token(), p.addr as *mut u32) = 0;
+        *translated_refmut(
+            process.acquire_inner_lock().get_user_token(),
+            p.addr as *mut u32,
+        ) = 0;
         futex_wake(p.addr, 1);
     }
 
     remove_from_tid2task(task_inner.gettid());
 
     // record exit code
-    task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
 
-    // here we do not remove the thread since we are still using the kstack
-    // it will be deallocated when sys_waittid is called
     drop(task_inner);
     drop(task);
+
     // however, if this is the main thread of current process
     // the process should terminate at once
     if rel_tid == 0 || is_exit_group {
-        remove_from_pid2process(process.getpid());
+        // remove_from_pid2process(process.getpid());
         let mut initproc_inner = INITPROC.acquire_inner_lock();
         let mut process_inner = process.acquire_inner_lock();
         // mark this process as a zombie process
@@ -135,6 +129,8 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
                 initproc_inner.children.push(child.clone());
             }
         }
+
+        drop(initproc_inner);
 
         // deallocate user res (including tid/trap_cx/ustack) of all threads
         // it has to be done before we dealloc the whole memory_set
@@ -152,6 +148,17 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
         process_inner.fd_table.clear();
         // clear sigactions
         process_inner.sigactions.clear();
+
+        // notify parent to recycle me
+        let ptask = process_inner
+            .parent.as_ref()
+            .unwrap()
+            .upgrade()
+            .unwrap()
+            .acquire_inner_lock()
+            .get_task(0);
+
+        unblock_task(ptask.clone());
     }
     drop(process);
     // we do not have to save task context
@@ -207,7 +214,7 @@ pub fn perform_signals_of_current() {
 
                     if sigaction.sa_flags.contains(SAFlags::SA_SIGINFO) {
                         trap_cx.x[2] -= size_of::<UContext>(); // sp -= sizeof(ucontext)
-                        trap_cx.x[12] = trap_cx.x[2];          // a2  = sp
+                        trap_cx.x[12] = trap_cx.x[2]; // a2  = sp
                         let mut userbuf = UserBuffer::new(translated_byte_buffer(
                             token,
                             trap_cx.x[2] as *const u8,

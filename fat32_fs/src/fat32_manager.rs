@@ -259,7 +259,7 @@ impl FAT32Manager {
         } else {
             if is_dir {
                 // let old_clusters= self.fat.read().cluster_count(first_cluster, &self.block_device);
-                let old_clusters= chain.read().cluster_count(first_cluster, &self.block_device, &self.fat);
+                let old_clusters= chain.write().cluster_count(first_cluster, &self.block_device, &self.fat);
                 self.size_to_cluster(new_sz) - old_clusters
             } else {
                 self.size_to_cluster(new_sz) - self.size_to_cluster(old_sz)

@@ -16,4 +16,17 @@
 
 - [ ] frame_allocator的大锁是否可以去掉？
 - [ ] heap_allocator太慢
-- [ ] 减少不必要的Vec使用？（需要alloc和dealloc）
+- [X] 减少不必要的Vec使用？（需要alloc和dealloc）
+- [X] Pagetable::from_token，是否还需要frames这个vec？
+- [X] translated_str不需要逐字节翻译页表
+- [X] Vec初始化时预留容量
+  内存可做的优化
+
+## fs可做的优化
+
+- [ ] 缓存读写锁数组可以换成Atomic？
+
+## 进程调度相关
+
+- [ ] 阻塞式wait
+- [ ] task回收、tcb重构
