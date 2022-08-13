@@ -308,9 +308,8 @@ impl VFile {
         }
         
         if first_cluster == 0 {  // 未分配簇则将cluster置为第一个簇
-            let (first_cluster, last_cluster) = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
+            let first_cluster = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
             self.set_first_cluster(first_cluster);
-            self.fs.get_fat().write().set_end_cluster(last_cluster, &self.block_device, &self.chain);
         } else {  // 已分配簇则将新分配的簇链连接到原来的簇链上
             // let fat = self.fs.get_fat();
             // let fat_writer = fat.write();
@@ -322,20 +321,13 @@ impl VFile {
                 &self.block_device, 
                 &fat
             );
-            let (first_cluster, last_cluster) = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
-            let fat_writer = fat.write();
-            fat_writer.set_next_cluster(
+            let first_cluster = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
+            fat.write().set_next_cluster(
                 final_cluster,
                 first_cluster,
                 &self.block_device,
                 &self.chain
             );
-            fat_writer.set_end_cluster(
-                last_cluster,
-                &self.block_device,
-                &self.chain
-            )
-
         }
         self.set_size(new_size);
     }
@@ -386,7 +378,7 @@ impl VFile {
         // println!("creating file {}", name);
         assert!(self.is_dir());
         let mut dirent_offset = self.find_free_dirent();
-        let (name_, ext_) = self.fs.split_name_ext(name);
+        let (name_, ext_) = name.rsplit_once(".").unwrap_or((name, ""));
         let mut short_ent = ShortDirEntry::new(name_, ext_, attribute);
         let mut long_pos_vec = Vec::new();
         if name_.len() > 8 || ext_.len() > 3 {

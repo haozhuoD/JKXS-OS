@@ -194,13 +194,14 @@ impl FAT32Manager {
             )
             .write()
             .modify(0, |data_block: &mut [u8; 512]| {
-                for byte in data_block.iter_mut() { *byte = 0; }
+                // for byte in data_block.iter_mut() { *byte = 0; }
+                data_block.fill(0)
             });
         }
     }
 
     // 在FAT表上分配num个簇，成功时返回第一个簇和最后一个簇，失败时返回None
-    pub fn alloc_cluster(&self, num: u32, chain: &Arc<RwLock<Chain>>) -> Option<(u32, u32)> {
+    pub fn alloc_cluster(&self, num: u32, chain: &Arc<RwLock<Chain>>) -> Option<u32> {
         let free_clusters = self.free_cluster_count();
         if num > free_clusters {
             return None;
@@ -217,13 +218,13 @@ impl FAT32Manager {
             curr_cluster = next_clutser;
         }
         // 填写最后一个FAT表项
-        // fat_writer.set_end_cluster(curr_cluster, &self.block_device, chain);
+        fat_writer.set_end_cluster(curr_cluster, &self.block_device, chain);
         // 修改FSInfo块
         let mut fsinfo_writer = self.fsinfo.write();
         fsinfo_writer.write_free_cluster_count(free_clusters - num);
         fsinfo_writer.write_last_alloc_cluster(curr_cluster);
 
-        Some((first_free_cluster, curr_cluster))
+        Some(first_free_cluster)
     }
 
     // 簇的去分配，仅修改FAT表，不更改数据区
@@ -237,10 +238,11 @@ impl FAT32Manager {
                 fat_writer.set_next_cluster(clusters[i], FREE_CLUSTER, &self.block_device, chain)
             );
             chain.write().clear_all();
-            self.fsinfo.write().write_free_cluster_count(free_clusters + num as u32);
+            let mut fsinfo_writer = self.fsinfo.write();
+            fsinfo_writer.write_free_cluster_count(free_clusters + num as u32);
             // 如果释放的簇号小于fsinfo中开始搜索空闲簇的字段，则更新该字段
-            if clusters[0] > 2 && clusters[0] < self.fsinfo.read().read_last_alloc_cluster() {
-                self.fsinfo.write().write_last_alloc_cluster(clusters[0] - 1);
+            if clusters[0] > 2 && clusters[0] < fsinfo_writer.read_last_alloc_cluster() {
+                fsinfo_writer.write_last_alloc_cluster(clusters[0] - 1);
             }
         }
     }
