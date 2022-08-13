@@ -167,7 +167,7 @@ impl File for Pipe {
         loop {
             let mut ring_buffer_lock = self.buffer.lock();
             if ring_buffer_lock.all_read_ends_closed() {
-                return EPIPE as usize;
+                return write_size;
             }
             let available = ring_buffer_lock.available_write();
             if available == 0 {

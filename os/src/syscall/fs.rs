@@ -51,7 +51,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
                 SYSCALL_ENABLE,
                 "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
                 fd,
-                translated_str(token, buf),
+                buf,
                 len,
                 ret
             );
@@ -86,8 +86,9 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         if fd > 2 {
             gdb_println!(
                 SYSCALL_ENABLE,
-                "sys_read(fd: {}, buf: *** , len: {}) = {}",
+                "sys_read(fd: {}, buf: {:#x?} , len: {}) = {}",
                 fd,
+                buf,
                 len,
                 ret
             );
