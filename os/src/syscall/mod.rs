@@ -90,6 +90,7 @@ pub use net::*;
 pub use process::*;
 pub use signal::*;
 pub use sync::*;
+pub use errorno::*;
 
 use crate::{
     gdb_println,

@@ -1,5 +1,5 @@
 use super::{File, OpenFlags};
-use crate::mm::UserBuffer;
+use crate::{mm::UserBuffer, syscall::EPIPE};
 
 use alloc::sync::{Arc, Weak};
 use spin::Mutex;
@@ -46,6 +46,7 @@ pub struct PipeRingBuffer {
     head: usize,
     tail: usize,
     status: RingBufferStatus,
+    read_end: Option<Weak<Pipe>>,
     write_end: Option<Weak<Pipe>>,
 }
 
@@ -56,8 +57,12 @@ impl PipeRingBuffer {
             head: 0,
             tail: 0,
             status: RingBufferStatus::Empty,
+            read_end: None,
             write_end: None,
         }
+    }
+    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+        self.read_end = Some(Arc::downgrade(read_end));
     }
     pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
@@ -98,6 +103,9 @@ impl PipeRingBuffer {
     pub fn all_write_ends_closed(&self) -> bool {
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
+    pub fn all_read_ends_closed(&self) -> bool {
+        self.read_end.as_ref().unwrap().upgrade().is_none()
+    }
 }
 
 /// Return (read_end, write_end)
@@ -106,6 +114,7 @@ pub fn make_pipe(flags: OpenFlags) -> (Arc<Pipe>, Arc<Pipe>) {
     let nonblock = flags.contains(OpenFlags::NONBLOCK);
     let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone(), nonblock));
     let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone(), nonblock));
+    buffer.lock().set_read_end(&read_end);
     buffer.lock().set_write_end(&write_end);
     (read_end, write_end)
 }
@@ -157,8 +166,12 @@ impl File for Pipe {
         let mut write_size = 0usize;
         loop {
             let mut ring_buffer_lock = self.buffer.lock();
+            if ring_buffer_lock.all_read_ends_closed() {
+                return EPIPE as usize;
+            }
             let available = ring_buffer_lock.available_write();
             if available == 0 {
+                // ring buffer is full
                 if self.nonblock {
                     return write_size;
                 }
