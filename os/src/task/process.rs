@@ -6,7 +6,7 @@ use super::{add_task, insert_into_tid2task, SigAction};
 use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
-    translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE,
+    translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
 };
 use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
@@ -336,7 +336,10 @@ impl ProcessControlBlock {
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         // 复制trap_cx和ustack等内存区域均在这里
         // 因此后面不需要再allow_user_res了
-        let memory_set = MemorySet::from_existed_user(&parent.memory_set);
+        // todo cow
+        // let memory_set = MemorySet::from_existed_user(&parent.memory_set);
+        let heap_start = parent.user_heap_base;
+        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set, heap_start);
         // copy fd table
         let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
@@ -717,6 +720,32 @@ impl ProcessControlBlockInner {
                 asm!("fence.i");
             }
         }
+        ret
+    }
+
+    pub fn cow_handle(&mut self, vaddr_u: usize) -> isize {
+        let mut ret = 0;
+        let vaddr: VirtAddr = vaddr_u.into();
+        let vpn: VirtPageNum = vaddr.floor();
+        if let Some(pte) = self.memory_set.translate(vpn) {
+            if pte.is_cow() {
+                // cow_alloc(vpn, former_ppn);
+                let former_ppn = pte.ppn();
+                self.memory_set.cow_alloc(vpn, former_ppn);
+                ret = 0;
+                unsafe {
+                    asm!("sfence.vma");
+                    asm!("fence.i");
+                }
+            }else {
+                // error!("cow erro , is no cow");
+                ret = -1;
+            }   
+        }else {
+            error!("cow erro, nofind pte");
+            ret = -1;
+        }
+
         ret
     }
 }
