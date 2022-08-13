@@ -52,6 +52,20 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
+    pub fn set_cow(&mut self) {
+        (*self).bits = self.bits | (1 << 9);
+        // let _ = self.flags() & (!PTEFlags::W);
+    }
+    pub fn set_flag(&mut self, flags: PTEFlags ) {
+        let new_flags: u8 = flags.bits().clone();
+        self.bits = (self.bits & 0xFFFF_FFFF_FFFF_FF00) | (new_flags as usize);
+    }
+    pub fn reset_cow(&mut self) {
+        (*self).bits = self.bits & !(1 << 9);
+    }
+    pub fn is_cow(&self) -> bool {
+        self.bits & (1 << 9) != 0
+    }
 }
 
 pub struct PageTable {
@@ -137,6 +151,14 @@ impl PageTable {
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
         *pte = PageTableEntry::empty();
     }
+    #[allow(unused)]
+    pub fn cow_remap(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, former_ppn: PhysPageNum) {
+        let pte = self.find_pte_create(vpn).unwrap();
+        *pte = PageTableEntry::new(ppn, pte.flags() | PTEFlags::W);
+        // pte.reset_cow();
+        pte.set_cow();
+        ppn.get_bytes_array().copy_from_slice(former_ppn.get_bytes_array());
+    }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
@@ -167,6 +189,15 @@ impl PageTable {
     }
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
+    }
+    pub fn set_flag(&mut self, vpn: VirtPageNum, flags: PTEFlags)  {
+        self.find_pte_create(vpn).unwrap().set_flag(flags);
+    }
+    pub fn set_cow(&mut self, vpn: VirtPageNum)  {
+        self.find_pte_create(vpn).unwrap().set_cow();
+    }
+    pub fn reset_cow(&mut self, vpn: VirtPageNum) {
+        self.find_pte_create(vpn).unwrap().reset_cow();
     }
 }
 

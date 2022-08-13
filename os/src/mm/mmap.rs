@@ -150,4 +150,10 @@ impl MmapArea {
             page_table.unmap(*vpn);
         }
     }
+
+    // /// 仅在mmaparea中插入映射
+    // pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
+    //     self.data_frames.insert(vpn, FrameTracker::from_ppn(ppn));
+    // }
+
 }
