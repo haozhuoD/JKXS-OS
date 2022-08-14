@@ -2,7 +2,8 @@
 
 ## 需要注意的点
 
-- [ ] trap_from_kernel不能触发
+- [X] trap_from_kernel不能触发
+- [ ] 单核可以不用锁
 
 ## simple syscall优化
 
@@ -21,10 +22,13 @@
 - [X] translated_str不需要逐字节翻译页表
 - [X] Vec初始化时预留容量
   内存可做的优化
+- [ ] 进程创建时栈空间可否lazy分配？
+- [ ] 控制alloc时是否需要清空？
 
 ## fs可做的优化
 
 - [ ] 缓存读写锁数组可以换成Atomic？
+- [ ] 路径解析加速
 
 ## 进程调度相关
 

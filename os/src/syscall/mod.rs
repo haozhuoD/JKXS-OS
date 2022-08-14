@@ -90,6 +90,7 @@ pub use net::*;
 pub use process::*;
 pub use signal::*;
 pub use sync::*;
+pub use errorno::*;
 
 use crate::{
     gdb_println,
@@ -156,8 +157,8 @@ pub fn init() {
         SYSCALL_TABLE[SYSCALL_GETUID] = sys_getuid as usize;
         SYSCALL_TABLE[SYSCALL_GETTID] = sys_gettid as usize;
         SYSCALL_TABLE[SYSCALL_SYSINFO] = sys_sysinfo as usize;
-        SYSCALL_TABLE[SYSCALL_SENDTO] = sys_sendto as usize;
-        SYSCALL_TABLE[SYSCALL_RECVFROM] = sys_recvfrom as usize;
+        // SYSCALL_TABLE[SYSCALL_SENDTO] = sys_sendto as usize;
+        // SYSCALL_TABLE[SYSCALL_RECVFROM] = sys_recvfrom as usize;
         SYSCALL_TABLE[SYSCALL_BRK] = sys_brk as usize;
         SYSCALL_TABLE[SYSCALL_MUNMAP] = sys_munmap as usize;
         SYSCALL_TABLE[SYSCALL_CLONE] = sys_clone as usize;

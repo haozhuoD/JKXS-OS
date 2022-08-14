@@ -33,9 +33,9 @@ board_qemu = []
 board_fu740 = ["sig_delay"]
 local_fu740 = ["board_fu740","min_log_level_debug"]
 
-# [profile.release]
-# opt-level = 1
-# debug = 2
-# debug-assertions = true
-# incremental = true
-# lto = "off"
+[profile.release]
+opt-level = 3
+debug = 2
+debug-assertions = true
+incremental = true
+lto = true

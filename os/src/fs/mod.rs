@@ -29,13 +29,13 @@ pub trait File: Send + Sync {
 pub use finfo::*;
 pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
-pub use vfile::{init_rootfs, list_apps, open_common_file, path2vec, OSFile, OpenFlags};
+pub use vfile::*;
 pub use devfs::open_device_file;
 pub use fsidx::*;
 
 pub fn path2abs<'a>(cwdv: &mut Vec<&'a str>, pathv: &Vec<&'a str>) -> String {
     for &path_element in pathv.iter() {
-        if path_element == "." {
+        if path_element.is_empty() || path_element == "." {
             continue;
         } else if path_element == ".." {
             cwdv.pop();

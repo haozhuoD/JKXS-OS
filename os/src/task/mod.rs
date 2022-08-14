@@ -222,7 +222,7 @@ pub fn perform_signals_of_current() {
                         ));
                         let mut ucontext = UContext::new();
                         *ucontext.mc_pc() = trap_cx.sepc;
-                        userbuf.write(ucontext.as_bytes()); // copy ucontext to userspace
+                        userbuf.copy_to_user(ucontext.as_bytes()); // copy ucontext to userspace
                     }
                     // debug!("prepare to jump to `handler`, original sepc = {:#x?}", trap_cx.sepc);
 

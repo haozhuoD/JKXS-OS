@@ -46,7 +46,7 @@ impl File for Stdin {
                 }
             }
         }
-        user_buf.write(buf.as_slice());
+        user_buf.copy_to_user(buf.as_slice());
         count
     }
     fn write(&self, _user_buf: UserBuffer) -> usize {

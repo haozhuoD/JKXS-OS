@@ -493,7 +493,7 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Uname>());
     let uname = Uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
-    userbuf.write(uname.as_bytes());
+    userbuf.copy_to_user(uname.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
     0
 }
@@ -578,7 +578,7 @@ pub fn sys_sysinfo(buf: *mut u8) -> isize {
     let sysinfo = Sysinfo::new();
 
     let mut userbuf = UserBuffer::new(buf_vec);
-    userbuf.write(sysinfo.as_bytes());
+    userbuf.copy_to_user(sysinfo.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_sysinfo(buf: {:#x?}) = {}", buf, 0);
     return 0;
 }
@@ -603,19 +603,19 @@ pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize {
         SYSLOG_ACTION_READ => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_READ_ALL => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_all_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_READ_CLEAR => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_clear_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_CLEAR => {

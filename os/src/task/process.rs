@@ -78,7 +78,7 @@ impl ProcessControlBlock {
     }
 
     pub fn getpid(&self) -> usize {
-        self.pid.load(Ordering::Relaxed)
+        self.pid.load(Ordering::Acquire)
     }
 
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
@@ -137,7 +137,7 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
         // set pid
-        process.pid.store(task_inner.gettid(), Ordering::Relaxed);
+        process.pid.store(task_inner.gettid(), Ordering::Release);
         process_inner.tasks.push(Some(Arc::clone(&task)));
 
         drop(task_inner);
