@@ -315,23 +315,36 @@ impl UserBuffer {
 
     /// 将buff中的数据写入UserBuf中
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        let len = self.len().min(buf.len());
-        if len == 0 {
-            return 0;
-        }
-        let mut current = 0;
+        let end = buf.len();
+        let mut start = 0;
         for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
-            for pa in (sub_buf.0)..(sub_buf.1) {
-                unsafe {
-                    *(pa as *mut u8) = buf[current];
-                }
-                current += 1;
-                if current == len {
-                    return len;
-                }
+            if start == end {
+                return start;
             }
+            let slen = (sub_buf.1 - sub_buf.0).min(end - start);
+            unsafe{
+                core::slice::from_raw_parts_mut(sub_buf.0 as *mut u8, slen)
+                .copy_from_slice(&buf[start..start+slen]);
+            }
+            start += slen;
         }
-        len
+        start
+        // let len = self.len().min(buf.len());
+        // if len == 0 {
+        //     return 0;
+        // }
+        // let mut current = 0;
+        // for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
+        //     for pa in (sub_buf.0)..(sub_buf.1) {
+        //         unsafe {
+        //             *(pa as *mut u8) = buf[current];
+        //         }
+        //         current += 1;
+        //         if current == len {
+        //             return len;
+        //         }
+        //     }
+        // }
     }
 
     pub fn clear(&mut self) -> usize {
