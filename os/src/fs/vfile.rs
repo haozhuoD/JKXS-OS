@@ -132,16 +132,14 @@ impl OSFile {
         let mut kstat = Kstat::new();
         let inner = self.inner.lock();
         kstat.st_mode = {
-            if inner.vfile.get_name() == "null" {
-                S_IFCHR
-            } else if inner.vfile.is_dir() {
+            if inner.vfile.is_dir() {
                 S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
             } else {
                 S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
             }
         };
-        kstat.st_ino = inner.vfile.first_cluster() as u64;
-        kstat.st_size = inner.vfile.get_size() as i64;
+        // kstat.st_ino = inner.vfile.first_cluster() as u64;
+        // kstat.st_size = inner.vfile.get_size() as i64;
         kstat.st_atime_sec = inner.atime as i64;
         kstat.st_mtime_sec = inner.mtime as i64;
         kstat
