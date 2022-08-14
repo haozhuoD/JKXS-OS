@@ -61,6 +61,9 @@ impl PipeRingBuffer {
             write_end: None,
         }
     }
+    pub fn arr_len(&self) -> usize {
+        RING_BUFFER_SIZE
+    }
     pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
         self.read_end = Some(Arc::downgrade(read_end));
     }
@@ -93,39 +96,50 @@ impl File for Pipe {
     fn writable(&self) -> bool {
         self.writable
     }
-    fn read(&self, buf: UserBuffer) -> usize {
+    fn read(&self, mut buf: UserBuffer) -> usize {
         assert!(self.readable());
-        let mut read_size = 0usize;
         loop {
             let mut ring = self.buffer.lock();
             if ring.sz == 0 {
                 if ring.all_write_ends_closed() || self.nonblock {
-                    return read_size;
+                    return 0;
                 }
                 drop(ring);
                 // debug!("read suspend, buf.len = {}, c = {}", l, read_size);
                 suspend_current_and_run_next();
                 continue;
             }
-            for pa in buf.into_iter() {
-                if ring.sz == 0 {
-                    break;
-                }
-                unsafe { *pa = ring.arr[ring.head]; }
-                ring.head += 1;
-                if ring.head == RING_BUFFER_SIZE {
-                    ring.head = 0;
-                }
-                ring.sz -= 1;
-                read_size += 1;
-            }
+            
+            assert!(ring.sz > 0);
+            let read_size = if ring.head < ring.tail {
+                buf.copy_to_user(&ring.arr[ring.head..ring.tail])
+            } else {
+                let sz1 = buf.copy_to_user(&ring.arr[ring.head..ring.arr_len()]);
+                let sz2 = buf.copy_to_user(&ring.arr[0..ring.tail]);
+                sz1 + sz2
+            };
+            
+            ring.head = (ring.head + read_size) % ring.arr_len();
+            ring.sz -= read_size;
+            // for pa in buf.into_iter() {
+            //     if ring.sz == 0 {
+            //         break;
+            //     }
+            //     unsafe { *pa = ring.arr[ring.head]; }
+            //     ring.head += 1;
+            //     if ring.head == RING_BUFFER_SIZE {
+            //         ring.head = 0;
+            //     }
+            //     ring.sz -= 1;
+            //     read_size += 1;
+            // }
             return read_size;
         }
     }
-    fn write(&self, buf: UserBuffer) -> usize {
+
+    fn write(&self, mut buf: UserBuffer) -> usize {
         assert!(self.writable());
-        let l = buf.len();
-        if l == 0 {
+        if buf.len() == 0 {
             return 0;
         }
         let mut write_size = 0usize;
@@ -134,7 +148,7 @@ impl File for Pipe {
             if ring.all_read_ends_closed() {
                 return write_size;
             }
-            if ring.sz == RING_BUFFER_SIZE {
+            if ring.sz == ring.arr_len() {
                 // ring buffer is full
                 if self.nonblock {
                     return write_size;
@@ -144,20 +158,28 @@ impl File for Pipe {
                 suspend_current_and_run_next();
                 continue;
             }
-            for pa in buf.into_iter() {
-                if ring.sz == RING_BUFFER_SIZE {
-                    break;
-                }
-                let tail = ring.tail;
-                unsafe { ring.arr[tail] = *pa; }
-                ring.tail += 1;
-                if ring.tail == RING_BUFFER_SIZE {
-                    ring.tail = 0;
-                }
-                ring.sz += 1;
-                write_size += 1;
+            assert!(ring.sz < ring.arr_len());
+
+            let head = ring.head;
+            let tail = ring.tail;
+            let arr_len = ring.arr_len();
+
+            let write_sz_this_time = if tail < head {
+                buf.copy_from_user(&mut ring.arr[tail..head])
+            } else {
+                let sz1 = buf.copy_from_user(&mut ring.arr[tail..arr_len]);
+                let sz2 = buf.copy_from_user(&mut ring.arr[0..head]);
+                sz1 + sz2
+            };
+            
+            ring.tail = (ring.tail + write_sz_this_time) % ring.arr_len();
+            ring.sz += write_sz_this_time;
+            write_size += write_sz_this_time;
+
+            // 不同于read，在写操作时只有写满了buf才返回
+            if write_size == buf.len() {
+                return write_size;
             }
-            return write_size;
         }
     }
     fn read_blocking(&self) -> bool {

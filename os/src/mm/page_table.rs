@@ -298,53 +298,73 @@ impl UserBuffVec {
 
 pub struct UserBuffer {
     pub bufvec: UserBuffVec,
+    len: usize,
+    id: usize,
+    offset: usize
 }
 
 impl UserBuffer {
     pub fn new(bufvec: UserBuffVec) -> Self {
-        Self { bufvec }
+        let _j = bufvec.bufs[0].0;
+        let mut len: usize = 0;
+        for b in bufvec.bufs[0..bufvec.sz].iter() {
+            len += b.1 - b.0;
+        }
+        Self { bufvec, len, id: 0, offset: _j }
     }
 
     pub fn len(&self) -> usize {
-        let mut total: usize = 0;
-        for b in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
-            total += b.1 - b.0;
-        }
-        total
+        self.len
     }
 
-    /// 将buff中的数据写入UserBuf中
-    pub fn write(&mut self, buf: &[u8]) -> usize {
+    pub fn copy_from_user(&mut self, buf: &mut [u8]) -> usize {
         let end = buf.len();
         let mut start = 0;
-        for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
+        
+        while self.id < self.bufvec.sz {
+            let sub_buf = self.bufvec.bufs[self.id];
             if start == end {
                 return start;
             }
-            let slen = (sub_buf.1 - sub_buf.0).min(end - start);
+            let slen = (sub_buf.1 - self.offset).min(end - start);
             unsafe{
-                core::slice::from_raw_parts_mut(sub_buf.0 as *mut u8, slen)
+                &buf[start..start+slen].copy_from_slice(
+                core::slice::from_raw_parts(self.offset as *mut u8, slen));
+            }
+            start += slen;
+            if slen == sub_buf.1 - self.offset {
+                self.id += 1;
+                self.offset = self.bufvec.bufs[self.id].0;
+            } else {
+                self.offset += slen;
+            }
+        }
+        start
+    }
+
+    pub fn copy_to_user(&mut self, buf: &[u8]) -> usize {
+        let end = buf.len();
+        let mut start = 0;
+        
+        while self.id < self.bufvec.sz {
+            let sub_buf = self.bufvec.bufs[self.id];
+            if start == end {
+                return start;
+            }
+            let slen = (sub_buf.1 - self.offset).min(end - start);
+            unsafe{
+                core::slice::from_raw_parts_mut(self.offset as *mut u8, slen)
                 .copy_from_slice(&buf[start..start+slen]);
             }
             start += slen;
+            if slen == sub_buf.1 - self.offset {
+                self.id += 1;
+                self.offset = self.bufvec.bufs[self.id].0;
+            } else {
+                self.offset += slen;
+            }
         }
         start
-        // let len = self.len().min(buf.len());
-        // if len == 0 {
-        //     return 0;
-        // }
-        // let mut current = 0;
-        // for sub_buf in self.bufvec.bufs[0..(self.bufvec.sz)].iter() {
-        //     for pa in (sub_buf.0)..(sub_buf.1) {
-        //         unsafe {
-        //             *(pa as *mut u8) = buf[current];
-        //         }
-        //         current += 1;
-        //         if current == len {
-        //             return len;
-        //         }
-        //     }
-        // }
     }
 
     pub fn clear(&mut self) -> usize {

@@ -139,7 +139,7 @@ impl OSFile {
             }
         };
         // kstat.st_ino = inner.vfile.first_cluster() as u64;
-        // kstat.st_size = inner.vfile.get_size() as i64;
+        kstat.st_size = inner.vfile.get_size() as i64;
         kstat.st_atime_sec = inner.atime as i64;
         kstat.st_mtime_sec = inner.mtime as i64;
         kstat

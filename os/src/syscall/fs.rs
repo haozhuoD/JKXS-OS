@@ -234,25 +234,6 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     new_fd as isize
 }
 
-fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
-    let mut kstat = Kstat::new();
-    kstat.st_mode = {
-        if f.name() == "null" {
-            S_IFCHR
-        } else if f.is_dir() {
-            S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
-        } else {
-            S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
-        }
-    };
-    kstat.st_ino = f.inode_id() as u64;
-    kstat.st_size = f.file_size() as i64;
-    kstat.st_atime_sec = f.accessed_time() as i64;
-    kstat.st_mtime_sec = f.modification_time() as i64;
-    userbuf.write(kstat.as_bytes());
-    0
-}
-
 /// 将文件描述符为fd的文件信息填入buf
 pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let token = current_user_token();
@@ -267,7 +248,7 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
         //     &mut userbuf,
         // )
         let cwd = inner.cwd.clone();
-        userbuf.write(
+        userbuf.copy_to_user(
             open_common_file(&cwd, "", OpenFlags::RDONLY)
                 .unwrap()
                 .stat()
@@ -287,7 +268,7 @@ pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     //     }
     // };
     } else if let Some(Some(FileClass::File(f))) = inner.fd_table.get(fd as usize) {
-        userbuf.write(f.stat().as_bytes());
+        userbuf.copy_to_user(f.stat().as_bytes());
         0
     } else {
         -EPERM
@@ -318,7 +299,7 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
 
     let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
         // fstat_inner(osfile, &mut userbuf)
-        userbuf.write(osfile.stat().as_bytes());
+        userbuf.copy_to_user(osfile.stat().as_bytes());
         0
     } else {
         -ENOENT
@@ -349,7 +330,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
 
     let ret = unsafe {
         let cwd_buf = core::slice::from_raw_parts(cwd_str.as_ptr(), cwd_str.len());
-        user_buf.write(cwd_buf) as isize
+        user_buf.copy_to_user(cwd_buf) as isize
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -491,7 +472,7 @@ fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isi
         }
         offset += DIRENT_SZ;
     }
-    userbuf.write(dentry_buf.as_slice());
+    userbuf.copy_to_user(dentry_buf.as_slice());
     f.set_offset(offset);
     nread as isize
 }
@@ -1400,7 +1381,7 @@ pub fn sys_statfs(_path: *const u8, buf: *const u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Statfs>());
     let mut userbuf = UserBuffer::new(buf_vec);
     let statfs = Statfs::new();
-    userbuf.write(statfs.as_bytes());
+    userbuf.copy_to_user(statfs.as_bytes());
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_statfs(path: {:#x?}, buf: {:#x?}) = {}",
@@ -1424,7 +1405,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: *mut u8, bufsiz: u
     }
     let mut userbuf = UserBuffer::new(translated_byte_buffer(token, buf, bufsiz));
     let _lmbench = "/exit_test\0";
-    userbuf.write(_lmbench.as_bytes());
+    userbuf.copy_to_user(_lmbench.as_bytes());
     let len = _lmbench.len() - 1;
 
     gdb_println!(
