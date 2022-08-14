@@ -35,7 +35,7 @@ local_fu740 = ["board_fu740","min_log_level_debug"]
 
 [profile.release]
 opt-level = 3
-debug = 2
-debug-assertions = true
-incremental = true
+# debug = 2
+# debug-assertions = true
+# incremental = true
 lto = true
