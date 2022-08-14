@@ -2,7 +2,8 @@
 
 ## 需要注意的点
 
-- [ ] trap_from_kernel不能触发
+- [X] trap_from_kernel不能触发
+- [ ] 单核可以不用锁
 
 ## simple syscall优化
 
