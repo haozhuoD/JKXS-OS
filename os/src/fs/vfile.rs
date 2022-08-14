@@ -275,17 +275,17 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
     let (readable, writable) = flags.read_write();
 
     let mut pathv = path2vec(path);
-    let abs_path = if path.starts_with("/") {
+    let abs_path = if is_abs_path(path) {
         path.to_string()
     } else {
         path2abs(&mut wpath, &pathv)
     };
 
-    // 节点是否存在？
+    // 首先在FSIDX中查找文件是否存在
     if let Some(inode) = find_vfile_idx(&abs_path) {
         if flags.contains(OpenFlags::TRUNC) {
             let (mut parent_path, child_name) = abs_path.rsplit_once("/").unwrap();
-            if parent_path == "" {
+            if parent_path.is_empty() {
                 parent_path = "/";
             }
             remove_vfile_idx(&abs_path);
@@ -298,8 +298,10 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
         }
         return Some(Arc::new(vfile));
     }
+
+    // 若在FSIDX中无法找到，尝试在FSIDX寻找父级目录
     let (mut parent_path, child_name) = abs_path.rsplit_once("/").unwrap();
-    if parent_path == "" {
+    if parent_path.is_empty() {
         parent_path = "/";
     }
     if let Some(parent_inode) = find_vfile_idx(parent_path) {
@@ -382,6 +384,12 @@ impl File for OSFile {
     }
 }
 
+#[inline(always)]
 pub fn path2vec(path: &str) -> Vec<&str> {
-    path.split("/").filter(|x| *x != "").collect()
+    path.split('/').collect()
+}
+
+#[inline(always)]
+pub fn is_abs_path(path: &str) -> bool {
+    unsafe { *path.as_ptr() == '/' as u8}
 }

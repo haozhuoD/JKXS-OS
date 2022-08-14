@@ -278,7 +278,7 @@ impl VFile {
         let len = path.len();
         let mut curr_vfile = self.clone();
         for i in 0..len {
-            if path[i] == "." {
+            if path[i].is_empty() || path[i] == "." {
                 continue;
             }
             curr_vfile = curr_vfile.find_vfile_name(path[i])?;

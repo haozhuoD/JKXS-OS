@@ -1,7 +1,7 @@
 use crate::fs::{
     make_pipe, open_common_file, open_device_file, path2vec, remove_vfile_idx, BitOpt, DType,
     FSDirent, FdSet, File, FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN,
-    SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU,
+    SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, is_abs_path,
 };
 use crate::gdb_println;
 use crate::mm::{
@@ -118,7 +118,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         flags,
         _mode
     );
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+    let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
         inner.cwd.clone()
     } else {
         String::from("/")
@@ -310,7 +310,7 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let mut userbuf = UserBuffer::new(buf_vec);
 
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+    let cwd = if !is_abs_path(&path) && dirfd == AT_FDCWD {
         process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
@@ -366,7 +366,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
 
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+    let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
         process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
@@ -416,7 +416,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let mut path = translated_str(token, path);
     let mut inner = process.acquire_inner_lock();
 
-    let old_cwd = if !path.starts_with("/") {
+    let old_cwd = if !is_abs_path(&path) {
         inner.cwd.clone()
     } else {
         String::from("/")
@@ -424,7 +424,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let ret = {
         if let Some(osfile) = open_common_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {
-                if path.starts_with("/") {
+                if is_abs_path(&path) {
                     if !path.ends_with("/") {
                         path.push('/');
                     }
@@ -436,7 +436,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
 
                     // cwdv.pop();
                     for &path_element in pathv.iter() {
-                        if path_element == "." || path_element == "" {
+                        if path_element.is_empty() || path_element == "." {
                             continue;
                         } else if path_element == ".." {
                             cwdv.pop();
@@ -559,7 +559,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
     let path = translated_str(token, path);
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
         if let Some(Some(FileClass::File(osfile))) = inner.fd_table.get(dirfd as usize) {
@@ -578,7 +578,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
         return -EPERM;
     }
     if let Some(osfile) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
-        let abs_path = if path.starts_with("/") {
+        let abs_path = if is_abs_path(&path) {
             path
         } else {
             base_path.to_string() + &path
@@ -815,7 +815,7 @@ pub fn sys_utimensat(
     };
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
         let dirfd = dirfd as usize;
@@ -910,7 +910,7 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as u32).unwrap();
     let mut base_path = inner.cwd.as_str();
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
         let dirfd = dirfd as usize;
@@ -1243,7 +1243,7 @@ pub fn sys_renameat2(
     let old_file;
     let new_file;
 
-    if old_path.starts_with("/") {
+    if is_abs_path(&old_path) {
         match open_common_file("/", old_path.as_str(), OpenFlags::empty()) {
             Some(tmp_file) => old_file = tmp_file.clone(),
             None => return -ENOENT,
@@ -1275,7 +1275,7 @@ pub fn sys_renameat2(
         }
     };
 
-    if new_path.starts_with("/") {
+    if is_abs_path(&new_path) {
         match open_common_file("/", new_path.as_str(), open_flags) {
             Some(tmp_file) => new_file = tmp_file.clone(),
             None => return -ENOENT,
