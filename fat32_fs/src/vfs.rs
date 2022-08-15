@@ -391,6 +391,20 @@ impl VFile {
         })
     }
 
+    pub fn write_at_uncached(&self, offset: usize, buf: &[u8]) -> usize {
+        self.increase_size((offset + buf.len()) as u32);
+        self.modify_short_dirent(|short_ent| {
+            short_ent.write_at(
+                offset, 
+                buf, 
+                &self.fs, 
+                &self.fs.get_fat(), 
+                &self.block_device,
+                &self.chain,
+            )
+        })
+    }
+
     // 在当前目录下创建文件
     pub fn create(&self, name: &str, attribute: u8) -> Option<Arc<VFile>> {
         // println!("creating file {}", name);
@@ -416,7 +430,7 @@ impl VFile {
                     checksum
                 );
                 assert_eq!(
-                    self.write_at(dirent_offset, long_ent.as_bytes_mut()),
+                    self.write_at_uncached(dirent_offset, long_ent.as_bytes_mut()),
                     DIRENT_SZ
                 );
                 long_pos_vec.push(self.get_pos(dirent_offset));
@@ -425,7 +439,7 @@ impl VFile {
         }
         // 写短文件名目录项
         assert_eq!(
-            self.write_at(dirent_offset, short_ent.as_bytes_mut()),
+            self.write_at_uncached(dirent_offset, short_ent.as_bytes_mut()),
             DIRENT_SZ
         );
         let (short_sector, short_offset) = self.get_pos(dirent_offset);
@@ -444,13 +458,13 @@ impl VFile {
             let mut self_dir = ShortDirEntry::new(".", "", ATTRIBUTE_DIRECTORY);
             let mut parent_dir = ShortDirEntry::new("..", "", ATTRIBUTE_DIRECTORY);
             parent_dir.set_first_cluster(self.first_cluster());
-            vfile.write_at(0, self_dir.as_bytes_mut());  // TODO：需要吗
-            vfile.write_at(DIRENT_SZ, parent_dir.as_bytes_mut());
+            vfile.write_at_uncached(0, self_dir.as_bytes_mut());  // TODO：需要吗
+            vfile.write_at_uncached(DIRENT_SZ, parent_dir.as_bytes_mut());
             let first_cluster = vfile.read_short_dirent(|short_ent| {
                 short_ent.first_cluster()
             });
             self_dir.set_first_cluster(first_cluster);
-            vfile.write_at(0, &self_dir.as_bytes_mut());
+            vfile.write_at_uncached(0, &self_dir.as_bytes_mut());
         }
         // println!("file created");
         Some(Arc::new(vfile))
