@@ -14,6 +14,7 @@ use spin::{Lazy, Mutex};
 pub struct OSFile {
     readable: bool,
     writable: bool,
+    vfile: Arc<VFile>,
     inner: Arc<Mutex<OSFileInner>>,
 }
 
@@ -21,7 +22,6 @@ pub struct OSFileInner {
     offset: usize,
     atime: u64,
     mtime: u64,
-    vfile: Arc<VFile>,
 }
 
 impl OSFile {
@@ -29,7 +29,8 @@ impl OSFile {
         Self {
             readable,
             writable,
-            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, atime: 0, mtime: 0, vfile })),
+            vfile,
+            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, atime: 0, mtime: 0})),
         }
     }
 
@@ -38,7 +39,7 @@ impl OSFile {
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::with_capacity(0x10000);
         loop {
-            let len = inner.vfile.read_at(inner.offset, &mut buffer);
+            let len = self.vfile.read_at(inner.offset, &mut buffer);
             if len == 0 {
                 break;
             }
@@ -49,50 +50,45 @@ impl OSFile {
     }
 
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-        let inner = self.inner.lock();
+
         let pathv = path2vec(path);
         let (readable, writable) = flags.read_write();
-        inner
+        self
             .vfile
             .find_vfile_path(&pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 
     pub fn remove(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.vfile.remove()
+        self.vfile.remove()
     }
 
     pub fn delete(&self) {
-        self.inner.lock().vfile.delete();
+        self.vfile.delete()
     }
 
     pub fn file_size(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.vfile.get_size() as usize
+        self.vfile.get_size() as usize
     }
 
     pub fn set_file_size(&self, size: u32) {
-        self.inner.lock().vfile.set_size(size);
+        self.vfile.set_size(size);
     }
 
     pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
-        let inner = self.inner.lock();
-        inner.vfile.dirent_info(offset)
+        self.vfile.dirent_info(offset)
     }
 
     pub fn is_dir(&self) -> bool {
-        let inner = self.inner.lock();
-        inner.vfile.is_dir()
+        self.vfile.is_dir()
     }
 
     pub fn inode_id(&self) -> u32 {
-        let inner = self.inner.lock();
-        inner.vfile.first_cluster()
+        self.vfile.first_cluster()
     }
 
     pub fn set_inode_id(&self, inode_id: u32) {
-        self.inner.lock().vfile.set_first_cluster(inode_id);
+        self.vfile.set_first_cluster(inode_id);
     }
 
     pub fn offset(&self) -> usize {
@@ -105,7 +101,7 @@ impl OSFile {
     }
 
     pub fn name(&self) -> String {
-        self.inner.lock().vfile.get_name()
+        self.vfile.get_name()
     }
 
     pub fn set_modification_time(&self, mtime: u64) {
@@ -130,18 +126,17 @@ impl OSFile {
 
     pub fn stat(&self) -> Kstat {
         let mut kstat = Kstat::new();
-        let inner = self.inner.lock();
         kstat.st_mode = {
-            if inner.vfile.is_dir() {
+            if self.vfile.is_dir() {
                 S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
             } else {
                 S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
             }
         };
         // kstat.st_ino = inner.vfile.first_cluster() as u64;
-        kstat.st_size = inner.vfile.get_size() as i64;
-        kstat.st_atime_sec = inner.atime as i64;
-        kstat.st_mtime_sec = inner.mtime as i64;
+        kstat.st_size = self.vfile.get_size() as i64;
+        // kstat.st_atime_sec = self.atime as i64;
+        // kstat.st_mtime_sec = self.mtime as i64;
         kstat
     }
 }
@@ -350,7 +345,7 @@ impl File for OSFile {
         let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
         for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter_mut() {
-            let read_size = inner.vfile.read_at(inner.offset, unsafe {
+            let read_size = self.vfile.read_at(inner.offset, unsafe {
                 core::slice::from_raw_parts_mut(slice.0 as *mut u8, slice.1 - slice.0)
             });
             if read_size == 0 {
@@ -365,7 +360,7 @@ impl File for OSFile {
         let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
         for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter() {
-            let write_size = inner.vfile.write_at(inner.offset, unsafe {
+            let write_size = self.vfile.write_at(inner.offset, unsafe {
                 core::slice::from_raw_parts(slice.0 as *const u8, slice.1 - slice.0)
             });
             assert_eq!(write_size, slice.1 - slice.0);
