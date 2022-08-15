@@ -80,7 +80,7 @@ pub fn rust_main() -> ! {
     task::add_initproc();
     unsafe { *(crate::monitor::SYSCALL_ENABLE as *mut u8) = 0 ;
             *(crate::monitor::MAPPING_ENABLE as *mut u8) = 0 ;  };
-    info!("(Boot Core) Riscv hartid {} run ", hartid);
+    info!("(**Boot Core**) Riscv hartid {} run ", hartid);
     // // get core_clock
     // #[cfg(feature = "board_fu740")]
     // {

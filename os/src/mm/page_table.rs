@@ -156,7 +156,7 @@ impl PageTable {
     pub fn cow_remap(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, former_ppn: PhysPageNum) {
         let pte = self.find_pte_create(vpn).unwrap();
         *pte = PageTableEntry::new(ppn, pte.flags() | PTEFlags::W);
-        // pte.reset_cow();
+        pte.reset_cow();
         // pte.set_cow();
         ppn.slice_u64().copy_from_slice(former_ppn.slice_u64());
     }

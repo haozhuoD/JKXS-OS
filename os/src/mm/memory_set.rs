@@ -1,4 +1,4 @@
-use super::frame_allocator::{frame_add_ref, frame_enquire_ref, frame_reduce_ref};
+use super::frame_allocator::frame_enquire_ref;
 use super::mmap::MmapArea;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
@@ -623,8 +623,6 @@ impl MemorySet {
                 let pte = parent_page_table.translate(vpn).unwrap();
                 let pte_flags = pte.flags() & !PTEFlags::W;
                 let ppn = pte.ppn();
-                // 增加内存页引用计数
-                frame_add_ref(ppn);
                 // 并设置为只读属性
                 parent_page_table.set_flag(vpn, pte_flags);
                 parent_page_table.set_cow(vpn);
@@ -679,7 +677,6 @@ impl MemorySet {
         }
         // TODO cow 处理heap区域
         for &vpn in user_space.heap_frames.keys() {
-            // error!("cp heap");
             // let frame = frame_alloc().unwrap();
             // let ppn = frame.ppn;
             // memory_set.heap_frames.insert(vpn, frame);
@@ -688,14 +685,13 @@ impl MemorySet {
             //     .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
             // // copy data from another space
             // let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            // debug!("heap src_ppn {:#x?}", src_ppn);
             // ppn.slice_u64()
             //     .copy_from_slice(src_ppn.slice_u64());
 
             let pte = parent_page_table.translate(vpn).unwrap();
             let pte_flags = pte.flags() & !PTEFlags::W;
             let ppn = pte.ppn();
-            // 增加内存页引用计数
-            frame_add_ref(ppn);
             // 并设置为只读属性
             parent_page_table.set_flag(vpn, pte_flags);
             parent_page_table.set_cow(vpn);
@@ -706,7 +702,7 @@ impl MemorySet {
         }
         memory_set
     }
-    pub fn cow_alloc(&mut self, vpn: VirtPageNum, former_ppn:PhysPageNum) {
+    pub fn cow_alloc(&mut self, vpn: VirtPageNum, former_ppn:PhysPageNum, is_heap: bool) {
         if frame_enquire_ref(former_ppn) == 1 {
             // info!("cow_alloc ref only 1 , vpn:{:?}, former_ppn:{:?}",vpn, former_ppn);
             // 引用计数为1 无需复制, 清除cow flag 添加 W flag
@@ -722,6 +718,10 @@ impl MemorySet {
         let ppn = frame.ppn;
         self.page_table.cow_remap(vpn, ppn, former_ppn);
         // info!("cow_remapping  vpn:{:?}, former_ppn:{:?}, ppn:{:?}",vpn, former_ppn, ppn);
+        if is_heap {
+            self.heap_frames.insert(vpn, frame);
+            return;
+        }
         for area in self.areas.iter_mut() {
             let head_vpn = area.vpn_range.get_start();
             let tail_vpn = area.vpn_range.get_end();

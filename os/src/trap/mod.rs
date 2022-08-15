@@ -116,15 +116,14 @@ pub fn trap_handler() -> ! {
             // let erro =( is_store && (ret_cow==0) ) ? false : (ret_lazy == -1);
             // let erro =if is_store && (ret_cow==0) { false } else {ret_lazy == -1};
             if ret_lazy==-1 {    
-                // info!("ret_lazy = {}",ret_lazy);
-                // info!("is_store = {}  ret_cow = {} ",is_store, ret_cow);
-                // error!(
-                //     "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                //     current_tid(),
-                //     scause.cause(),
-                //     stval,
-                //     current_trap_cx().sepc,
-                // );
+                gdb_println!(SYSCALL_ENABLE, "ret_lazy = {}", ret_lazy);
+                error!(
+                    "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, cause SIGSEGV.",
+                    current_tid(),
+                    scause.cause(),
+                    stval,
+                    current_trap_cx().sepc,
+                );
                 // let cx = current_trap_cx();
                 // for (i, v) in cx.x.iter().enumerate() {
                 //     debug!("x[{}] = {:#x?}", i, v);

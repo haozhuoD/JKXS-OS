@@ -20,6 +20,7 @@ impl FrameTracker {
         Self { ppn }
     }
     pub fn from_ppn(ppn: PhysPageNum) -> Self {
+        frame_add_ref(ppn);
         Self { ppn }
     }
 }

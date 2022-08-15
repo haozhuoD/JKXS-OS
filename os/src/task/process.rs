@@ -723,7 +723,7 @@ impl ProcessControlBlockInner {
                 if pte.is_cow() && pte.is_valid() {
                     // cow_alloc(vpn, former_ppn);
                     let former_ppn = pte.ppn();
-                    self.memory_set.cow_alloc(vpn, former_ppn);
+                    self.memory_set.cow_alloc(vpn, former_ppn, vaddr >= heap_base && vaddr < heap_top);
                     ret = 0;
                 }else if !pte.is_valid() {
                     if vaddr >= heap_base && vaddr < heap_top {
@@ -738,7 +738,7 @@ impl ProcessControlBlockInner {
                         ret = -1;
                     }
                 }else {
-                    error!("lazy cow erro , find pte but ...");
+                    // error!("lazy cow erro , find pte but ...");
                     ret = -1;
                 }  
             }else {
@@ -762,32 +762,6 @@ impl ProcessControlBlockInner {
                 asm!("fence.i");
             }
         }
-        ret
-    }
-
-    pub fn cow_handle(&mut self, vaddr_u: usize) -> isize {
-        let mut ret = 0;
-        let vaddr: VirtAddr = vaddr_u.into();
-        let vpn: VirtPageNum = vaddr.floor();
-        if let Some(pte) = self.memory_set.translate(vpn) {
-            if pte.is_cow() {
-                // cow_alloc(vpn, former_ppn);
-                let former_ppn = pte.ppn();
-                self.memory_set.cow_alloc(vpn, former_ppn);
-                ret = 0;
-                unsafe {
-                    asm!("sfence.vma");
-                    asm!("fence.i");
-                }
-            }else {
-                // error!("cow erro , is no cow");
-                ret = -1;
-            }   
-        }else {
-            error!("cow erro, nofind pte");
-            ret = -1;
-        }
-
         ret
     }
 }
