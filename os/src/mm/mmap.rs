@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     frame_alloc, page_table::PTEFlags, translated_byte_buffer, FrameTracker, MapPermission,
-    PageTable, PhysPageNum, UserBuffer, VirtAddr, VirtPageNum,
+    PageTable, PhysPageNum, UserBuffer, VirtAddr, VirtPageNum, address::VPNRange,
 };
 
 bitflags! {
@@ -32,8 +32,9 @@ bitflags! {
 pub type FdOne = Option<FileClass>;
 
 pub struct MmapArea {
-    pub start_vpn: VirtPageNum,
-    pub end_vpn: VirtPageNum,
+    // pub start_vpn: VirtPageNum,
+    // pub end_vpn: VirtPageNum,
+    pub vpn_range: VPNRange,
     pub map_perm: MapPermission,
     pub flags: usize,
     pub fd_one: FdOne,
@@ -53,8 +54,7 @@ impl MmapArea {
         offset: usize,
     ) -> Self {
         Self {
-            start_vpn,
-            end_vpn,
+            vpn_range : VPNRange::new(start_vpn, end_vpn),
             map_perm,
             flags,
             fd_one,
@@ -66,8 +66,7 @@ impl MmapArea {
 
     pub fn from_another(another: &MmapArea) -> Self {
         let mut new_area = Self {
-            start_vpn: another.start_vpn,
-            end_vpn: another.end_vpn,
+            vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
             map_perm: another.map_perm,
             flags: another.flags,
             fd_one: another.fd_one.clone(),
@@ -79,6 +78,19 @@ impl MmapArea {
             let frame = frame_alloc().unwrap();
             new_area.data_frames.insert(*vpn, frame);
         }
+        new_area
+    }
+
+    pub fn cow_from_another(another: &MmapArea) -> Self {
+        let mut new_area = Self {
+            vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
+            map_perm: another.map_perm,
+            flags: another.flags,
+            fd_one: another.fd_one.clone(),
+            fd: another.fd,
+            offset: another.offset,
+            data_frames: BTreeMap::new(),
+        };
         new_area
     }
 
@@ -117,7 +129,7 @@ impl MmapArea {
             match file {
                 FileClass::File(f) => {
                     let vaddr = VirtAddr::from(vpn).0;
-                    f.set_offset(self.offset + vaddr - VirtAddr::from(self.start_vpn).0);
+                    f.set_offset(self.offset + vaddr - VirtAddr::from(self.vpn_range.get_start()).0);
                     if !f.readable() {
                         return -1;
                     }
@@ -147,9 +159,9 @@ impl MmapArea {
         }
     }
 
-    // /// 仅在mmaparea中插入映射
-    // pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
-    //     self.data_frames.insert(vpn, FrameTracker::from_ppn(ppn));
-    // }
+    /// 仅在mmaparea中插入映射
+    pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
+        self.data_frames.insert(vpn, FrameTracker::from_ppn(ppn));
+    }
 
 }

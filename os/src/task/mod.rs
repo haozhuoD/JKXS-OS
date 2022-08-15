@@ -231,7 +231,7 @@ pub fn perform_signals_of_current() {
                 }
                 if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
-                    // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
+                    error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_tid(),signum);
                     drop(process_inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);

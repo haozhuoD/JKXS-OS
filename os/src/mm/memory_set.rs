@@ -646,7 +646,7 @@ impl MemorySet {
             // 拷贝数据
             for vpn in area.data_frames.keys() {
                 // debug!("mmap vpn copy {:#x}", vpn.0);
-                let src_ppn = user_space.translate(*vpn).unwrap().ppn();
+                let src_ppn = parent_page_table.translate(*vpn).unwrap().ppn();
                 let dst_ppn = memory_set.translate(*vpn).unwrap().ppn();
                 // debug!("mmap copy: src_ppn = {:#x?},  dst_ppn {:#x}", src_ppn.0, dst_ppn.0);
                 // debug!("cp src_ppn:{:?} , dst_ppn:{:?}",src_ppn,dst_ppn);
@@ -680,16 +680,29 @@ impl MemorySet {
         // TODO cow 处理heap区域
         for &vpn in user_space.heap_frames.keys() {
             // error!("cp heap");
-            let frame = frame_alloc().unwrap();
-            let ppn = frame.ppn;
-            memory_set.heap_frames.insert(vpn, frame);
-            memory_set
-                .page_table
-                .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
-            // copy data from another space
-            let src_ppn = user_space.translate(vpn).unwrap().ppn();
-            ppn.slice_u64()
-                .copy_from_slice(src_ppn.slice_u64());
+            // let frame = frame_alloc().unwrap();
+            // let ppn = frame.ppn;
+            // memory_set.heap_frames.insert(vpn, frame);
+            // memory_set
+            //     .page_table
+            //     .map(vpn, ppn, PTEFlags::U | PTEFlags::R | PTEFlags::W);
+            // // copy data from another space
+            // let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            // ppn.slice_u64()
+            //     .copy_from_slice(src_ppn.slice_u64());
+
+            let pte = parent_page_table.translate(vpn).unwrap();
+            let pte_flags = pte.flags() & !PTEFlags::W;
+            let ppn = pte.ppn();
+            // 增加内存页引用计数
+            frame_add_ref(ppn);
+            // 并设置为只读属性
+            parent_page_table.set_flag(vpn, pte_flags);
+            parent_page_table.set_cow(vpn);
+            // 设置子进程页表项目
+            memory_set.page_table.map(vpn, ppn, pte_flags);
+            memory_set.page_table.set_cow(vpn);
+            memory_set.heap_frames.insert(vpn, FrameTracker::from_ppn(ppn));
         }
         memory_set
     }
@@ -705,7 +718,6 @@ impl MemorySet {
             return 
         }
         // info!("cow_alloc ref = 2");
-        // frame_reduce_ref(former_ppn);
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
         self.page_table.cow_remap(vpn, ppn, former_ppn);
@@ -713,7 +725,7 @@ impl MemorySet {
         for area in self.areas.iter_mut() {
             let head_vpn = area.vpn_range.get_start();
             let tail_vpn = area.vpn_range.get_end();
-            if vpn <= tail_vpn && vpn >= head_vpn {
+            if vpn < tail_vpn && vpn >= head_vpn {
                 area.data_frames.insert(vpn, frame);
                 break;
             }
@@ -762,8 +774,8 @@ impl MemorySet {
     /// (lazy) 为vpn处的虚拟地址分配一个mmap页面，失败返回-1
     pub fn insert_mmap_dataframe(&mut self, vpn: VirtPageNum) -> isize {
         for mmap_area in self.mmap_areas.iter_mut() {
-            if vpn >= mmap_area.start_vpn
-                && vpn < mmap_area.end_vpn
+            if vpn >= mmap_area.vpn_range.get_start()
+                && vpn < mmap_area.vpn_range.get_end()
                 && !mmap_area.data_frames.contains_key(&vpn)
             {
                 return mmap_area.map_one(&mut self.page_table, vpn);
@@ -778,7 +790,7 @@ impl MemorySet {
             .mmap_areas
             .iter_mut()
             .enumerate()
-            .find(|(_, area)| area.start_vpn == vpn)
+            .find(|(_, area)| area.vpn_range.get_start() == vpn)
         {
             area.unmap(&mut self.page_table);
             self.mmap_areas.remove(idx);
