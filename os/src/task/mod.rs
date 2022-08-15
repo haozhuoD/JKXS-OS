@@ -18,7 +18,7 @@ use crate::{
     loader::get_initproc_binary,
     mm::{translated_byte_buffer, translated_refmut, UserBuffer},
     syscall::futex_wake,
-    timer::wakeup_futex_waiters,
+    gdb_println, monitor::{SYSCALL_ENABLE, QEMU},
 };
 use alloc::sync::Arc;
 use manager::fetch_task;
@@ -231,7 +231,7 @@ pub fn perform_signals_of_current() {
                 }
                 if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
-                    // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
+                    gdb_println!(SYSCALL_ENABLE, "[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_tid(),signum);
                     drop(process_inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);
@@ -245,7 +245,7 @@ pub fn perform_signals_of_current() {
         }
         // 如果信号代表当前进程出错，则exit
         if let Some(_msg) = SIGNAL_DFL_EXIT.get(&signum) {
-            // error!("[tid={}] {}", current_tid(), msg);
+            gdb_println!(SYSCALL_ENABLE, "[tid = {}] exited by signal {}", current_tid(),signum);
             drop(process);
             drop(task_inner);
             drop(task);
