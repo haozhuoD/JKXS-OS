@@ -20,6 +20,7 @@ pub struct VFile {
     pub long_pos_vec:   Vec<(usize, usize)>,  // 长文件名目录项的(扇区, 偏移)
     attribute:      u8,
     chain:          Arc<RwLock<Chain>>,
+    // cache:          Arc<RwLock<Cache>>,
     fs:             Arc<FAT32Manager>,
     block_device:   Arc<dyn BlockDevice>,
 }
@@ -41,6 +42,7 @@ impl VFile {
             long_pos_vec,
             attribute,
             chain: Arc::new(RwLock::new(Chain::new())),
+            // cache: Arc::new(RwLock::new(Cache::new())),
             fs,
             block_device
         }
@@ -347,6 +349,29 @@ impl VFile {
     }
 
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
+        // let mut cache_writer = self.cache.write();
+        // if cache_writer.modified {
+        //     let r_sz = self.read_short_dirent(|short_ent| {
+        //         short_ent.read_at(
+        //             offset, 
+        //             buf, 
+        //             &self.fs, 
+        //             &self.fs.get_fat(), 
+        //             &self.block_device,
+        //             &self.chain,
+        //         )
+        //     });
+        //     cache_writer.data.copy_from_slice(buf);
+        //     cache_writer.modified = false;
+        //     r_sz
+        // } else {
+        //     let end = (offset + buf.len()).min(cache_writer.data.len());
+        //     if offset > end {
+        //         panic!("???");
+        //     }
+        //     buf.copy_from_slice(&cache_writer.data[offset..end]);
+        //     end - offset
+        // }
         self.read_short_dirent(|short_ent| {
             short_ent.read_at(
                 offset, 
@@ -361,6 +386,7 @@ impl VFile {
 
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         self.increase_size((offset + buf.len()) as u32);
+        // self.cache.write().modified = true;
         self.modify_short_dirent(|short_ent| {
             short_ent.write_at(
                 offset, 
@@ -716,5 +742,20 @@ impl VFile {
         // self.fs.dealloc_cluster(all_clusters);
         self.fs.dealloc_cluster(all_clusters, &self.chain);
         len
+    }
+}
+
+#[derive(Clone)]
+struct Cache {
+    data:       Vec<u8>,
+    modified:   bool,
+}
+
+impl Cache {
+    pub fn new() -> Self {
+        Self {
+            data: Vec::new(),
+            modified: true, 
+        }
     }
 }

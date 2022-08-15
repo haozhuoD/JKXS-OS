@@ -36,15 +36,18 @@ impl OSFile {
 
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.lock();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::with_capacity(0x10000);
+        let size = self.vfile.get_size() as usize;
+        let mut v: Vec<u8> = Vec::with_capacity(size);
+        unsafe { v.set_len(size) };
         loop {
-            let len = self.vfile.read_at(inner.offset, &mut buffer);
+            let len = self.vfile.read_at(
+                inner.offset, 
+                unsafe { core::slice::from_raw_parts_mut(v.as_mut_ptr() as *mut u8, size) 
+            });
             if len == 0 {
                 break;
             }
             inner.offset += len;
-            v.extend_from_slice(&buffer[..len]);
         }
         v
     }
