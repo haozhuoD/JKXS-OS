@@ -693,7 +693,8 @@ impl ProcessControlBlockInner {
         self.memory_set
             .insert_heap_dataframe(vaddr, user_heap_base, user_heap_top)
     }
-
+    
+    #[inline(always)]
     pub fn check_lazy(&mut self, vaddr: usize, is_load: bool) -> isize {
         if vaddr == 0 {
             error!("Assertion failed in user space");
