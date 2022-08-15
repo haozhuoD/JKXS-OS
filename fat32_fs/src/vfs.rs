@@ -57,11 +57,16 @@ impl VFile {
     }
 
     pub fn get_size(&self) -> u32 {
-        self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        if !self.is_dir() {
+            return self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        }
+        0
     }
 
     pub fn set_size(&self, size: u32) {
-        self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        if !self.is_dir() {
+            self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        }
     }
 
     pub fn get_fs(&self) -> Arc<FAT32Manager> {
@@ -303,9 +308,7 @@ impl VFile {
             &self.chain,
         );
         if needed == 0 {
-            if !self.is_dir() {
-                self.set_size(new_size);
-            }
+            self.set_size(new_size);
             return;
         }
         
@@ -671,10 +674,10 @@ impl VFile {
     // 删除目录项，不清理fat表
     pub fn delete(&self) {
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -684,10 +687,10 @@ impl VFile {
     pub fn remove(&self) -> usize {
         let first_cluster = self.first_cluster();
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
