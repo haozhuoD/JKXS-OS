@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::TaskControlBlock;
+use super::{TaskControlBlock, MAX_SIGNUM};
 use super::{add_task, insert_into_tid2task, SigAction};
 use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -12,7 +12,6 @@ use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -33,7 +32,7 @@ pub struct ProcessControlBlockInner {
     pub exit_code: i32,
     pub fd_max: usize,
     pub fd_table: FdTable,
-    pub sigactions: BTreeMap<u32, SigAction>,
+    pub sigactions: [SigAction; MAX_SIGNUM as usize],
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
@@ -102,7 +101,7 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                sigactions: BTreeMap::new(),
+                sigactions: [SigAction::new(); MAX_SIGNUM as usize],
                 tasks: Vec::with_capacity(10),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,

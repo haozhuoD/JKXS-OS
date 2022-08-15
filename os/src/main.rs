@@ -35,7 +35,7 @@ mod trap;
 mod test;
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
-use core::{arch::global_asm, sync::atomic::{AtomicBool, Ordering}};
+use core::arch::global_asm;
 #[allow(unused)]
 use drivers::block_device_test;
 use spin::{Lazy, Mutex};
