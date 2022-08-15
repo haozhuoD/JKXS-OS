@@ -655,7 +655,7 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
         }
         // failed
         let vaddr: usize = VirtAddr::from(vpn).into();
-        if inner.check_lazy(vaddr) == 0 {
+        if inner.check_lazy(vaddr,true) == 0 {
             if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
                 continue;
             }

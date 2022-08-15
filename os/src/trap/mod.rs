@@ -103,27 +103,26 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
             let stval = stval::read();
-            let is_store = scause.cause() == Trap::Exception(Exception::StoreFault) || scause.cause() == Trap::Exception(Exception::StorePageFault);
+            // let is_store = scause.cause() == Trap::Exception(Exception::StoreFault) || scause.cause() == Trap::Exception(Exception::StorePageFault);
+            let is_load = scause.cause() == Trap::Exception(Exception::LoadFault) || scause.cause() == Trap::Exception(Exception::LoadPageFault);
             let process = current_process();
             let mut process_inner = process.acquire_inner_lock();
-            let ret_lazy = process_inner.check_lazy(stval);
-            let mut ret_cow:isize = 0;
-            if is_store && ret_lazy==-1 {
-                // info!("[tid={}] is_store cow_handle start ... vaddr:0x{:x}",current_tid(),stval);
-                ret_cow = process_inner.cow_handle(stval);
-            }
+            let ret_lazy = process_inner.check_lazy(stval,is_load);
+            // let mut ret_cow:isize = 0;
+            // if is_store && ret_lazy==-1 {
+            //     // info!("[tid={}] is_store cow_handle start ... vaddr:0x{:x}",current_tid(),stval);
+            //     ret_cow = process_inner.cow_handle(stval);
+            // }
             // let erro =( is_store && (ret_cow==0) ) ? false : (ret_lazy == -1);
-            let erro =if is_store && (ret_cow==0) { false } else {ret_lazy == -1};
-            if erro {    
-                // info!("ret_lazy = {}",ret_lazy);
-                // info!("is_store = {}  ret_cow = {} ",is_store, ret_cow);
-                // error!(
-                //     "[tid={}] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                //     current_tid(),
-                //     scause.cause(),
-                //     stval,
-                //     current_trap_cx().sepc,
-                // );
+            // let erro =if is_store && (ret_cow==0) { false } else {ret_lazy == -1};
+            if ret_lazy==-1 {    
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "{:?} in application, bad addr = {:#x}, bad instruction = {:#x}, cause SIGSEGV.",
+                    scause.cause(),
+                    stval,
+                    current_trap_cx().sepc,
+                );
                 // let cx = current_trap_cx();
                 // for (i, v) in cx.x.iter().enumerate() {
                 //     debug!("x[{}] = {:#x?}", i, v);

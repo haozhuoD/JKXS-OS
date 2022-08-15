@@ -3,6 +3,8 @@ use core::mem::size_of;
 use alloc::{collections::BTreeMap, string::String};
 use spin::Lazy;
 
+pub const MAX_SIGNUM: u32 = 64;
+
 pub const SIG_DFL: usize = 0;
 pub const SIG_IGN: usize = 1;
 
@@ -13,25 +15,8 @@ pub const SIGFPE: u32 = 8;
 pub const SIGKILL: u32 = 9;
 pub const SIGSEGV: u32 = 11;
 
-pub const SIGNAL_DFL_EXIT: Lazy<BTreeMap<u32, String>> = Lazy::new(|| {
-    let mut set_ = BTreeMap::new();
-    set_.insert(SIGINT, String::from("Interrupted, SIGINT=2"));
-    set_.insert(SIGILL, String::from("Illegal Instruction, SIGILL=4"));
-    set_.insert(SIGABRT, String::from("Aborted, SIGABRT=6"));
-    set_.insert(
-        SIGFPE,
-        String::from("Erroneous Arithmetic Operation, SIGFPE=8"),
-    );
-    set_.insert(
-        SIGKILL,
-        String::from("Killed, SIGKILL=9"),
-    );
-    set_.insert(SIGSEGV, String::from("Segmentation Fault, SIGSEGV=11"));
-    set_
-});
-
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct SigAction {
     pub sa_handler: usize,
     pub sa_sigaction: usize,
@@ -40,6 +25,21 @@ pub struct SigAction {
     pub sa_restorer: usize,
 }
 
+impl SigAction {
+    pub fn new() -> Self {
+        Self {
+            sa_handler: 0,
+            sa_sigaction: 0,
+            sa_mask: 0,
+            sa_flags: SAFlags::empty(),
+            sa_restorer: 0,
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.sa_handler == 0 && self.sa_sigaction == 0 && self.sa_mask == 0
+    }
+}
 bitflags! {
     pub struct SAFlags: u32 {
         const SA_NOCLDSTOP = 1;		 /* Don't send SIGCHLD when children stop.  */
@@ -55,7 +55,7 @@ bitflags! {
 }
 
 pub fn is_signal_valid(signum: u32) -> bool {
-    signum < 64
+    signum < MAX_SIGNUM
 }
 
 pub struct _MContext {
@@ -70,14 +70,12 @@ pub struct _Signaltstack {
 
 #[repr(C)]
 pub struct UContext {
-    pub __bits: [usize; 25]
+    pub __bits: [usize; 25],
 }
 
 impl UContext {
     pub fn new() -> Self {
-        Self {
-            __bits: [0; 25]
-        }
+        Self { __bits: [0; 25] }
     }
 
     pub fn as_bytes(&self) -> &[u8] {

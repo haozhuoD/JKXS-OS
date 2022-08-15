@@ -156,8 +156,8 @@ impl PageTable {
     pub fn cow_remap(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, former_ppn: PhysPageNum) {
         let pte = self.find_pte_create(vpn).unwrap();
         *pte = PageTableEntry::new(ppn, pte.flags() | PTEFlags::W);
-        // pte.reset_cow();
-        pte.set_cow();
+        pte.reset_cow();
+        // pte.set_cow();
         ppn.slice_u64().copy_from_slice(former_ppn.slice_u64());
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
@@ -167,7 +167,7 @@ impl PageTable {
     pub fn translate_vpn_with_lazycheck(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
         let re_check: _ = |vpn: VirtPageNum| match current_process()
             .acquire_inner_lock()
-            .check_lazy(VirtAddr::from(vpn).into())
+            .check_lazy(VirtAddr::from(vpn).into(),true)
         {
             0 => Some(self.translate(vpn).unwrap().ppn()),
             _ => None,

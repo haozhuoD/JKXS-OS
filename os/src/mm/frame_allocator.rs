@@ -20,6 +20,7 @@ impl FrameTracker {
         Self { ppn }
     }
     pub fn from_ppn(ppn: PhysPageNum) -> Self {
+        frame_add_ref(ppn);
         Self { ppn }
     }
 }
@@ -113,6 +114,9 @@ impl FrameAllocator for StackFrameAllocator {
         let ppn = ppn.0; 
         let ref_times = self.refcounter.get_mut(&ppn).unwrap();
         *ref_times += 1;
+        // if *ref_times>=3 {
+        //     println!("ref_times >=3");
+        // }
     }
     fn reduce_ref(&mut self, ppn: PhysPageNum) {
         // info!("reduce_ref ppn:{:?}",ppn);

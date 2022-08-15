@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use super::TaskControlBlock;
+use super::{TaskControlBlock, MAX_SIGNUM};
 use super::{add_task, insert_into_tid2task, SigAction};
 use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
 use crate::fs::{FileClass, Stdin, Stdout};
@@ -12,7 +12,6 @@ use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -33,7 +32,7 @@ pub struct ProcessControlBlockInner {
     pub exit_code: i32,
     pub fd_max: usize,
     pub fd_table: FdTable,
-    pub sigactions: BTreeMap<u32, SigAction>,
+    pub sigactions: [SigAction; MAX_SIGNUM as usize],
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
@@ -102,7 +101,7 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                sigactions: BTreeMap::new(),
+                sigactions: [SigAction::new(); MAX_SIGNUM as usize],
                 tasks: Vec::with_capacity(10),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
@@ -541,13 +540,13 @@ impl ProcessControlBlock {
                     // 3                    3
                     // fix area          |-- - - -
                     // old area        |-----|
-                    if (start_vpn < mmap_area.start_vpn && end_vpn > mmap_area.start_vpn)
-                        || (start_vpn >= mmap_area.start_vpn && start_vpn < mmap_area.end_vpn)
+                    if (start_vpn < mmap_area.vpn_range.get_start() && end_vpn > mmap_area.vpn_range.get_start())
+                        || (start_vpn >= mmap_area.vpn_range.get_start() && start_vpn < mmap_area.vpn_range.get_end())
                     {
                         // index = i;
                         old_perm = mmap_area.map_perm;
-                        old_start = mmap_area.start_vpn;
-                        old_end = mmap_area.end_vpn;
+                        old_start = mmap_area.vpn_range.get_start();
+                        old_end = mmap_area.vpn_range.get_end();
                         old_flags = mmap_area.flags;
                         old_offset = mmap_area.offset;
                         old_fdone = mmap_area.fd_one.clone();
@@ -694,8 +693,9 @@ impl ProcessControlBlockInner {
         self.memory_set
             .insert_heap_dataframe(vaddr, user_heap_base, user_heap_top)
     }
-
-    pub fn check_lazy(&mut self, vaddr: usize) -> isize {
+    
+    #[inline(always)]
+    pub fn check_lazy(&mut self, vaddr: usize, is_load: bool) -> isize {
         if vaddr == 0 {
             error!("Assertion failed in user space");
             return -1;
@@ -703,49 +703,65 @@ impl ProcessControlBlockInner {
         let heap_base = self.user_heap_base;
         let heap_top = self.user_heap_top;
         let mmap_top = self.mmap_area_top;
+        let mut ret:isize = 0;
+        if is_load {
+            if vaddr >= heap_base && vaddr < heap_top {
+                    // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_heap_page(vaddr);
+                } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                    // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_mmap_page(vaddr);
+                } else {
+                    ret = -1;
+                }
+        }else {
+            let vaddr_n: VirtAddr = vaddr.into();
+            let vpn: VirtPageNum = vaddr_n.floor();
+            if let Some(pte) = self.memory_set.translate(vpn) {
+                if pte.is_cow() && pte.is_valid() {
+                    // cow_alloc(vpn, former_ppn);
+                    let former_ppn = pte.ppn();
+                    self.memory_set.cow_alloc(vpn, former_ppn, vaddr >= heap_base && vaddr < heap_top);
+                    ret = 0;
+                }else if !pte.is_valid() {
+                    if vaddr >= heap_base && vaddr < heap_top {
+                        // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                        // println!("is_load? {:#x?}", is_load);
+                        ret = self.lazy_alloc_heap_page(vaddr);
+                    } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                        // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                        // println!("is_load? {:#x?}", is_load);
+                        ret = self.lazy_alloc_mmap_page(vaddr);
+                    } else {
+                        ret = -1;
+                    }
+                }else {
+                    // error!("lazy cow erro , find pte but ...");
+                    ret = -1;
+                }  
+            }else {
+                if vaddr >= heap_base && vaddr < heap_top {
+                    // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_heap_page(vaddr);
+                } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                    // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_mmap_page(vaddr);
+                } else {
+                    ret = -1;
+                }
+            }
+        }
 
-        // debug!("page fault: va = {:#x?}", vaddr);
-        let ret = if vaddr >= heap_base && vaddr < heap_top {
-            // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
-            self.lazy_alloc_heap_page(vaddr)
-        } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
-            // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
-            self.lazy_alloc_mmap_page(vaddr)
-        } else {
-            -1
-        };
         if ret == 0 {
             unsafe {
                 asm!("sfence.vma");
                 asm!("fence.i");
             }
         }
-        ret
-    }
-
-    pub fn cow_handle(&mut self, vaddr_u: usize) -> isize {
-        let mut ret = 0;
-        let vaddr: VirtAddr = vaddr_u.into();
-        let vpn: VirtPageNum = vaddr.floor();
-        if let Some(pte) = self.memory_set.translate(vpn) {
-            if pte.is_cow() {
-                // cow_alloc(vpn, former_ppn);
-                let former_ppn = pte.ppn();
-                self.memory_set.cow_alloc(vpn, former_ppn);
-                ret = 0;
-                unsafe {
-                    asm!("sfence.vma");
-                    asm!("fence.i");
-                }
-            }else {
-                // error!("cow erro , is no cow");
-                ret = -1;
-            }   
-        }else {
-            error!("cow erro, nofind pte");
-            ret = -1;
-        }
-
         ret
     }
 }
