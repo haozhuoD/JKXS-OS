@@ -20,7 +20,7 @@ pub struct VFile {
     pub long_pos_vec:   Vec<(usize, usize)>,  // 长文件名目录项的(扇区, 偏移)
     attribute:      u8,
     chain:          Arc<RwLock<Chain>>,
-    // cache:          Arc<RwLock<Cache>>,
+    cache:          Arc<RwLock<Cache>>,
     fs:             Arc<FAT32Manager>,
     block_device:   Arc<dyn BlockDevice>,
 }
@@ -42,7 +42,7 @@ impl VFile {
             long_pos_vec,
             attribute,
             chain: Arc::new(RwLock::new(Chain::new())),
-            // cache: Arc::new(RwLock::new(Cache::new())),
+            cache: Arc::new(RwLock::new(Cache::new())),
             fs,
             block_device
         }
@@ -349,44 +349,36 @@ impl VFile {
     }
 
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
-        // let mut cache_writer = self.cache.write();
-        // if cache_writer.modified {
-        //     let r_sz = self.read_short_dirent(|short_ent| {
-        //         short_ent.read_at(
-        //             offset, 
-        //             buf, 
-        //             &self.fs, 
-        //             &self.fs.get_fat(), 
-        //             &self.block_device,
-        //             &self.chain,
-        //         )
-        //     });
-        //     cache_writer.data.copy_from_slice(buf);
-        //     cache_writer.modified = false;
-        //     r_sz
-        // } else {
-        //     let end = (offset + buf.len()).min(cache_writer.data.len());
-        //     if offset > end {
-        //         panic!("???");
-        //     }
-        //     buf.copy_from_slice(&cache_writer.data[offset..end]);
-        //     end - offset
-        // }
-        self.read_short_dirent(|short_ent| {
-            short_ent.read_at(
-                offset, 
-                buf, 
-                &self.fs, 
-                &self.fs.get_fat(), 
-                &self.block_device,
-                &self.chain,
-            )
-        })
+        let mut cache_writer = self.cache.write();
+        if cache_writer.modified {
+            self.read_short_dirent(|short_ent| {
+                let size = short_ent.get_size() as usize;
+                cache_writer.data = Some(Vec::with_capacity(size));
+                let data = cache_writer.data.as_mut().unwrap();
+                unsafe {
+                    data.set_len(size);
+                }
+                short_ent.read_at(
+                    0,
+                    data.as_mut_slice(),
+                    &self.fs,
+                    &self.fs.get_fat(),
+                    &self.block_device,
+                    &self.chain
+                )
+            });
+            cache_writer.modified = false;
+        }
+        let data =  cache_writer.data.as_ref().unwrap();
+        let end = (offset + buf.len()).min(data.len());
+        let r_sz = end - offset;
+        buf[..r_sz].copy_from_slice(&data[offset..end]);
+        r_sz
     }
 
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         self.increase_size((offset + buf.len()) as u32);
-        // self.cache.write().modified = true;
+        self.cache.write().modified = true;
         self.modify_short_dirent(|short_ent| {
             short_ent.write_at(
                 offset, 
@@ -747,14 +739,14 @@ impl VFile {
 
 #[derive(Clone)]
 struct Cache {
-    data:       Vec<u8>,
+    data:       Option<Vec<u8>>,
     modified:   bool,
 }
 
 impl Cache {
     pub fn new() -> Self {
         Self {
-            data: Vec::new(),
+            data: None,
             modified: true, 
         }
     }
