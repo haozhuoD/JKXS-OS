@@ -210,8 +210,8 @@ impl OpenFlags {
 }
 
 fn do_create_common_file(
-    cur_vfile: Arc<VFile>,
-    pathv: &mut Vec<&str>,
+    cwd: &str,
+    path: &str,
     flags: OpenFlags,
     abs_path: &str,
     parent_path: &str,
@@ -233,7 +233,15 @@ fn do_create_common_file(
                 Arc::new(OSFile::new(readable, writable, vfile))
             });
     }
+    let mut pathv = path2vec(path);
     pathv.pop();
+    let cur_vfile = {
+        if cwd == "/" {
+            ROOT_VFILE.clone()
+        } else {
+            ROOT_VFILE.find_vfile_path(&path2vec(cwd)).unwrap()
+        }
+    };
     if let Some(parent_dir) = cur_vfile.find_vfile_path(&pathv) {
         let attribute = {
             if flags.contains(OpenFlags::DIRECTORY) {
@@ -255,26 +263,18 @@ fn do_create_common_file(
 }
 
 pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-    // info!("cwd = {}, path = {}, flags = {:#x?}", cwd, path, flags);
-    let mut wpath;
-    let cur_vfile = {
-        if cwd == "/" {
-            wpath = Vec::with_capacity(32);
-            ROOT_VFILE.clone()
-        } else {
-            wpath = path2vec(cwd);
-            ROOT_VFILE.find_vfile_path(&wpath).unwrap()
-        }
-    }; // 当前工作路径对应节点
-    let (readable, writable) = flags.read_write();
-
-    let mut pathv = path2vec(path);
     let abs_path = if is_abs_path(path) {
         path.to_string()
     } else {
-        path2abs(&mut wpath, &pathv)
+        let mut wpath = {
+            if cwd == "/" {
+                Vec::with_capacity(32)
+            } else {
+                path2vec(cwd)
+            }
+        };
+        path2abs(&mut wpath, &path2vec(path))
     };
-
     // 首先在FSIDX中查找文件是否存在
     if let Some(inode) = find_vfile_idx(&abs_path) {
         if flags.contains(OpenFlags::TRUNC) {
@@ -284,8 +284,9 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
             }
             remove_vfile_idx(&abs_path);
             inode.remove();
-            return do_create_common_file(cur_vfile, &mut pathv, flags, &abs_path, parent_path, child_name);
+            return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
         }
+        let (readable, writable) = flags.read_write();
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
             vfile.set_offset(vfile.file_size());
@@ -303,34 +304,43 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
             if flags.contains(OpenFlags::TRUNC) {
                 remove_vfile_idx(&abs_path);
                 inode.remove();
-                return do_create_common_file(cur_vfile, &mut pathv, flags, &abs_path, parent_path, child_name);
+                return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
             }
             insert_vfile_idx(&abs_path, inode.clone());
+            let (readable, writable) = flags.read_write();
             let vfile = OSFile::new(readable, writable, inode);
             if flags.contains(OpenFlags::APPEND) {
                 vfile.set_offset(vfile.file_size());
             }
             return Some(Arc::new(vfile));
         } 
-    } else if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
-        // println!("exist");
-        if flags.contains(OpenFlags::TRUNC) {
-            remove_vfile_idx(&abs_path);
-            inode.remove();
-            return do_create_common_file(cur_vfile, &mut pathv, flags, &abs_path, parent_path, child_name);
+    } else {
+        let cur_vfile = {
+            if cwd == "/" {
+                ROOT_VFILE.clone()
+            } else {
+                ROOT_VFILE.find_vfile_path(&path2vec(cwd)).unwrap()
+            }
+        };
+        if let Some(inode) = cur_vfile.find_vfile_path(&path2vec(path)) {
+            if flags.contains(OpenFlags::TRUNC) {
+                remove_vfile_idx(&abs_path);
+                inode.remove();
+                return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
+            }
+            insert_vfile_idx(&abs_path, inode.clone());
+            let (readable, writable) = flags.read_write();
+            let vfile = OSFile::new(readable, writable, inode);
+            if flags.contains(OpenFlags::APPEND) {
+                vfile.set_offset(vfile.file_size());
+            }
+            return Some(Arc::new(vfile));
         }
-        insert_vfile_idx(&abs_path, inode.clone());
-        let vfile = OSFile::new(readable, writable, inode);
-        if flags.contains(OpenFlags::APPEND) {
-            vfile.set_offset(vfile.file_size());
-        }
-        return Some(Arc::new(vfile));
     }
 
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
-        // println!("don't exist");
-        return do_create_common_file(cur_vfile, &mut pathv, flags, &abs_path, parent_path, child_name);
+        return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
     }
     None
 }

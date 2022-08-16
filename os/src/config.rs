@@ -6,6 +6,7 @@ pub const FSIMG_END_PAGENUM : usize = 0xb000_0;
 pub const MEMORY_END: usize = 0xb000_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
+pub const PAGE_MASK: usize = !0xfff;
 
 pub const USER_STACK_SIZE: usize = PAGE_SIZE * 40;
 pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 65;
@@ -31,12 +32,12 @@ pub use crate::board::{CLOCK_FREQ, MMIO};
 
 #[allow(unused)]
 pub fn aligned_up(addr: usize) -> usize {
-    ((addr + PAGE_SIZE - 1) >> PAGE_SIZE_BITS) << PAGE_SIZE_BITS
+    (addr + PAGE_SIZE - 1) & PAGE_MASK
 }
 
 #[allow(unused)]
 pub fn aligned_down(addr: usize) -> usize {
-    (addr >> PAGE_SIZE_BITS) << PAGE_SIZE_BITS
+    addr & PAGE_MASK
 }
 
 #[allow(unused)]

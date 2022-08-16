@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{TaskControlBlock, MAX_SIGNUM};
 use super::{add_task, insert_into_tid2task, SigAction};
-use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
+use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE, aligned_up};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
@@ -454,8 +454,14 @@ impl ProcessControlBlock {
         // `flags` field unimplemented
         // 目前mmap区域只能不断向上增长，无回收重整内存
         // 目前不检查fd是否合法
-        assert!(is_aligned(start) && is_aligned(len));
+        // assert!(is_aligned(start) && is_aligned(len));
         let mut inner = self.acquire_inner_lock();
+        let start = if start != 0 {
+            aligned_up(start)
+        }else {
+            inner.mmap_area_top
+        };
+        let len = aligned_up(len);
         // assert_eq!(start, inner.mmap_area_top);
 
         let start_vpn = VirtAddr::from(start).floor();
@@ -642,7 +648,7 @@ impl ProcessControlBlock {
     }
 
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
-        assert!(is_aligned(start));
+        // assert!(is_aligned(start));
         let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)

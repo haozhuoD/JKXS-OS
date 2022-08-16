@@ -140,7 +140,7 @@ impl MemorySet {
             .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
         {
             area.unmap(&mut self.page_table);
-            self.areas.remove(idx);
+            self.areas.swap_remove(idx);
         }
     }
     /// 在 MemorySet.page_table 中为 MapArea 创建页表项 , 页属性为MapArea 对应的属性( R W X U )
@@ -721,7 +721,7 @@ impl MemorySet {
             .find(|(_, area)| area.vpn_range.get_start() == vpn)
         {
             area.unmap(&mut self.page_table);
-            self.mmap_areas.remove(idx);
+            self.mmap_areas.swap_remove(idx);
             return 0;
         }
         // if failed
