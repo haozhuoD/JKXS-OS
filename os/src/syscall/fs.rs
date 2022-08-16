@@ -417,7 +417,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
 
                     // cwdv.pop();
                     for &path_element in pathv.iter() {
-                        if path_element.is_empty() || path_element == "." {
+                        if path_element == "." {
                             continue;
                         } else if path_element == ".." {
                             cwdv.pop();

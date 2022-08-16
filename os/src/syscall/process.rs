@@ -17,6 +17,7 @@ use crate::mm::{
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::multicore::get_hartid;
 use crate::sbi::shutdown;
+use crate::syscall::process;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
     suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx, __FA, block_current_and_run_next,
@@ -210,10 +211,8 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         }
     }
 
-    let cwd = current_process().acquire_inner_lock().cwd.clone();
-
     // run usershell
-    if cwd == "/" && path == "user_shell" {
+    if path == "user_shell" {
         let process = current_process();
         match process.exec(get_usershell_binary(), &args_vec) {
             Some(task) => {
@@ -240,11 +239,12 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         path = String::from("/busybox");
     }
 
+    let process =  current_process();
+    let cwd = process.acquire_inner_lock().cwd.clone();
     // run other programs
     let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_vfile.read_all();
-        let process = current_process();
-        match process.exec(all_data.as_slice(), &args_vec) {
+        let all_data = unsafe { app_vfile.read_as_elf() };
+        match process.exec(all_data, &args_vec) {
             Some(task) => {
                 task.acquire_inner_lock().__save_info_to_fast_access();
                 unsafe {
