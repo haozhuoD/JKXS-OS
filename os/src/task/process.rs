@@ -186,8 +186,40 @@ impl ProcessControlBlock {
 
         let mut envp: Vec<usize> = Vec::with_capacity(1);
         envp.push(0);
-        user_sp -= user_sp % core::mem::size_of::<usize>();
+        let mut env: Vec<String> = Vec::with_capacity(30);
+        // env.push(String::from("SHELL=/bin/sh"));
+        // env.push(String::from("PWD=/"));
+        // env.push(String::from("USER=root"));
+        // env.push(String::from("MOTD_SHOWN=pam"));
+        // env.push(String::from("LANG=C.UTF-8"));
+        // env.push(String::from(
+        //     "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        // ));
+        // env.push(String::from("TERM=vt220"));
+        // env.push(String::from("SHLVL=2"));
+        // env.push(String::from("JOURNAL_STREAM=8:9265"));
+        // env.push(String::from("OLDPWD=/root"));
+        // env.push(String::from("_=busybox"));
+        // env.push(String::from("LOGNAME=root"));
+        // env.push(String::from("HOME=/"));
+        env.push(String::from("PATH=/"));
+        // env.push(String::from("LD_LIBRARY_PATH=/lib64"));
+        let mut envp: Vec<usize> = (0..=env.len()).collect();
+        envp[env.len()] = 0;
 
+        for i in 0..env.len() {
+            user_sp -= env[i].len() + 1;
+            envp[i] = user_sp;
+            let mut p = user_sp;
+            // write chars to [user_sp, user_sp + len]
+            for c in env[i].as_bytes() {
+                *translated_refmut(new_token, p as *mut u8) = *c;
+                p += 1;
+            }
+            *translated_refmut(new_token, p as *mut u8) = 0;
+        }
+        // make the user_sp aligned to 8B for k210 platform
+        user_sp -= user_sp % core::mem::size_of::<usize>();
         ///////////// push argv strings ///////////////////
         let mut argv: Vec<usize> = (0..=args.len()).collect();
         argv[args.len()] = 0;
@@ -255,12 +287,18 @@ impl ProcessControlBlock {
         }
 
         ////////////// *envp [] //////////////////////
-        user_sp -= core::mem::size_of::<usize>();
+        user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
         let envp_base = user_sp;
         *translated_refmut(
             new_token,
-            user_sp as *mut usize,
+            (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize,
         ) = 0;
+        for i in 0..env.len() {
+            *translated_refmut(
+                new_token,
+                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
+            ) = envp[i];
+        }
 
         ////////////// *argv [] //////////////////////
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
