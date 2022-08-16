@@ -20,6 +20,7 @@ pub struct VFile {
     pub long_pos_vec:   Vec<(usize, usize)>,  // 长文件名目录项的(扇区, 偏移)
     attribute:      u8,
     chain:          Arc<RwLock<Chain>>,
+    cache:          Arc<RwLock<Cache>>,
     fs:             Arc<FAT32Manager>,
     block_device:   Arc<dyn BlockDevice>,
 }
@@ -41,6 +42,7 @@ impl VFile {
             long_pos_vec,
             attribute,
             chain: Arc::new(RwLock::new(Chain::new())),
+            cache: Arc::new(RwLock::new(Cache::new())),
             fs,
             block_device
         }
@@ -55,11 +57,16 @@ impl VFile {
     }
 
     pub fn get_size(&self) -> u32 {
-        self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        if !self.is_dir() {
+            return self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        }
+        0
     }
 
     pub fn set_size(&self, size: u32) {
-        self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        if !self.is_dir() {
+            self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        }
     }
 
     pub fn get_fs(&self) -> Arc<FAT32Manager> {
@@ -301,9 +308,7 @@ impl VFile {
             &self.chain,
         );
         if needed == 0 {
-            if !self.is_dir() {
-                self.set_size(new_size);
-            }
+            self.set_size(new_size);
             return;
         }
         
@@ -347,8 +352,38 @@ impl VFile {
     }
 
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
-        self.read_short_dirent(|short_ent| {
-            short_ent.read_at(
+        let mut cache_writer = self.cache.write();
+        if cache_writer.modified {
+            self.read_short_dirent(|short_ent| {
+                let size = short_ent.get_size() as usize;
+                cache_writer.data = Some(Vec::with_capacity(size));
+                let data = cache_writer.data.as_mut().unwrap();
+                unsafe {
+                    data.set_len(size);
+                }
+                short_ent.read_at(
+                    0,
+                    data.as_mut_slice(),
+                    &self.fs,
+                    &self.fs.get_fat(),
+                    &self.block_device,
+                    &self.chain
+                )
+            });
+            cache_writer.modified = false;
+        }
+        let data =  cache_writer.data.as_ref().unwrap();
+        let end = (offset + buf.len()).min(data.len());
+        let r_sz = end - offset;
+        buf[..r_sz].copy_from_slice(&data[offset..end]);
+        r_sz
+    }
+
+    pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        self.increase_size((offset + buf.len()) as u32);
+        self.cache.write().modified = true;
+        self.modify_short_dirent(|short_ent| {
+            short_ent.write_at(
                 offset, 
                 buf, 
                 &self.fs, 
@@ -359,7 +394,7 @@ impl VFile {
         })
     }
 
-    pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+    pub fn write_at_uncached(&self, offset: usize, buf: &[u8]) -> usize {
         self.increase_size((offset + buf.len()) as u32);
         self.modify_short_dirent(|short_ent| {
             short_ent.write_at(
@@ -398,7 +433,7 @@ impl VFile {
                     checksum
                 );
                 assert_eq!(
-                    self.write_at(dirent_offset, long_ent.as_bytes_mut()),
+                    self.write_at_uncached(dirent_offset, long_ent.as_bytes_mut()),
                     DIRENT_SZ
                 );
                 long_pos_vec.push(self.get_pos(dirent_offset));
@@ -407,7 +442,7 @@ impl VFile {
         }
         // 写短文件名目录项
         assert_eq!(
-            self.write_at(dirent_offset, short_ent.as_bytes_mut()),
+            self.write_at_uncached(dirent_offset, short_ent.as_bytes_mut()),
             DIRENT_SZ
         );
         let (short_sector, short_offset) = self.get_pos(dirent_offset);
@@ -426,13 +461,13 @@ impl VFile {
             let mut self_dir = ShortDirEntry::new(".", "", ATTRIBUTE_DIRECTORY);
             let mut parent_dir = ShortDirEntry::new("..", "", ATTRIBUTE_DIRECTORY);
             parent_dir.set_first_cluster(self.first_cluster());
-            vfile.write_at(0, self_dir.as_bytes_mut());  // TODO：需要吗
-            vfile.write_at(DIRENT_SZ, parent_dir.as_bytes_mut());
+            vfile.write_at_uncached(0, self_dir.as_bytes_mut());  // TODO：需要吗
+            vfile.write_at_uncached(DIRENT_SZ, parent_dir.as_bytes_mut());
             let first_cluster = vfile.read_short_dirent(|short_ent| {
                 short_ent.first_cluster()
             });
             self_dir.set_first_cluster(first_cluster);
-            vfile.write_at(0, &self_dir.as_bytes_mut());
+            vfile.write_at_uncached(0, &self_dir.as_bytes_mut());
         }
         // println!("file created");
         Some(Arc::new(vfile))
@@ -639,10 +674,10 @@ impl VFile {
     // 删除目录项，不清理fat表
     pub fn delete(&self) {
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -652,10 +687,10 @@ impl VFile {
     pub fn remove(&self) -> usize {
         let first_cluster = self.first_cluster();
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -716,5 +751,20 @@ impl VFile {
         // self.fs.dealloc_cluster(all_clusters);
         self.fs.dealloc_cluster(all_clusters, &self.chain);
         len
+    }
+}
+
+#[derive(Clone)]
+struct Cache {
+    data:       Option<Vec<u8>>,
+    modified:   bool,
+}
+
+impl Cache {
+    pub fn new() -> Self {
+        Self {
+            data: None,
+            modified: true, 
+        }
     }
 }
