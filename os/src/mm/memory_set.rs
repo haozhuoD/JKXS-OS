@@ -17,6 +17,7 @@ use crate::task::{
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use xmas_elf::ElfFile;
 use core::arch::asm;
 use riscv::register::satp;
 use spin::{Lazy, RwLock};
@@ -55,7 +56,9 @@ impl DLLMem {
     pub fn readso(&mut self ,cwd: &str, path: &str){
         if let Some(app_vfile) = open_common_file(cwd, path, OpenFlags::RDONLY) {
             self.name = path.to_string();
-            self.data = app_vfile.read_all();
+            unsafe {
+                self.data = app_vfile.read_as_elf().to_vec();
+            }
         } else {
             error!("[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}", path, cwd);
             self.name = "NULL".to_string();
@@ -270,8 +273,7 @@ impl MemorySet {
     }
     /// load libc.so(elf) to DYNAMIC_LINKER
     /// return value 0: erro,   other: ld入口地址 (&mut self, elf_data: &[u8])
-    pub fn load_dl(&mut self, elf_data: &[u8]) -> usize {
-        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+    pub fn load_dl(&mut self, elf: &ElfFile) -> usize {
         let s = match elf.find_section_by_name(".interp") {
             Some(s) => s,
             None => return 0,
@@ -347,7 +349,6 @@ impl MemorySet {
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
-        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_sigreturn_trampoline();
@@ -363,10 +364,13 @@ impl MemorySet {
 
         // println!("[from_elf] program_header-2 : type is {:#?} ",ph.get_type().unwrap());
         // run other programs
+        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
+    
         auxv.push(AuxHeader {
             aux_type: AT_PHENT,
             value: elf.header.pt2.ph_entry_size() as usize,
         }); // ELF64 header 64bytes
+    
         auxv.push(AuxHeader {
             aux_type: AT_PHNUM,
             value: ph_count as usize,
@@ -380,26 +384,14 @@ impl MemorySet {
             aux_type: AT_BASE,
             value: 0 as usize,
         });
-        // todo is_dynamic = 1;
-        // .interp: 2 第二个
-        // .strtab: ph_count-2 倒数第二个
-        // TODO 通过方法寻找？ 可读性更高？
-        // let dl_sec = elf.program_header(1).unwrap();
-        _at_base = memory_set.load_dl(elf_data);
+
+        _at_base = memory_set.load_dl(&elf);
+
         if _at_base != 0 {
-            // error!("load_dl finish !");
             auxv.push(AuxHeader {
                 aux_type: AT_BASE,
                 value: DYNAMIC_LINKER as usize,
             });
-            // println!("chech_addr : {:X} ",at_base);
-            // check
-            // if let Some(chech_addr) = memory_set.page_table.translate_va(DYNAMIC_LINKER.into()){
-            //     println!("chech_addr : {:?} ",chech_addr);
-            // }else {
-            //     error!("check no pass");
-            // }
-
             _at_base += DYNAMIC_LINKER;
         }
 
@@ -510,12 +502,12 @@ impl MemorySet {
         (
             memory_set,
             USER_STACK_BASE,
-            // elf.header.pt2.entry_point() as usize,
             entry,
             user_heap_base,
             auxv,
         )
     }
+
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
         let mut memory_set = Self::new_bare();
         // map trampoline
@@ -567,8 +559,6 @@ impl MemorySet {
         }
         memory_set
     }
-
-
 
     pub fn cow_from_existed_user(user_space: &mut MemorySet, heap_start: usize) -> MemorySet{
         // This part is not for Copy on Write.

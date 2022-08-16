@@ -238,7 +238,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> UserB
 /// Load a string from other address spaces into kernel space without an end `\0`.
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
-    let mut string = String::with_capacity(128);
+    let mut string = String::with_capacity(64);
     let mut start_va = ptr as usize;
     let mut done = false;
     loop {
@@ -271,6 +271,7 @@ pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
         .get_ref()
 }
 
+/// 不支持跨页读写
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;

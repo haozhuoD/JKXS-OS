@@ -35,7 +35,7 @@ pub use fsidx::*;
 
 pub fn path2abs<'a>(cwdv: &mut Vec<&'a str>, pathv: &Vec<&'a str>) -> String {
     for &path_element in pathv.iter() {
-        if path_element.is_empty() || path_element == "." {
+        if path_element == "." {
             continue;
         } else if path_element == ".." {
             cwdv.pop();

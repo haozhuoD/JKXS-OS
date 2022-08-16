@@ -34,26 +34,24 @@ impl OSFile {
         }
     }
 
-    pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.lock();
-        let size = self.vfile.get_size() as usize;
-        let mut v: Vec<u8> = Vec::with_capacity(size);
-        unsafe { v.set_len(size) };
-        loop {
-            let len = self.vfile.read_at(
-                inner.offset, 
-                unsafe { core::slice::from_raw_parts_mut(v.as_mut_ptr() as *mut u8, size) 
-            });
-            if len == 0 {
-                break;
-            }
-            inner.offset += len;
-        }
-        v
+    pub unsafe fn read_as_elf(&self) -> &[u8] {
+        self.vfile.read_as_elf()
+        // let size = self.vfile.get_size() as usize;
+        // let mut v: Vec<u8> = Vec::with_capacity(size);
+        // unsafe { v.set_len(size) };
+        // loop {
+        //     let len = self.vfile.read_at(
+        //         inner.offset, 
+        //         unsafe { core::slice::from_raw_parts_mut(v.as_mut_ptr() as *mut u8, size) 
+        //     });
+        //     if len == 0 {
+        //         break;
+        //     }
+        //     inner.offset += len;
+        // }
     }
 
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-
         let pathv = path2vec(path);
         let (readable, writable) = flags.read_write();
         self
@@ -392,7 +390,7 @@ impl File for OSFile {
 
 #[inline(always)]
 pub fn path2vec(path: &str) -> Vec<&str> {
-    path.split('/').collect()
+    path.split('/').filter(|s| !s.is_empty()).collect()
 }
 
 #[inline(always)]
