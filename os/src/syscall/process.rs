@@ -356,7 +356,7 @@ pub fn sys_brk(addr: usize) -> isize {
 }
 
 pub fn sys_mmap(
-    _start: usize,
+    start: usize,
     len: usize,
     prot: usize,
     flags: usize,
@@ -364,20 +364,12 @@ pub fn sys_mmap(
     offset: usize,
 ) -> isize {
     // let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    let start:usize;
     //若起始地址不为0，选择相信传入的起始地址。不做检查
-    if _start != 0 {
-        start = aligned_up(_start);
-    }else {
-        start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    }
-    let aligned_len = aligned_up(len);
-    let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-
+    let ret = current_process().mmap(start, len, prot, flags, fd, offset);
     gdb_println!(SYSCALL_ENABLE, 
-        "sys_mmap(aligned_start: {:#x?}, aligned_len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
+        "sys_mmap(start: {:#x?}, len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
         start , // start,
-        aligned_len,// aligned_len, 
+        len,// len, 
         prot, 
         flags, 
         fd, 
