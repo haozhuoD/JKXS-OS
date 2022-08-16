@@ -418,7 +418,7 @@ impl VFile {
             cache_writer.modified = false;
         }
         let data = &cache_writer.data;
-        println!("******read as elf, {:#x?} -> {:#x?}", data.as_ptr(), data.as_ptr().add(data.len()));
+        // println!("******read as elf, {:#x?} -> {:#x?}", data.as_ptr(), data.as_ptr().add(data.len()));
         core::slice::from_raw_parts(data.as_ptr(), data.len())
     }
 

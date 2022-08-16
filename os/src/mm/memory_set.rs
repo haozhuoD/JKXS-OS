@@ -162,14 +162,14 @@ impl MemorySet {
         let data = map_area.direct_mapping_slice.unwrap();
         let mut ppn = PhysAddr::from(data.as_ptr() as usize).floor();
 
-        let end_ppn = PhysAddr::from(data.as_ptr() as usize + data.len()).floor();
+        // let end_ppn = PhysAddr::from(data.as_ptr() as usize + data.len()).floor();
         let flags = PTEFlags::from_bits(map_area.map_perm.bits).unwrap();
         for vpn in map_area.vpn_range {
-            info!("push_with_direct_mapping {:#x?} -> {:#x?}", vpn, ppn);
+            // info!("push_with_direct_mapping {:#x?} -> {:#x?}", vpn, ppn);
             self.page_table.map(vpn, ppn, flags);
             ppn.step();
         }
-        error!("in fact, end_ppn = {:#x?}", end_ppn);
+        // error!("in fact, end_ppn = {:#x?}", end_ppn);
         self.areas.push(map_area);
     }
 
@@ -382,7 +382,6 @@ impl MemorySet {
     /// Include sections in elf and trampoline,
     /// also returns user_sp_base and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, usize, Vec<AuxHeader>) {
-        debug!("from_elf, data_start-pa = {:#x?}, end-pa = {:#x?}", elf_data.as_ptr(), elf_data.as_ptr() as usize + elf_data.len());
         assert!(is_aligned(elf_data.as_ptr() as usize));
         let mut memory_set = Self::new_bare();
         // map trampoline
@@ -482,15 +481,9 @@ impl MemorySet {
             // println!("[from_elf] program_header-{:#?} : type is {:#?} ", i, ph.get_type().unwrap());
             // println!("[from_elf] virtual_addr : {:X},  mem_size is {:X} ", ph.virtual_addr(), ph.mem_size());
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
-                println!(
-                    " +++ [from_elf] program_header-{:#?} : type is {:#?} ",
-                    i,
-                    ph.get_type().unwrap()
-                );
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
-                max_end_vpn = max_end_vpn.max(start_va.floor());
-
+                
                 let mut map_perm = MapPermission::U;
                 if head_va == 0 {
                     head_va = start_va.0;
@@ -510,6 +503,8 @@ impl MemorySet {
 
                 let mut map_area =
                     MapArea::new(area_type, start_va, end_va, MapType::Framed, map_perm);
+
+                max_end_vpn = map_area.vpn_range.get_end();
 
                 let ph_offset = ph.offset() as usize;
                 let ph_file_size = ph.file_size() as usize;
