@@ -307,8 +307,7 @@ impl ProcessControlBlock {
         // 因此后面不需要再allow_user_res了
         // todo cow
         // let memory_set = MemorySet::from_existed_user(&parent.memory_set);
-        let heap_start = parent.user_heap_base;
-        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set, heap_start);
+        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set);
         // copy fd table
         let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
