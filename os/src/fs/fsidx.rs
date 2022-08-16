@@ -1,11 +1,11 @@
-use alloc::collections::BTreeMap;
+use hashbrown::HashMap;
 use alloc::sync::Arc;
 use alloc::string::{ToString, String};
 use spin::{Lazy, RwLock};
 use fat32_fs::VFile;
 
-static FSIDX: Lazy<RwLock<BTreeMap<String, Arc<VFile>>>> = 
-    Lazy::new(|| RwLock::new(BTreeMap::new()));
+static FSIDX: Lazy<RwLock<HashMap<String, Arc<VFile>>>> = 
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 pub fn find_vfile_idx(path: &str) -> Option<Arc<VFile>> {
     FSIDX.read().get(path).map(|vfile| Arc::clone(vfile))
