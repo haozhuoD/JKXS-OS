@@ -57,11 +57,16 @@ impl VFile {
     }
 
     pub fn get_size(&self) -> u32 {
-        self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        if !self.is_dir() {
+            return self.read_short_dirent(|short_ent| {short_ent.get_size()})
+        }
+        0
     }
 
     pub fn set_size(&self, size: u32) {
-        self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        if !self.is_dir() {
+            self.modify_short_dirent(|short_ent| { short_ent.set_size(size); });
+        }
     }
 
     pub fn get_fs(&self) -> Arc<FAT32Manager> {
@@ -303,9 +308,7 @@ impl VFile {
             &self.chain,
         );
         if needed == 0 {
-            if !self.is_dir() {
-                self.set_size(new_size);
-            }
+            self.set_size(new_size);
             return;
         }
         
@@ -353,8 +356,8 @@ impl VFile {
         if cache_writer.modified {
             self.read_short_dirent(|short_ent| {
                 let size = short_ent.get_size() as usize;
-                cache_writer.data = Some(Vec::with_capacity(size));
-                let data = cache_writer.data.as_mut().unwrap();
+                cache_writer.data = Vec::with_capacity(size);
+                let data = &mut cache_writer.data;
                 unsafe {
                     data.set_len(size);
                 }
@@ -369,7 +372,7 @@ impl VFile {
             });
             cache_writer.modified = false;
         }
-        let data =  cache_writer.data.as_ref().unwrap();
+        let data =  &cache_writer.data;
         let end = (offset + buf.len()).min(data.len());
         let r_sz = end - offset;
         buf[..r_sz].copy_from_slice(&data[offset..end]);
@@ -389,6 +392,34 @@ impl VFile {
                 &self.chain,
             )
         })
+    }
+
+    /// 将整个文件的数据作为数组切片返回，实现零拷贝
+    /// 注意：只能用于读取elf!!
+    pub unsafe fn read_as_elf(&self) -> &'static [u8] {
+        let mut cache_writer = self.cache.write();
+        if cache_writer.modified {
+            self.read_short_dirent(|short_ent| {
+                let size = short_ent.get_size() as usize;
+                cache_writer.data = Vec::with_capacity(size);
+                let data = &mut cache_writer.data;
+                unsafe {
+                    data.set_len(size);
+                }
+                short_ent.read_at(
+                    0,
+                    data.as_mut_slice(),
+                    &self.fs,
+                    &self.fs.get_fat(),
+                    &self.block_device,
+                    &self.chain
+                )
+            });
+            cache_writer.modified = false;
+        }
+        let data = &cache_writer.data;
+        // println!("******read as elf, {:#x?} -> {:#x?}", data.as_ptr(), data.as_ptr().add(data.len()));
+        core::slice::from_raw_parts(data.as_ptr(), data.len())
     }
 
     pub fn write_at_uncached(&self, offset: usize, buf: &[u8]) -> usize {
@@ -671,10 +702,10 @@ impl VFile {
     // 删除目录项，不清理fat表
     pub fn delete(&self) {
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -684,10 +715,10 @@ impl VFile {
     pub fn remove(&self) -> usize {
         let first_cluster = self.first_cluster();
         (0..self.long_pos_vec.len()).for_each(|i| {
-            self.modify_long_dirent(i, |long_ent| {
-                long_ent.delete();
+                self.modify_long_dirent(i, |long_ent| {
+                    long_ent.delete();
+                });
             });
-        });
         self.modify_short_dirent(|short_ent| {
             short_ent.delete();
         });
@@ -753,14 +784,14 @@ impl VFile {
 
 #[derive(Clone)]
 struct Cache {
-    data:       Option<Vec<u8>>,
+    data:       Vec<u8>,
     modified:   bool,
 }
 
 impl Cache {
     pub fn new() -> Self {
         Self {
-            data: None,
+            data: Vec::new(),
             modified: true, 
         }
     }

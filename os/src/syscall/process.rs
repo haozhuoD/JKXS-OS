@@ -17,6 +17,7 @@ use crate::mm::{
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::multicore::get_hartid;
 use crate::sbi::shutdown;
+use crate::syscall::process;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
     suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx, __FA, block_current_and_run_next,
@@ -210,10 +211,8 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         }
     }
 
-    let cwd = current_process().acquire_inner_lock().cwd.clone();
-
     // run usershell
-    if cwd == "/" && path == "user_shell" {
+    if path == "user_shell" {
         let process = current_process();
         match process.exec(get_usershell_binary(), &args_vec) {
             Some(task) => {
@@ -240,11 +239,12 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         path = String::from("/busybox");
     }
 
+    let process =  current_process();
+    let cwd = process.acquire_inner_lock().cwd.clone();
     // run other programs
     let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_vfile.read_all();
-        let process = current_process();
-        match process.exec(all_data.as_slice(), &args_vec) {
+        let all_data = unsafe { app_vfile.read_as_elf() };
+        match process.exec(all_data, &args_vec) {
             Some(task) => {
                 task.acquire_inner_lock().__save_info_to_fast_access();
                 unsafe {
@@ -356,7 +356,7 @@ pub fn sys_brk(addr: usize) -> isize {
 }
 
 pub fn sys_mmap(
-    _start: usize,
+    start: usize,
     len: usize,
     prot: usize,
     flags: usize,
@@ -364,20 +364,12 @@ pub fn sys_mmap(
     offset: usize,
 ) -> isize {
     // let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    let start:usize;
     //若起始地址不为0，选择相信传入的起始地址。不做检查
-    if _start != 0 {
-        start = aligned_up(_start);
-    }else {
-        start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    }
-    let aligned_len = aligned_up(len);
-    let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-
+    let ret = current_process().mmap(start, len, prot, flags, fd, offset);
     gdb_println!(SYSCALL_ENABLE, 
-        "sys_mmap(aligned_start: {:#x?}, aligned_len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
+        "sys_mmap(start: {:#x?}, len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
         start , // start,
-        aligned_len,// aligned_len, 
+        len,// len, 
         prot, 
         flags, 
         fd, 

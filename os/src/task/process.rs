@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{TaskControlBlock, MAX_SIGNUM};
 use super::{add_task, insert_into_tid2task, SigAction};
-use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE};
+use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE, aligned_up};
 use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
@@ -150,68 +150,45 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> Option<Arc<TaskControlBlock>> {
-        assert_eq!(self.acquire_inner_lock().thread_count(), 1);
+        let mut inner = self.acquire_inner_lock();
+        assert_eq!(inner.thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
             MemorySet::from_elf(elf_data);
-        if (ustack_base == 0) && (entry_point == 0) && (uheap_base == 0) {
+        if ustack_base == 0 && entry_point == 0 && uheap_base == 0 {
             return None;
         }
         let new_token = memory_set.token();
+
         // substitute memory_set
-        self.acquire_inner_lock().memory_set = memory_set;
+        inner.memory_set = memory_set;
 
         // ****设置用户堆顶和mmap顶端位置****
-        self.acquire_inner_lock().user_heap_base = uheap_base;
-        self.acquire_inner_lock().user_heap_top = uheap_base;
-        self.acquire_inner_lock().mmap_area_top = MMAP_BASE;
+        inner.user_heap_base = uheap_base;
+        inner.user_heap_top = uheap_base;
+        inner.mmap_area_top = MMAP_BASE;
+        
+        let task = inner.get_task(0);
+        drop(inner);
+
         // then we alloc user resource for main thread again
         // since memory_set has been changed
-        let task = self.acquire_inner_lock().get_task(0);
         let mut task_inner = task.acquire_inner_lock();
-        task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
-        task_inner.res.as_mut().unwrap().alloc_user_res();
-        task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
+        let res = task_inner.res.as_mut().unwrap();
+        res.ustack_base = ustack_base;
+        res.alloc_user_res();
+        let trap_cx_ppn = res.trap_cx_ppn();
+        let mut user_sp = res.ustack_top();
+        drop(res);
+        task_inner.trap_cx_ppn = trap_cx_ppn;
 
-        let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
+        ////////////// push env strings ///////////////////
 
-        ////////////// envp[] ///////////////////
-        let mut env: Vec<String> = Vec::with_capacity(30);
-        env.push(String::from("SHELL=/bin/sh"));
-        env.push(String::from("PWD=/"));
-        env.push(String::from("USER=root"));
-        env.push(String::from("MOTD_SHOWN=pam"));
-        env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from(
-            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
-        ));
-        env.push(String::from("TERM=vt220"));
-        env.push(String::from("SHLVL=2"));
-        env.push(String::from("JOURNAL_STREAM=8:9265"));
-        env.push(String::from("OLDPWD=/root"));
-        env.push(String::from("_=busybox"));
-        env.push(String::from("LOGNAME=root"));
-        env.push(String::from("HOME=/"));
-        env.push(String::from("PATH=/:/bin"));
-        env.push(String::from("LD_LIBRARY_PATH=/lib64"));
-        let mut envp: Vec<usize> = (0..=env.len()).collect();
-        envp[env.len()] = 0;
-
-        for i in 0..env.len() {
-            user_sp -= env[i].len() + 1;
-            envp[i] = user_sp;
-            let mut p = user_sp;
-            // write chars to [user_sp, user_sp + len]
-            for c in env[i].as_bytes() {
-                *translated_refmut(new_token, p as *mut u8) = *c;
-                p += 1;
-            }
-            *translated_refmut(new_token, p as *mut u8) = 0;
-        }
-        // make the user_sp aligned to 8B for k210 platform
+        let mut envp: Vec<usize> = Vec::with_capacity(1);
+        envp.push(0);
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
-        ////////////// argv[] ///////////////////
+        ///////////// push argv strings ///////////////////
         let mut argv: Vec<usize> = (0..=args.len()).collect();
         argv[args.len()] = 0;
         for i in 0..args.len() {
@@ -227,7 +204,6 @@ impl ProcessControlBlock {
             }
             *translated_refmut(new_token, p as *mut u8) = 0;
         }
-        // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
         ////////////// platform String ///////////////////
@@ -243,15 +219,15 @@ impl ProcessControlBlock {
 
         ////////////// rand bytes ///////////////////
         user_sp -= 16;
-        p = user_sp;
+        // p = user_sp;
         auxv.push(AuxHeader {
             aux_type: AT_RANDOM,
             value: user_sp,
         });
-        for i in 0..0xf {
-            *translated_refmut(new_token, p as *mut u8) = i as u8;
-            p += 1;
-        }
+        // for i in 0..0xf {
+        //     *translated_refmut(new_token, p as *mut u8) = i as u8;
+        //     p += 1;
+        // }
 
         ////////////// padding //////////////////////
         user_sp -= user_sp % 16;
@@ -279,18 +255,12 @@ impl ProcessControlBlock {
         }
 
         ////////////// *envp [] //////////////////////
-        user_sp -= (env.len() + 1) * core::mem::size_of::<usize>();
+        user_sp -= core::mem::size_of::<usize>();
         let envp_base = user_sp;
         *translated_refmut(
             new_token,
-            (user_sp + core::mem::size_of::<usize>() * (env.len())) as *mut usize,
+            user_sp as *mut usize,
         ) = 0;
-        for i in 0..env.len() {
-            *translated_refmut(
-                new_token,
-                (user_sp + core::mem::size_of::<usize>() * i) as *mut usize,
-            ) = envp[i];
-        }
 
         ////////////// *argv [] //////////////////////
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
@@ -337,8 +307,7 @@ impl ProcessControlBlock {
         // 因此后面不需要再allow_user_res了
         // todo cow
         // let memory_set = MemorySet::from_existed_user(&parent.memory_set);
-        let heap_start = parent.user_heap_base;
-        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set, heap_start);
+        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set);
         // copy fd table
         let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
@@ -485,8 +454,14 @@ impl ProcessControlBlock {
         // `flags` field unimplemented
         // 目前mmap区域只能不断向上增长，无回收重整内存
         // 目前不检查fd是否合法
-        assert!(is_aligned(start) && is_aligned(len));
+        // assert!(is_aligned(start) && is_aligned(len));
         let mut inner = self.acquire_inner_lock();
+        let start = if start != 0 {
+            aligned_up(start)
+        }else {
+            inner.mmap_area_top
+        };
+        let len = aligned_up(len);
         // assert_eq!(start, inner.mmap_area_top);
 
         let start_vpn = VirtAddr::from(start).floor();
@@ -673,7 +648,7 @@ impl ProcessControlBlock {
     }
 
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
-        assert!(is_aligned(start));
+        // assert!(is_aligned(start));
         let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)

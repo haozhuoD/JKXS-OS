@@ -123,6 +123,7 @@ pub fn main() -> i32 {
     // libc_test();
     busybox_lua_test();
     lmbench_test();
+    println!("!TEST FINISH!");
     // interactive_main();
     shutdown()
 }
