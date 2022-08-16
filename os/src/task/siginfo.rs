@@ -1,8 +1,5 @@
 use core::mem::size_of;
 
-use alloc::{collections::BTreeMap, string::String};
-use spin::Lazy;
-
 pub const MAX_SIGNUM: u32 = 64;
 
 pub const SIG_DFL: usize = 0;

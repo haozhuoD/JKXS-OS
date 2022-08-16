@@ -1,7 +1,8 @@
 use super::{ProcessControlBlock, TaskControlBlock};
 
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use hashbrown::HashMap;
 use spin::{Lazy, Mutex, RwLock};
 
 pub struct TaskManager {
@@ -29,10 +30,10 @@ impl TaskManager {
 }
 
 pub static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| Mutex::new(TaskManager::new()));
-pub static PID2PCB: Lazy<RwLock<BTreeMap<usize, Arc<ProcessControlBlock>>>> =
-    Lazy::new(|| RwLock::new(BTreeMap::new()));
-pub static TID2TCB: Lazy<RwLock<BTreeMap<usize, Arc<TaskControlBlock>>>> =
-    Lazy::new(|| RwLock::new(BTreeMap::new()));
+pub static PID2PCB: Lazy<RwLock<HashMap<usize, Arc<ProcessControlBlock>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+pub static TID2TCB: Lazy<RwLock<HashMap<usize, Arc<TaskControlBlock>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 pub fn add_task(task: Arc<TaskControlBlock>) {
     TASK_MANAGER.lock().add_to_ready_queue(task);

@@ -1,4 +1,5 @@
-use alloc::{vec::Vec, collections::BTreeMap, sync::Arc};
+use alloc::{vec::Vec, sync::Arc};
+use hashbrown::HashMap;
 use spin::RwLock;
 
 use crate::{FAT, BlockDevice};
@@ -6,14 +7,14 @@ const END_CLUSTER: u32 = 0x0FFFFFF8;
 
 pub struct Chain {
     pub chain: Vec<u32>,                    // index -> cluster
-    pub chain_map: BTreeMap<u32, usize>,    // cluster -> index
+    pub chain_map: HashMap<u32, usize>,    // cluster -> index
 }
 
 impl Chain {
     pub fn new() -> Self {
         Self {
             chain: Vec::new(),
-            chain_map: BTreeMap::new(),
+            chain_map: HashMap::new(),
         }
     }
 

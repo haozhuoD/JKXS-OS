@@ -1,4 +1,6 @@
-use alloc::collections::BTreeMap;
+
+
+use hashbrown::HashMap;
 
 use crate::{
     config::PAGE_SIZE,
@@ -40,7 +42,7 @@ pub struct MmapArea {
     pub fd_one: FdOne,
     pub fd: usize,
     pub offset: usize,
-    pub data_frames: BTreeMap<VirtPageNum, FrameTracker>,
+    pub data_frames: HashMap<usize, FrameTracker>,
 }
 
 impl MmapArea {
@@ -60,7 +62,7 @@ impl MmapArea {
             fd_one,
             fd,
             offset,
-            data_frames: BTreeMap::new(),
+            data_frames: HashMap::new(),
         }
     }
 
@@ -72,7 +74,7 @@ impl MmapArea {
             fd_one: another.fd_one.clone(),
             fd: another.fd,
             offset: another.offset,
-            data_frames: BTreeMap::new(),
+            data_frames: HashMap::new(),
         };
         for (vpn, _) in (&another.data_frames).into_iter() {
             let frame = frame_alloc().unwrap();
@@ -89,7 +91,7 @@ impl MmapArea {
             fd_one: another.fd_one.clone(),
             fd: another.fd,
             offset: another.offset,
-            data_frames: BTreeMap::new(),
+            data_frames: HashMap::new(),
         };
         new_area
     }
@@ -104,7 +106,7 @@ impl MmapArea {
                 | PTEFlags::U
                 | PTEFlags::R
                 | PTEFlags::W;
-            page_table.map(*vpn, ppn, pte_flags);
+            page_table.map((*vpn).into(), ppn, pte_flags);
         }
     }
 
@@ -113,7 +115,7 @@ impl MmapArea {
         let ppn: PhysPageNum;
         let frame = frame_alloc().unwrap();
         ppn = frame.ppn;
-        self.data_frames.insert(vpn, frame);
+        self.data_frames.insert(vpn.0, frame);
 
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
         page_table.map(vpn, ppn, pte_flags);
@@ -155,13 +157,13 @@ impl MmapArea {
 
     pub fn unmap(&self, page_table: &mut PageTable) {
         for vpn in self.data_frames.keys() {
-            page_table.unmap(*vpn);
+            page_table.unmap((*vpn).into());
         }
     }
 
     /// 仅在mmaparea中插入映射
     pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
-        self.data_frames.insert(vpn, FrameTracker::from_ppn(ppn));
+        self.data_frames.insert(vpn.0, FrameTracker::from_ppn(ppn));
     }
 
 }

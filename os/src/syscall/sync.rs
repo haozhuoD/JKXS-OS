@@ -1,6 +1,7 @@
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use hashbrown::HashMap;
 use spin::{Lazy, RwLock};
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -88,8 +89,8 @@ const FUTEX_CMD_MASK: usize = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
 // const FLAGS_SHARED: usize = 1;
 // const FLAGS_CLOCKRT: usize = 2;
 
-pub static FUTEX_QUEUE: Lazy<RwLock<BTreeMap<usize, FutexQueue>>> =
-    Lazy::new(|| RwLock::new(BTreeMap::new()));
+pub static FUTEX_QUEUE: Lazy<RwLock<HashMap<usize, FutexQueue>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 // Simple implementation
 pub fn sys_futex(
