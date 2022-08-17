@@ -9,7 +9,7 @@ os/Cargo.lock
 os/kernel.asm
 user/build
 user/target/*
-user/rootfs/*
+# user/rootfs/*
 user/.idea/*
 user/Cargo.lock
 fat32_fs/target/*
