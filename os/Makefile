@@ -5,7 +5,7 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 FS_IMG := ../fat32-fuse/fs.img
 SDCARD := /dev/sdb
-CPUS ?= 2
+CPUS ?= 1
 	
 ifeq ($(MODE), release)
 	BUILD_MODE := --release

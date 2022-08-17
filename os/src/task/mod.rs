@@ -103,8 +103,9 @@ pub fn exit_current_and_run_next(exit_code: i32, is_exit_group: bool) -> ! {
     // do futex_wake if clear_child_tid is set
     if let Some(p) = &task_inner.clear_child_tid {
         // debug!("p = {:#x?}", p);
-        *translated_refmut(process.acquire_inner_lock().get_user_token(), p.addr as *mut u32) = 0;
-        futex_wake(p.addr, 1);
+        *p.phyaddr.get_mut() = 0;
+        // *translated_refmut(process.acquire_inner_lock().get_user_token(), p.addr as *mut u32) = 0;
+        futex_wake(p.uaddr, 1);
     }
 
     remove_from_tid2task(task_inner.gettid());
@@ -224,7 +225,7 @@ pub fn perform_signals_of_current() {
                 }
                 if sigaction.sa_handler == SIG_DFL {
                     //SIG_DFL 终止程序
-                    // error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_pid(),signum);
+                    error!("[perform_signals_of_current]-fn pid:{} signal_num:{}, SIG_DFL kill process",current_tid(),signum);
                     drop(process_inner);
                     drop(process);
                     exit_current_and_run_next(-(signum as i32), false);
@@ -238,7 +239,7 @@ pub fn perform_signals_of_current() {
         }
         // 如果信号代表当前进程出错，则exit
         if let Some(_msg) = SIGNAL_DFL_EXIT.get(&signum) {
-            // error!("[tid={}] {}", current_tid(), msg);
+            error!("[tid={}] {}", current_tid(), _msg);
             drop(process);
             drop(task_inner);
             drop(task);

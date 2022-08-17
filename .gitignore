@@ -1,5 +1,6 @@
 .idea/*
 .vscode/*
+fsimg/*
 os/target/*
 os/.idea/*
 os/src/linker.ld
@@ -8,6 +9,7 @@ os/Cargo.lock
 os/kernel.asm
 user/build
 user/target/*
+user/rootfs/*
 user/.idea/*
 user/Cargo.lock
 fat32_fs/target/*

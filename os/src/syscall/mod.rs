@@ -97,7 +97,7 @@ use crate::{
 
 pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
     if !((syscall_id == SYSCALL_READ || syscall_id == SYSCALL_WRITE) && (args[0] <= 2))
-        && syscall_id != SYSCALL_READDIR
+        && syscall_id != SYSCALL_READDIR && syscall_id != SYSCALL_PPOLL
     {
         gdb_println!(
             SYSCALL_ENABLE,
@@ -199,6 +199,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
         SYSCALL_WAIT4 => sys_waitpid(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
+        SYSCALL_GETEUID => sys_geteuid(),
         SYSCALL_SYSINFO => sys_sysinfo(args[0] as _),
         SYSCALL_RENAMEAT2 => sys_renameat2(
             args[0] as _,

@@ -137,12 +137,15 @@ pub fn sys_clone(
                 new_tid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
-            new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
+            let va = ctid_ptr as usize; 
+            new_task_inner.clear_child_tid = Some(ClearChildTid {
+                ctid: *translated_ref(
                 current_process_inner.get_user_token(),
-                ctid_ptr,
-            ),
-            addr: ctid_ptr as usize});
-        }
+                ctid_ptr),
+                // addr: ctid_ptr as usize});
+                uaddr : ctid_ptr as usize,
+                phyaddr: current_process_inner.memory_set.page_table.translate_va_with_lazycheck(va.into()).unwrap()})
+            }
         new_tid
     } else {
         let new_process = current_process.fork(flags, stack_ptr as usize, newtls);
@@ -155,11 +158,14 @@ pub fn sys_clone(
             new_process_inner.pid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
+            let va = ctid_ptr as usize; 
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
                 new_process_inner.get_user_token(),
                 ctid_ptr,
             ),
-            addr: ctid_ptr as usize});
+            // addr: ctid_ptr as usize});
+            uaddr : ctid_ptr as usize,
+            phyaddr: current_process.acquire_inner_lock().memory_set.page_table.translate_va_with_lazycheck(va.into()).unwrap()})
         }
         if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid_ptr as usize != 0 {
             *translated_refmut(new_process_inner.get_user_token(), ctid_ptr) =
@@ -406,6 +412,12 @@ pub fn sys_getppid() -> isize {
 pub fn sys_getuid() -> isize {
     // only support root user
     gdb_println!(SYSCALL_ENABLE, "sys_getuid() = {}", 0);
+    0
+}
+
+pub fn sys_geteuid() -> isize {
+    // only support root user
+    gdb_println!(SYSCALL_ENABLE, "sys_geteuid() = {}", 0);
     0
 }
 

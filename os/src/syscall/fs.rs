@@ -45,16 +45,16 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         drop(inner);
         drop(process);
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        // if fd >= 2 {
-        gdb_println!(
-            SYSCALL_ENABLE,
-            "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
-            fd,
-            translated_str(token, buf),
-            len,
-            ret
-        );
-        // }
+        if fd >= 2 {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
+                fd,
+                translated_str(token, buf),
+                len,
+                ret
+            );
+        }
         ret as isize
     } else {
         -EBADF
@@ -82,16 +82,16 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         drop(inner);
         drop(process);
         let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        // if fd > 2 {
-        gdb_println!(
-            SYSCALL_ENABLE,
-            "sys_read(fd: {}, buf: {:#x?}, len: {}) = {}",
-            fd,
-            translated_str(token, buf),
-            len,
-            ret
-        );
-        // }
+        if fd > 2 {
+            gdb_println!(
+                SYSCALL_ENABLE,
+                "sys_read(fd: {}, buf: {:#x?}, len: {}) = {}",
+                fd,
+                translated_str(token, buf),
+                len,
+                ret
+            );
+        }
         ret as isize
     } else {
         -EBADF
@@ -104,6 +104,11 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     }
     let token = current_user_token();
     let mut path = translated_str(token, path);
+
+    if path == "/lib/libz.so.1" {
+        println!("/lib/libz.so.1 -> /lib/libz.so.1.2.11");
+        path = "/lib/libz.so.1.2.11".to_string();
+    }
 
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
@@ -987,14 +992,14 @@ pub fn sys_ppoll(fds: *mut Pollfd, nfds: usize, timeout: *const u64) -> isize {
         suspend_current_and_run_next();
     }
 
-    gdb_println!(
-        SYSCALL_ENABLE,
-        "sys_ppoll(fds: {:#x?}, nfds = {:x?}, timeout: {:#x?}) = {}",
-        fds,
-        nfds,
-        timeout,
-        ret
-    );
+    // gdb_println!(
+    //     SYSCALL_ENABLE,
+    //     "sys_ppoll(fds: {:#x?}, nfds = {:x?}, timeout: {:#x?}) = {}",
+    //     fds,
+    //     nfds,
+    //     timeout,
+    //     ret
+    // );
 
     ret
 }
@@ -1420,6 +1425,8 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: *mut u8, bufsiz: u
     let token = inner.get_user_token();
     let path = translated_str(token, pathname);
     if path.as_str() != "/proc/self/exe" {
+        error!("sys_readlinkat, path: {:?}",path);
+        return 0;
         unimplemented!();
     }
     let mut userbuf = UserBuffer::new(translated_byte_buffer(token, buf, bufsiz));

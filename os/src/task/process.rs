@@ -188,7 +188,7 @@ impl ProcessControlBlock {
         env.push(String::from("_=busybox"));
         env.push(String::from("LOGNAME=root"));
         env.push(String::from("HOME=/"));
-        env.push(String::from("PATH=/bin"));
+        env.push(String::from("PATH=/bin:/usr/bin:/lib"));
         env.push(String::from("LD_LIBRARY_PATH=/lib64"));
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;

@@ -1,6 +1,6 @@
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags, ITimerSpec};
-use crate::mm::PhysPageNum;
+use crate::mm::{PhysPageNum, PhysAddr};
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
@@ -128,5 +128,6 @@ pub enum TaskStatus {
 #[derive(Debug)]
 pub struct ClearChildTid {
     pub ctid: u32,
-    pub addr: usize,
+    pub uaddr: usize,
+    pub phyaddr: PhysAddr,
 }

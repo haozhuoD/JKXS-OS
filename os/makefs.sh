@@ -5,7 +5,7 @@ rm -rf ${FAT32_DIR}
 mkdir -p ${FAT32_DIR}
 if test ! -e ${FAT32_DIR}/${FS_IMG}
 then
-    dd if=/dev/zero of=${FAT32_DIR}/${FS_IMG} bs=1k count=512k
+    dd if=/dev/zero of=${FAT32_DIR}/${FS_IMG} bs=1k count=640k
 fi
 
 sudo chmod 777 ${FS_IMG}
@@ -50,3 +50,5 @@ sudo cp -r ../user/rootfs/* ${FAT32_DIR}/fs/
 # done
 
 sudo umount ${FAT32_DIR}/fs
+
+# sudo mv ${FS_IMG} ../fsimg
