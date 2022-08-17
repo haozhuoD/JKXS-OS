@@ -3,8 +3,9 @@ use crate::config::FSIMG_START_PAGENUM;
 use crate::config::FSIMG_END_PAGENUM;
 use crate::config::MEMORY_END;
 
-use alloc::collections::BTreeMap;
+
 use alloc::vec::Vec;
+use hashbrown::HashMap;
 use core::fmt::{self, Debug, Formatter};
 use spin::Lazy;
 use spin::RwLock;
@@ -50,7 +51,7 @@ pub struct StackFrameAllocator {
     current: usize,
     end: usize,
     recycled: Vec<usize>,
-    refcounter: BTreeMap<usize, u8>,
+    refcounter: HashMap<usize, u8>,
 }
 
 impl StackFrameAllocator {
@@ -67,7 +68,7 @@ impl FrameAllocator for StackFrameAllocator {
             current: 0,
             end: 0,
             recycled: Vec::with_capacity(0x10000),
-            refcounter: BTreeMap::new(),
+            refcounter: HashMap::new(),
         }
     }
     fn alloc(&mut self) -> Option<PhysPageNum> {
