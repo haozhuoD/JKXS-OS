@@ -392,7 +392,6 @@ impl MemorySet {
             // }
 
             _at_base += DYNAMIC_LINKER;
-            println!("dl entry : {:X} ", _at_base);
         } else {
             auxv.push(AuxHeader {
                 aux_type: AT_BASE,
@@ -476,7 +475,6 @@ impl MemorySet {
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                     start_va.page_offset(),
                 );
-                println!("start_va = {:#x?}, end_va = {:#x?}", start_va, end_va);
                 gdb_println!(
                     MAPPING_ENABLE,
                     "[user-elfmap] va[0x{:X} - 0x{:X}] Framed",
@@ -487,8 +485,7 @@ impl MemorySet {
         }
 
         let ph_head_addr = head_va.unwrap() + elf.header.pt2.ph_offset() as usize;
-        println!("[from_elf] AT_PHDR head_va = {:#x?},  elf.header.pt2.ph_offset() = {:#x?}, ph_head_addr is {:X} ",
-                    head_va, elf.header.pt2.ph_offset() as usize, ph_head_addr);
+
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,

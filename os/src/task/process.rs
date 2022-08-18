@@ -189,7 +189,6 @@ impl ProcessControlBlock {
         // env.push(String::from("LOGNAME=root"));
         // env.push(String::from("HOME=/"));
         // env.push(String::from("LD_LIBRARY_PATH=/lib64"));
-        debug!("args = {:#x?}, env = {:#x?}", args, env);
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;
 
@@ -273,7 +272,6 @@ impl ProcessControlBlock {
                 new_token,
                 (addr + core::mem::size_of::<usize>()) as *mut usize,
             ) = auxv[i].value;
-            debug!("auxv[{}] = {:#x?}", auxv[i].aux_type, auxv[i].value);
         }
 
         ////////////// *envp [] //////////////////////

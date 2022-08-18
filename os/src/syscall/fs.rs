@@ -98,6 +98,26 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     }
 }
 
+fn forward(path: &mut String) {
+    if path == "/lib/libz.so.1" {
+        *path = "/lib/libz.so.1.2.11".to_string();
+    } else if path == "/usr/lib/libctf.so.0" {
+        *path = "/usr/lib/libctf.so.0.0.0".to_string();
+    } else if path == "/usr/lib/libatomic.so" {
+        *path = "/usr/lib/libatomic.so.1.2.0".to_string();
+    } else if path == "/usr/lib/libc.so" {
+        *path = "/lib/ld-musl-riscv64.so.1".to_string();
+    } else if path == "/usr/lib/libisl.so.23" {
+        *path = "/usr/lib/libisl.so.23.1.0".to_string();
+    } else if path == "/usr/lib/libmpc.so.3" {
+        *path = "/usr/lib/libmpc.so.3.2.1".to_string();
+    } else if path == "/usr/lib/libmpfr.so.6" {
+        *path = "/usr/lib/libmpfr.so.6.1.0".to_string();
+    } else if path == "/usr/lib/libgmp.so.10" {
+        *path = "/usr/lib/libgmp.so.10.4.1".to_string();
+    }
+}
+
 pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
     if path as usize == 0 {
         return -EFAULT;
@@ -105,15 +125,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
     let token = current_user_token();
     let mut path = translated_str(token, path);
 
-    if path == "/lib/libz.so.1" {
-        println!("/lib/libz.so.1 -> /lib/libz.so.1.2.11");
-        path = "/lib/libz.so.1.2.11".to_string();
-    }
-
-    if path == "/usr/lib/libctf.so.0" {
-        println!("/usr/lib/libctf.so.0 -> /usr/lib/libctf.so.0.0.0");
-        path = "/usr/lib/libctf.so.0.0.0".to_string();
-    }
+    forward(&mut path);
 
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
@@ -658,20 +670,25 @@ pub fn sys_readv(fd: usize, iov: *mut IOVec, iocnt: usize) -> isize {
     if fd >= inner.fd_table.len() {
         return -EPERM;
     }
-    if let Some(file) = &inner.fd_table[fd] {
-        let f: Arc<dyn File + Send + Sync>;
-        match file {
-            FileClass::File(fi) => f = fi.clone(),
-            FileClass::Abs(fi) => f = fi.clone(),
-        }
-        if !f.readable() {
-            return -EPERM;
-        }
-        for i in 0..iocnt {
-            let iovec = translated_ref(token, unsafe { iov.add(i) });
-            let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
-            ret += f.read(UserBuffer::new(buf)) as isize;
-        }
+
+    let file = inner.fd_table[fd].clone();
+    if file.is_none() {
+        return -EBADF;
+    }
+    drop(inner);
+
+    let f: Arc<dyn File + Send + Sync>;
+    match file.unwrap() {
+        FileClass::File(fi) => f = fi.clone(),
+        FileClass::Abs(fi) => f = fi.clone(),
+    }
+    if !f.readable() {
+        return -EPERM;
+    }
+    for i in 0..iocnt {
+        let iovec = translated_ref(token, unsafe { iov.add(i) });
+        let buf = translated_byte_buffer(token, iovec.iov_base, iovec.iov_len);
+        ret += f.read(UserBuffer::new(buf)) as isize;
     }
 
     gdb_println!(
@@ -1430,9 +1447,8 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: *mut u8, bufsiz: u
     let token = inner.get_user_token();
     let path = translated_str(token, pathname);
     if path.as_str() != "/proc/self/exe" {
-        error!("sys_readlinkat, path: {:?}",path);
+        // error!("sys_readlinkat, path: {:?}", path);
         return 0;
-        unimplemented!();
     }
     let mut userbuf = UserBuffer::new(translated_byte_buffer(token, buf, bufsiz));
     let _lmbench = "/exit_test\0";
