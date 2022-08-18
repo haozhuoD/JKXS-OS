@@ -110,6 +110,11 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         path = "/lib/libz.so.1.2.11".to_string();
     }
 
+    if path == "/usr/lib/libctf.so.0" {
+        println!("/usr/lib/libctf.so.0 -> /usr/lib/libctf.so.0.0.0");
+        path = "/usr/lib/libctf.so.0.0.0".to_string();
+    }
+
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
 

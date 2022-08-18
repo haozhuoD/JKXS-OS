@@ -185,7 +185,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6], sepc: usize) -> isize {
             args[3] as _,
             args[4] as _,
         ),
-        SYSCALL_EXECVE => sys_exec(args[0] as _, args[1] as _),
+        SYSCALL_EXECVE => sys_exec(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_MMAP => sys_mmap(
             args[0] as _,
             args[1] as _,

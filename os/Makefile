@@ -105,6 +105,18 @@ gdb:
 		-smp $(CPUS) \
 		-s -S
 
+gdb-vir-fsimg:
+	@qemu-system-riscv64 \
+		-m 1G	\
+		-machine virt -nographic \
+		-bios $(BOOTLOADER) \
+		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
+		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device loader,file=$(FS_IMG),addr=0x90000000 \
+		-smp $(CPUS) \
+		-s -S
+		
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
 		-ex 'add-symbol-file ../user/busybox_lua_testsuites/lmbench_all' \

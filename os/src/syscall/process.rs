@@ -190,10 +190,11 @@ pub fn sys_clone(
     ret as isize
 }
 
-pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
+pub fn sys_exec(path: *const u8, mut args: *const usize, mut envp: *const usize) -> isize {
     let token = current_user_token();
     let mut path = translated_str(token, path);
     let mut args_vec: Vec<String> = Vec::new();
+    let mut env_vec: Vec<String> = Vec::new();
 
     loop {
         let arg_str_ptr = *translated_ref(token, args);
@@ -206,12 +207,27 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         }
     }
 
+    loop {
+        if envp as usize == 0 {
+            env_vec.push(String::from("PATH=/bin:/usr/bin:/lib"));
+            break;
+        }
+        let env_str_ptr = *translated_ref(token, envp);
+        if env_str_ptr == 0 {
+            break;
+        }
+        env_vec.push(translated_str(token, env_str_ptr as *const u8));
+        unsafe {
+            envp = envp.add(1);
+        }
+    }
+
     let cwd = current_process().acquire_inner_lock().cwd.clone();
 
     // run usershell
     if cwd == "/" && path == "user_shell" {
         let process = current_process();
-        let exec_ret = process.exec(get_usershell_binary(), &args_vec);
+        let exec_ret = process.exec(get_usershell_binary(), &args_vec, &mut env_vec);
         if exec_ret != 0 {
             return -1;
         }
@@ -233,7 +249,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_vfile.read_all();
         let process = current_process();
-        let exec_ret = process.exec(all_data.as_slice(), &args_vec);
+        let exec_ret = process.exec(all_data.as_slice(), &args_vec, &mut env_vec);
         if exec_ret != 0 {
             -EPERM
         } else {

@@ -39,25 +39,31 @@ pub static mut SATP: usize = 0;
 // 还需在动态链接加载其不同时继续进行处理
 pub static KERNEL_DL_DATA: Lazy<RwLock<DLLMem>> = Lazy::new(|| RwLock::new(DLLMem::new()));
 
-pub struct DLLMem{
+pub struct DLLMem {
     pub data: Vec<u8>,
     pub name: String,
 }
 
 impl DLLMem {
-    pub fn new() ->Self {
+    pub fn new() -> Self {
         Self {
             data: Vec::new(),
             name: "NULL".to_string(),
         }
     }
-    pub fn readso(&mut self ,cwd: &str, path: &str){
+    pub fn readso(&mut self, cwd: &str, path: &str) {
         if let Some(app_vfile) = open_common_file(cwd, path, OpenFlags::RDONLY) {
-            info!("[execve load_dl] dynamic load dl {:#x?} success ... cwd is {:#x?}", path, cwd);
+            info!(
+                "[execve load_dl] dynamic load dl {:#x?} success ... cwd is {:#x?}",
+                path, cwd
+            );
             self.name = path.to_string();
             self.data = app_vfile.read_all();
         } else {
-            error!("[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}", path, cwd);
+            error!(
+                "[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}",
+                path, cwd
+            );
             self.name = "NULL".to_string();
             self.data.clear();
         }
@@ -80,7 +86,8 @@ pub fn load_dll() {
     let dl = KERNEL_DL_DATA.read();
     debug!(
         "load {} to kernel memoryset size:0x{:x} ......",
-        dl.name ,dl.data.len()
+        dl.name,
+        dl.data.len()
     );
 }
 
@@ -364,10 +371,6 @@ impl MemorySet {
             value: PAGE_SIZE as usize,
         });
 
-        auxv.push(AuxHeader {
-            aux_type: AT_BASE,
-            value: 0 as usize,
-        });
         // todo is_dynamic = 1;
         // .interp: 2 第二个
         // .strtab: ph_count-2 倒数第二个
@@ -389,6 +392,12 @@ impl MemorySet {
             // }
 
             _at_base += DYNAMIC_LINKER;
+            println!("dl entry : {:X} ", _at_base);
+        } else {
+            auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: 0 as usize,
+            });
         }
 
         auxv.push(AuxHeader {
@@ -436,7 +445,7 @@ impl MemorySet {
             value: 0x112d as usize,
         });
 
-        let mut head_va = 0;
+        let mut head_va = None;
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -448,8 +457,8 @@ impl MemorySet {
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
-                if head_va == 0 {
-                    head_va = start_va.0;
+                if head_va.is_none() {
+                    head_va = Some(start_va.0);
                 }
                 if ph_flags.is_read() {
                     map_perm |= MapPermission::R;
@@ -467,6 +476,7 @@ impl MemorySet {
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                     start_va.page_offset(),
                 );
+                println!("start_va = {:#x?}, end_va = {:#x?}", start_va, end_va);
                 gdb_println!(
                     MAPPING_ENABLE,
                     "[user-elfmap] va[0x{:X} - 0x{:X}] Framed",
@@ -476,8 +486,9 @@ impl MemorySet {
             }
         }
 
-        let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
-        // println!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        let ph_head_addr = head_va.unwrap() + elf.header.pt2.ph_offset() as usize;
+        println!("[from_elf] AT_PHDR head_va = {:#x?},  elf.header.pt2.ph_offset() = {:#x?}, ph_head_addr is {:X} ",
+                    head_va, elf.header.pt2.ph_offset() as usize, ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,

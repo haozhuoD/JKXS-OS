@@ -145,7 +145,7 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> isize {
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>, env: &Vec<String>) -> isize {
         assert_eq!(self.acquire_inner_lock().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
@@ -171,25 +171,25 @@ impl ProcessControlBlock {
 
         let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
 
-        ////////////// envp[] ///////////////////
-        let mut env: Vec<String> = Vec::new();
-        env.push(String::from("SHELL=/bin/sh"));
-        env.push(String::from("PWD=/"));
-        env.push(String::from("USER=root"));
-        env.push(String::from("MOTD_SHOWN=pam"));
-        env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from(
-            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
-        ));
-        env.push(String::from("TERM=vt220"));
-        env.push(String::from("SHLVL=2"));
-        env.push(String::from("JOURNAL_STREAM=8:9265"));
-        env.push(String::from("OLDPWD=/root"));
-        env.push(String::from("_=busybox"));
-        env.push(String::from("LOGNAME=root"));
-        env.push(String::from("HOME=/"));
-        env.push(String::from("PATH=/bin:/usr/bin:/lib"));
-        env.push(String::from("LD_LIBRARY_PATH=/lib64"));
+        ////////////// env strings ///////////////////
+        // let mut env: Vec<String> = Vec::new();
+        // env.push(String::from("SHELL=/bin/sh"));
+        // env.push(String::from("PWD=/"));
+        // env.push(String::from("USER=root"));
+        // env.push(String::from("MOTD_SHOWN=pam"));
+        // env.push(String::from("LANG=C.UTF-8"));
+        // env.push(String::from(
+        //     "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        // ));
+        // env.push(String::from("TERM=vt220"));
+        // env.push(String::from("SHLVL=2"));
+        // env.push(String::from("JOURNAL_STREAM=8:9265"));
+        // env.push(String::from("OLDPWD=/root"));
+        // env.push(String::from("_=busybox"));
+        // env.push(String::from("LOGNAME=root"));
+        // env.push(String::from("HOME=/"));
+        // env.push(String::from("LD_LIBRARY_PATH=/lib64"));
+        debug!("args = {:#x?}, env = {:#x?}", args, env);
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;
 
@@ -207,7 +207,7 @@ impl ProcessControlBlock {
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
-        ////////////// argv[] ///////////////////
+        ////////////// argv strings ///////////////////
         let mut argv: Vec<usize> = (0..=args.len()).collect();
         argv[args.len()] = 0;
         for i in 0..args.len() {
@@ -264,6 +264,7 @@ impl ProcessControlBlock {
         user_sp -= auxv.len() * core::mem::size_of::<AuxHeader>();
         let auxv_base = user_sp;
         // println!("[auxv]: base 0x{:X}", auxv_base);
+
         for i in 0..auxv.len() {
             // println!("[auxv]: {:?}", auxv[i]);
             let addr = user_sp + core::mem::size_of::<AuxHeader>() * i;
@@ -272,6 +273,7 @@ impl ProcessControlBlock {
                 new_token,
                 (addr + core::mem::size_of::<usize>()) as *mut usize,
             ) = auxv[i].value;
+            debug!("auxv[{}] = {:#x?}", auxv[i].aux_type, auxv[i].value);
         }
 
         ////////////// *envp [] //////////////////////
