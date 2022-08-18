@@ -51,16 +51,13 @@ impl ProcessControlBlockInner {
     }
 
     pub fn alloc_fd(&mut self, minfd: usize) -> usize {
-        let mut i = minfd;
-        loop {
-            while i >= self.fd_table.len() {
+        let len = self.fd_table.len();
+        (minfd..len)
+            .find(|&idx| self.fd_table[idx].is_none())
+            .unwrap_or_else(|| {
                 self.fd_table.push(None);
-            }
-            if self.fd_table[i].is_none() {
-                return i;
-            }
-            i += 1;
-        }
+                len
+            })
     }
 
     pub fn thread_count(&self) -> usize {
