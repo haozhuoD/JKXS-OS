@@ -2,6 +2,8 @@
 
 ![System](https://img.shields.io/badge/System-jkxsOS-brightgreen) ![Lang](https://img.shields.io/badge/Lang-Rust-green) ![ISA](https://img.shields.io/badge/ISA-riscv64-yellowgreen) ![Platform](https://img.shields.io/badge/Platform-Qemu%2c%20Hifive%20Unmatched-yellow)
 
+![logo](./docs/image/readme/学校logo.png)
+
 ## <i>Current Achievements</i>
 
 #### 内核赛道 决赛第一阶段`fu740`测评满分
