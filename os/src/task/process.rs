@@ -8,6 +8,7 @@ use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
 };
+use crate::mm::address::StepByOne;
 use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
@@ -695,8 +696,19 @@ impl ProcessControlBlock {
 
 impl ProcessControlBlockInner {
     fn lazy_alloc_mmap_page(&mut self, vaddr: usize) -> isize {
-        let vpn = VirtAddr::from(vaddr).floor();
-        self.memory_set.insert_mmap_dataframe(vpn)
+        // let vpn = VirtAddr::from(vaddr).floor();
+        // self.memory_set.insert_mmap_dataframe(vpn)
+
+        let mut vpn = VirtAddr::from(vaddr).floor();
+        let mut ret = -1;
+        for i in 0..4 {
+            if self.memory_set.insert_mmap_dataframe(vpn) == -1 {
+                break;
+            }
+            vpn.step_four();
+            ret = 0;
+        }
+        ret
     }
 
     fn lazy_alloc_heap_page(&mut self, vaddr: usize) -> isize {

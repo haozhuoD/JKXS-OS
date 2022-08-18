@@ -1,11 +1,11 @@
-mod address;
+pub(crate) mod address;
 mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
 mod mmap;
 mod page_table;
 
-use address::VPNRange;
+pub use address::VPNRange;
 pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use core::arch::asm;
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};

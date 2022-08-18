@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     frame_alloc, page_table::PTEFlags, translated_byte_buffer, FrameTracker, MapPermission,
-    PageTable, PhysPageNum, UserBuffer, VirtAddr, VirtPageNum, address::VPNRange,
+    PageTable, PhysPageNum, UserBuffer, VirtAddr, VirtPageNum, address::VPNRange, frame_allocator::frame_alloc_without_clear,
 };
 
 bitflags! {
@@ -77,7 +77,8 @@ impl MmapArea {
             data_frames: HashMap::new(),
         };
         for (vpn, _) in (&another.data_frames).into_iter() {
-            let frame = frame_alloc().unwrap();
+            let frame = frame_alloc_without_clear().unwrap();
+            // let frame = frame_alloc().unwrap();
             new_area.data_frames.insert(*vpn, frame);
         }
         new_area
@@ -113,7 +114,8 @@ impl MmapArea {
     /// (lazy)分配一个物理页帧并建立vpn到它的mmap映射，同时从fd中读取对应文件，失败返回-1
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> isize {
         let ppn: PhysPageNum;
-        let frame = frame_alloc().unwrap();
+        let frame = frame_alloc_without_clear().unwrap();
+        // let frame = frame_alloc().unwrap();
         ppn = frame.ppn;
         self.data_frames.insert(vpn.0, frame);
 
@@ -124,6 +126,7 @@ impl MmapArea {
         let token = page_table.token();
 
         if self.fd as isize == -1 {
+            super::frame_allocator::frame_clean(ppn);
             return 0;
         }
 
