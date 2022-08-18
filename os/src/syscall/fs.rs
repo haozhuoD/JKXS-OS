@@ -1315,11 +1315,10 @@ pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
     let ret = if let Some(Some(f)) = inner.fd_table.get(fd) {
         match f {
             FileClass::File(fi) => {
-                let sz = fi.file_size();
                 let new_off: isize = match whence {
                     SEEK_SET => offset as _,
                     SEEK_CUR => (fi.offset() + offset) as _,
-                    SEEK_END => (sz + offset) as _,
+                    SEEK_END => (fi.file_size() + offset) as _,
                     _ => -1,
                 };
                 if new_off < 0 {
