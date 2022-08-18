@@ -313,7 +313,7 @@ impl VFile {
         }
         
         if first_cluster == 0 {  // 未分配簇则将cluster置为第一个簇
-            let first_cluster = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
+            let first_cluster = self.fs.alloc_cluster(needed, 0, &self.chain).expect("SD Card has no space!");
             self.set_first_cluster(first_cluster);
         } else {  // 已分配簇则将新分配的簇链连接到原来的簇链上
             // let fat = self.fs.get_fat();
@@ -326,13 +326,7 @@ impl VFile {
                 &self.block_device, 
                 &fat
             );
-            let first_cluster = self.fs.alloc_cluster(needed, &self.chain).expect("SD Card has no space!");
-            fat.write().set_next_cluster(
-                final_cluster,
-                first_cluster,
-                &self.block_device,
-                &self.chain
-            );
+            self.fs.alloc_cluster(needed, final_cluster, &self.chain).expect("SD Card has no space!");
         }
         self.set_size(new_size);
     }

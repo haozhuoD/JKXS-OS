@@ -201,7 +201,7 @@ impl FAT32Manager {
     }
 
     // 在FAT表上分配num个簇，成功时返回第一个簇和最后一个簇，失败时返回None
-    pub fn alloc_cluster(&self, num: u32, chain: &Arc<RwLock<Chain>>) -> Option<u32> {
+    pub fn alloc_cluster(&self, num: u32, final_cluster: u32, chain: &Arc<RwLock<Chain>>) -> Option<u32> {
         let free_clusters = self.free_cluster_count();
         if num > free_clusters {
             return None;
@@ -210,6 +210,9 @@ impl FAT32Manager {
         let last_alloc_cluster = self.fsinfo.read().read_last_alloc_cluster();
         let first_free_cluster = fat_writer.next_free_cluster(last_alloc_cluster, &self.block_device);
         let mut curr_cluster = first_free_cluster;
+        if final_cluster != 0 {
+            fat_writer.set_next_cluster(final_cluster, curr_cluster, &self.block_device, chain)
+        }
         for _ in 1..num {
             self.clear_cluster(curr_cluster);
             let next_clutser = fat_writer.next_free_cluster(curr_cluster, &self.block_device);
