@@ -6,6 +6,11 @@ use alloc::vec::Vec;
 use spin::{RwLock, RwLockWriteGuard};
 
 const PAGE_SIZE: usize = 4096;
+pub const PAGE_MASK: usize = !0xfff;
+
+fn aligned_down(addr: usize) -> usize {
+    addr & PAGE_MASK
+}
 
 #[derive(Clone)]
 pub struct VFile {
@@ -359,11 +364,16 @@ impl VFile {
     fn check_cache_modified(&self, cache_writer: &mut RwLockWriteGuard<VFileCache>) {
         if cache_writer.modified {
             self.read_short_dirent(|short_ent| {
+                // println!("in");
                 let size = short_ent.get_size() as usize;
-                cache_writer.data = Vec::with_capacity(size + PAGE_SIZE);
+                let aligned_size = aligned_down(size) + PAGE_SIZE;
+                // println!("size = {:#x?}, aligned_size = {:#x?}", size, aligned_size);
+                cache_writer.data = Vec::with_capacity(aligned_size);
+                // println!("ptr0={:#x?}", cache_writer.data.as_ptr() as usize);
+                // println!("in2");
                 let data = &mut cache_writer.data;
                 unsafe {
-                    data.set_len(size + PAGE_SIZE);
+                    data.set_len(size);
                 }
                 let data_start_pa = data.as_ptr() as usize;
                 let data_offset = data_start_pa & 0xfff;
