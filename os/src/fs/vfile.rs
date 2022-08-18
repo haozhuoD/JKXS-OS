@@ -36,19 +36,10 @@ impl OSFile {
 
     pub unsafe fn read_as_elf(&self) -> &[u8] {
         self.vfile.read_as_elf()
-        // let size = self.vfile.get_size() as usize;
-        // let mut v: Vec<u8> = Vec::with_capacity(size);
-        // unsafe { v.set_len(size) };
-        // loop {
-        //     let len = self.vfile.read_at(
-        //         inner.offset, 
-        //         unsafe { core::slice::from_raw_parts_mut(v.as_mut_ptr() as *mut u8, size) 
-        //     });
-        //     if len == 0 {
-        //         break;
-        //     }
-        //     inner.offset += len;
-        // }
+    }
+
+    pub unsafe fn get_data_cache_physaddr(&self, offset: usize) -> usize {
+        self.vfile.get_data_cache_physaddr(offset)
     }
 
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {

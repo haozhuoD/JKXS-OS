@@ -702,7 +702,7 @@ impl ProcessControlBlockInner {
             if self.memory_set.insert_mmap_dataframe(vpn) == -1 {
                 break;
             }
-            vpn.step_four();
+            vpn.step4();
             ret = 0;
         }
         ret

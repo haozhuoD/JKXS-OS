@@ -1,5 +1,3 @@
-
-
 use hashbrown::HashMap;
 
 use crate::{
@@ -8,8 +6,9 @@ use crate::{
 };
 
 use super::{
-    frame_alloc, page_table::PTEFlags, translated_byte_buffer, FrameTracker, MapPermission,
-    PageTable, PhysPageNum, UserBuffer, VirtAddr, VirtPageNum, address::VPNRange, frame_allocator::frame_alloc_without_clear,
+    address::VPNRange, frame_alloc, frame_allocator::frame_alloc_without_clear,
+    page_table::PTEFlags, translated_byte_buffer, FrameTracker, MapPermission, PageTable, PhysAddr,
+    PhysPageNum, UserBuffer, VirtAddr, VirtPageNum,
 };
 
 bitflags! {
@@ -42,7 +41,7 @@ pub struct MmapArea {
     pub fd_one: FdOne,
     pub fd: usize,
     pub offset: usize,
-    pub data_frames: HashMap<usize, FrameTracker>,
+    pub data_frames: HashMap<usize, Option<FrameTracker>>,
 }
 
 impl MmapArea {
@@ -56,7 +55,7 @@ impl MmapArea {
         offset: usize,
     ) -> Self {
         Self {
-            vpn_range : VPNRange::new(start_vpn, end_vpn),
+            vpn_range: VPNRange::new(start_vpn, end_vpn),
             map_perm,
             flags,
             fd_one,
@@ -79,7 +78,7 @@ impl MmapArea {
         for (vpn, _) in (&another.data_frames).into_iter() {
             let frame = frame_alloc_without_clear().unwrap();
             // let frame = frame_alloc().unwrap();
-            new_area.data_frames.insert(*vpn, frame);
+            new_area.data_frames.insert(*vpn, Some(frame));
         }
         new_area
     }
@@ -100,33 +99,31 @@ impl MmapArea {
     /// 这里有问题：pte_flags可能被sys_mprotect修改，导致其与self.map_perm不一致.
     /// fake solution here.
     pub fn map_all(&self, page_table: &mut PageTable) {
-        for (vpn, frame) in (&self.data_frames).into_iter() {
-            let ppn = frame.ppn;
-            // let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
-            let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap()
-                | PTEFlags::U
-                | PTEFlags::R
-                | PTEFlags::W;
-            page_table.map((*vpn).into(), ppn, pte_flags);
+        for (vpn, frame_unwrapped) in (&self.data_frames).into_iter() {
+            if let Some(frame) = frame_unwrapped {
+                let ppn = frame.ppn;
+                // let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
+                let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap()
+                    | PTEFlags::U
+                    | PTEFlags::R
+                    | PTEFlags::W;
+                page_table.map((*vpn).into(), ppn, pte_flags);
+            }
         }
     }
 
     /// (lazy)分配一个物理页帧并建立vpn到它的mmap映射，同时从fd中读取对应文件，失败返回-1
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> isize {
-        let ppn: PhysPageNum;
-        let frame = frame_alloc_without_clear().unwrap();
-        // let frame = frame_alloc().unwrap();
-        ppn = frame.ppn;
-        self.data_frames.insert(vpn.0, frame);
-
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
-        page_table.map(vpn, ppn, pte_flags);
 
         // println!{"The translate_va 0x800001f0 is 0x{:#?}", page_table.translate_va((0x800001f0 as usize).into())};
         let token = page_table.token();
 
         if self.fd as isize == -1 {
-            super::frame_allocator::frame_clean(ppn);
+            let frame = frame_alloc().unwrap();
+            let ppn = frame.ppn;
+            self.data_frames.insert(vpn.0, Some(frame));
+            page_table.map(vpn, ppn, pte_flags);
             return 0;
         }
 
@@ -134,18 +131,24 @@ impl MmapArea {
             match file {
                 FileClass::File(f) => {
                     let vaddr = VirtAddr::from(vpn).0;
-                    f.set_offset(self.offset + vaddr - VirtAddr::from(self.vpn_range.get_start()).0);
+                    let file_off =
+                        self.offset + vaddr - VirtAddr::from(self.vpn_range.get_start()).0;
+                    f.set_offset(file_off);
                     if !f.readable() {
                         return -1;
                     }
-                    // println!{"The va_start is 0x{:X}, offset of file is {}", vaddr, self.offset+ vaddr - VirtAddr::from(self.start_vpn).0};
-                    // let read_len =
-                    f.read(UserBuffer::new(translated_byte_buffer(
-                        token,
-                        vaddr as *const u8,
-                        PAGE_SIZE,
-                    )));
-                    // println!{"read fd:{} {} bytes", self.fd, read_len};
+                    let pa = unsafe { f.get_data_cache_physaddr(file_off) };
+                    let ppn = PhysAddr::from(pa).floor();
+                    self.data_frames.insert(vpn.0, None);
+                    page_table.map(vpn, ppn, pte_flags);
+
+                    // println! { "The va_start is 0x{:X}, vpn is {:#x?}, offset of file is {}, pa = {:#x?}", vaddr, vpn ,file_off, pa };
+                    // f.read(UserBuffer::new(translated_byte_buffer(
+                    //     token,
+                    //     vaddr as *const u8,
+                    //     PAGE_SIZE,
+                    // )));
+                    // println! {"read fd:{} bytes", self.fd};
                 }
                 _ => {
                     // println!{"not a OS_file"};
@@ -166,7 +169,7 @@ impl MmapArea {
 
     /// 仅在mmaparea中插入映射
     pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
-        self.data_frames.insert(vpn.0, FrameTracker::from_ppn(ppn));
+        self.data_frames
+            .insert(vpn.0, Some(FrameTracker::from_ppn(ppn)));
     }
-
 }
