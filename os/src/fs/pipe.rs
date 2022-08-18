@@ -1,7 +1,7 @@
 use super::{File, OpenFlags};
 use crate::{mm::UserBuffer, syscall::EPIPE};
 
-use alloc::sync::{Arc, Weak};
+use alloc::{sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 
 use crate::task::suspend_current_and_run_next;
@@ -42,7 +42,7 @@ enum RingBufferStatus {
 }
 
 pub struct PipeRingBuffer {
-    arr: [u8; RING_BUFFER_SIZE],
+    arr: Vec<u8>,
     head: usize,
     tail: usize,
     pub sz: usize,
@@ -52,8 +52,10 @@ pub struct PipeRingBuffer {
 
 impl PipeRingBuffer {
     pub fn new() -> Self {
+        let mut buf = Vec::with_capacity(RING_BUFFER_SIZE);
+        unsafe { buf.set_len(RING_BUFFER_SIZE); }
         Self {
-            arr: [0; RING_BUFFER_SIZE],
+            arr: buf,
             head: 0,
             tail: 0,
             sz: 0,

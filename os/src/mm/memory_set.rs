@@ -552,11 +552,11 @@ impl MemorySet {
         // map trampoline & strampoline
         memory_set.map_sigreturn_trampoline();
         memory_set.map_trampoline();
-
+        
         for area in user_space.areas.iter() {
             let mut new_area = MapArea::from_another(area);
             match area.area_type {
-                MapAreaType::UserStack | MapAreaType::TrapContext => {
+                MapAreaType::TrapContext => {
                     // we copy trap_context/user_stack directly
                     memory_set.push(new_area, None, 0);
                     // copy data from another space
@@ -566,7 +566,7 @@ impl MemorySet {
                         dst_ppn.slice_u64().copy_from_slice(src_ppn.slice_u64());
                     }
                 }
-                MapAreaType::ElfReadWriteArea => {
+                MapAreaType::UserStack | MapAreaType::ElfReadWriteArea => {
                     // we apply COW for ElfReadWriteArea
                     // error!("cow-elf area_start:{:?} , area_end:{:?}",area.vpn_range.get_start(),area.vpn_range.get_end());
                     // cow 处理elf逻辑段
