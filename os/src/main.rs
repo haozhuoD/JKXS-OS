@@ -32,12 +32,13 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
+mod test;
 
 use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
 use core::arch::global_asm;
 #[allow(unused)]
 use drivers::block_device_test;
-use spin::{Lazy, Mutex, RwLock};
+use spin::{Lazy, Mutex};
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("userbin.S"));
@@ -53,7 +54,7 @@ fn clear_bss() {
     }
 }
 
-static BOOT_CORE_READY: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
+static BOOT_CORE_READY: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
 static BOOT_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 
 #[no_mangle]
@@ -61,7 +62,7 @@ pub fn rust_main() -> ! {
     save_hartid(); // 这句话之前不能加任何函数调用，否则a0的值会被覆盖
     let hartid = get_hartid();
     info!("Riscv hartid {} init ", hartid);
-    if *(BOOT_CORE_READY.read()) {
+    if *BOOT_CORE_READY.lock() {
         // 如果BOOT_CORE已经准备完毕，则其他核通过others_main启动。否则说明是启动核，直接fall through
         others_main(hartid);
     }
@@ -71,13 +72,15 @@ pub fn rust_main() -> ! {
     fpu::init();
     trap::init();
     trap::enable_timer_interrupt();
+    syscall::init();
     timer::set_next_trigger();
     fs::list_apps();
     fs::init_rootfs();
     // block_device_test();
     task::add_initproc();
-    mm::load_libc_so();
-    info!("(Boot Core) Riscv hartid {} run ", hartid);
+    unsafe { *(crate::monitor::SYSCALL_ENABLE as *mut u8) = 0 ;
+            *(crate::monitor::MAPPING_ENABLE as *mut u8) = 0 ;  };
+    info!("(**Boot Core**) Riscv hartid {} run ", hartid);
     // // get core_clock
     // #[cfg(feature = "board_fu740")]
     // {
@@ -85,10 +88,9 @@ pub fn rust_main() -> ! {
     //     info!("core_freq is 0x{:X} ", core_f);
     // }
 
-    *(BOOT_CORE_READY.write()) = true;
+    *BOOT_CORE_READY.lock() = true;
     // wakeup_other_cores(hartid);
 
-    // while *(BOOT_COUNT.lock()) != 2 {};
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

@@ -10,6 +10,7 @@ pub struct TrapContext {
     pub kernel_sp: usize,
     pub trap_handler: usize,
     pub core_id: usize,
+    pub freg: [usize; 32],
 }
 
 impl TrapContext {
@@ -35,6 +36,7 @@ impl TrapContext {
             kernel_sp,
             trap_handler,
             core_id,
+            freg: [0; 32],
         };
         cx.set_sp(sp);
         cx

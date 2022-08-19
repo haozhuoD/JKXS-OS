@@ -1,5 +1,4 @@
-
-use crate::{CacheMode};
+use crate::CacheMode;
 use crate::fat::END_CLUSTER;
 
 use super:: {
@@ -9,6 +8,7 @@ use super:: {
 	get_info_block_cache,
 	fat32_manager::FAT32Manager,
 	fat::*,
+	chain::*,
 };
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -34,6 +34,10 @@ pub const ATTRIBUTE_LFN      :	u8 = 0x0F;
 pub const DIRENT_SZ:			usize = 32;
 
 type DataBlock = [u8; BLOCK_SZ];
+type DirentBlock = [ShortDirEntry; BLOCK_SZ / DIRENT_SZ];
+
+pub const EMPTY_DIRENT:		isize = -1;
+pub const NOTFIND_DIRENT:	isize = -2;
 
 
 #[repr(packed)]
@@ -214,9 +218,10 @@ impl ShortDirEntry {
 
 		}
 
-		// 没有对拓展名做限制，长度超过3会panic
+		// 扩展名只复制前3字节
 		let mut ext_bytes = [0x20u8; SHORT_EXT_LEN];
-		let _ = &mut ext_bytes[..extension.len()].copy_from_slice(extension.to_ascii_uppercase().as_bytes());
+		let extlen = extension.len().min(3);
+		let _ = &mut ext_bytes[0..extlen].copy_from_slice(&extension.to_ascii_uppercase().as_bytes()[0..extlen]);
 
 
 		Self{
@@ -322,29 +327,17 @@ impl ShortDirEntry {
 
 		let ext_len = (0usize..SHORT_EXT_LEN).find(|i| self.extension[*i] == 0x20u8)
 			.unwrap_or(SHORT_EXT_LEN);
-		let extension = core::str::from_utf8(&self.extension[..ext_len]).unwrap();
 		if ext_len == 0 {
 			name.to_string().to_ascii_lowercase()
 		} else {
+			let extension = core::str::from_utf8(&self.extension[..ext_len]).unwrap();
 			format!("{}.{}", name.to_ascii_lowercase(), extension.to_ascii_lowercase())
 		}
 	}
 
 	pub fn checksum(&self) -> u8 {
-		let mut name_buff = [0u8; 11];
-		let _ = &mut name_buff[0..8].copy_from_slice(&self.name[..]);
-		let _ = &mut name_buff[8..11].copy_from_slice(&self.extension[..]);
-		let mut checksum: u32 = 0;
-		for i in 0..11 {
-			if checksum & 1 == 0 {
-				checksum = (checksum >> 1) + name_buff[i] as u32;
-			} else {
-				checksum = 0x80 + (checksum >> 1) + name_buff[i] as u32;
-			}
-			checksum = checksum & 0xFF;
-		}
-		checksum as u8
-
+		self.name.iter().chain(self.extension.iter())
+            .fold(0, |acc, &ch| acc.rotate_right(1).wrapping_add(ch))
 	}
 
 	pub fn set_size(&mut self, size: u32) {
@@ -363,7 +356,7 @@ impl ShortDirEntry {
 
 	// 获取文件起始簇号,在文件尚未分配簇时为0
 	pub fn first_cluster(&self) -> u32 {
-		((self.first_cluster_high as u32) << 16) + (self.first_cluster_low as u32)
+		((self.first_cluster_high as u32) << 16) | (self.first_cluster_low as u32)
 	}
 
 	pub fn delete(&mut self) {
@@ -383,16 +376,30 @@ impl ShortDirEntry {
 		offset: usize,
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice>
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> (u32, usize, usize) {
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
+		// let bytes_per_sector = manager.bytes_per_sector() as usize;
+		// let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		// let cluster_index = offset / bytes_per_cluster;
+		// let curr_cluster = fat_reader.get_cluster_at(
+		// 	self.first_cluster(), 
+		// 	cluster_index, 
+		// 	block_device
+		// );
+		// let curr_sector = manager.first_sector_of_cluster(curr_cluster)
+		// 							+ (offset - cluster_index as usize * bytes_per_cluster)
+		// 							/ bytes_per_sector;
+		// (curr_cluster, curr_sector, offset % bytes_per_sector)
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
-		let cluster_index = manager.cluster_of_offset(offset);
-		let curr_cluster = fat_reader.get_cluster_at(
+		let cluster_index = offset / bytes_per_cluster;
+		let curr_cluster = chain.write().get_cluster_at(
 			self.first_cluster(), 
 			cluster_index, 
-			block_device
+			block_device,
+			fat
 		);
 		let curr_sector = manager.first_sector_of_cluster(curr_cluster)
 									+ (offset - cluster_index as usize * bytes_per_cluster)
@@ -407,16 +414,18 @@ impl ShortDirEntry {
 		buf: &mut [u8],
 		manager: &Arc<FAT32Manager>,
 		fat: &Arc<RwLock<FAT>>,
-		block_device: &Arc<dyn BlockDevice> 
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
 	) -> usize {
-		let fat_reader = fat.read();
+		// let fat_reader = fat.read();
 		let bytes_per_sector = manager.bytes_per_sector() as usize;
 		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
 		let mut curr_offset = offset;
 		let end: usize;
 		// 边界检查
 		if self.is_dir() {
-			let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			// let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			let size = bytes_per_cluster * chain.write().cluster_count(self.first_cluster(), block_device, fat) as usize;
 			end = (offset + buf.len()).min(size);
 		} else {
 			end = (offset + buf.len()).min(self.size_in_bytes as usize);
@@ -425,12 +434,11 @@ impl ShortDirEntry {
 			return 0;
 		}
 
-		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
 		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
 			return 0;
 		}
-		let mut curr_cluster = curr_cluster;
-		let mut curr_sector = curr_sector;
 
 		let mut read_size = 0usize;
 		loop {
@@ -439,39 +447,50 @@ impl ShortDirEntry {
 			end_current_block = end_current_block.min(end);
 			let block_read_size = end_current_block - curr_offset;
 			let dst = &mut buf[read_size..read_size + block_read_size];
-			if self.is_dir() {
-				get_info_block_cache(  // 目录项通过Info block cache读取
-					curr_sector, 
-					Arc::clone(block_device), 
-					CacheMode::READ
-				)
-				.read()
-				.read(0, |data_block: &DataBlock| {
-					let src = &data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_read_size];
-					dst.copy_from_slice(src);
-				});
-			} else {
-				get_data_block_cache(  // 文件内容通过Data block cache读取
-					curr_sector, 
-					Arc::clone(block_device), 
-					CacheMode::READ
-				)
-				.read()
-				.read(0, |data_block: &DataBlock| {
-					let src = &data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_read_size];
-					dst.copy_from_slice(src);
-				});
-			}
+			// if self.is_dir() {
+			// 	get_info_block_cache(  // 目录项通过Info block cache读取
+			// 		curr_sector, 
+			// 		Arc::clone(block_device), 
+			// 		CacheMode::READ
+			// 	)
+			// 	.read()
+			// 	.read(0, |data_block: &DataBlock| {
+			// 		let src = &data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_read_size];
+			// 		dst.copy_from_slice(src);
+			// 	});
+			// } else {
+			// 	get_data_block_cache(  // 文件内容通过Data block cache读取
+			// 		curr_sector, 
+			// 		Arc::clone(block_device), 
+			// 		CacheMode::READ
+			// 	)
+			// 	.read()
+			// 	.read(0, |data_block: &DataBlock| {
+			// 		let src = &data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_read_size];
+			// 		dst.copy_from_slice(src);
+			// 	});
+			// }
+			get_data_block_cache(
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.read()
+			.read(0, |data_block: &DataBlock| {
+				let src = &data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_read_size];
+				dst.copy_from_slice(src);
+			});
 			read_size += block_read_size;
 			if end_current_block == end {
 				break;
 			}
 			curr_offset = end_current_block;
 			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-			if curr_cluster % bytes_per_cluster as u32 == 0 {
-				curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+			if curr_offset % bytes_per_cluster == 0 {
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain.write().get_next_cluster(curr_cluster, block_device, fat);
 				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-					break;  // TODO: panic?
+					break;
 				}
 				curr_sector = manager.first_sector_of_cluster(curr_cluster);
 			} else {
@@ -480,87 +499,241 @@ impl ShortDirEntry {
 		}
 		read_size
 	}
-
-		// 以偏移量写文件，需要保证offset开始的区间在文件范围内
-		pub fn write_at(
-			&self,
-			offset: usize,
-			buf: &[u8],
-			manager: &Arc<FAT32Manager>,
-			fat: &Arc<RwLock<FAT>>,
-			block_device: &Arc<dyn BlockDevice> 
-		) -> usize {
-			// 不会修改文件size，因此不用获取FAT写锁
-			let fat_reader = fat.read();
-			let bytes_per_sector = manager.bytes_per_sector() as usize;
-			let bytes_per_cluster = manager.bytes_per_cluster() as usize;
-			let mut curr_offset = offset;
-			let end: usize;
-			// 边界检查
-			if self.is_dir() {
-				let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
-				end = (offset + buf.len()).min(size);
-			} else {
-				end = (offset + buf.len()).min(self.size_in_bytes as usize);
-			}
-			assert!(curr_offset <= end);
 	
-			let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
-			if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-				panic!("Write error!");
-			}
-			let mut curr_cluster = curr_cluster;
-			let mut curr_sector = curr_sector;
-	
-			let mut write_size = 0usize;
-			loop {
-				// 将偏移量向上对齐扇区大小
-				let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
-				end_current_block = end_current_block.min(end);
-				let block_write_size = end_current_block - curr_offset;
-				if self.is_dir() {
-					get_info_block_cache(  // 目录项通过Info block cache读取
-						curr_sector, 
-						Arc::clone(block_device), 
-						CacheMode::READ
-					)
-					.write()
-					.modify(0, |data_block: &mut DataBlock| {
-						let src = &buf[write_size..write_size + block_write_size];
-						let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
-						dst.copy_from_slice(src);
-					});
-				} else {
-					get_data_block_cache(  // 文件内容通过Data block cache读取
-						curr_sector, 
-						Arc::clone(block_device), 
-						CacheMode::READ
-					)
-					.write()
-					.modify(0, |data_block: &mut DataBlock| {
-						let src = &buf[write_size..write_size + block_write_size];
-						let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
-						dst.copy_from_slice(src);
-					});
-				}
-				write_size += block_write_size;
-				if end_current_block == end {
-					break;
-				}
-				curr_offset = end_current_block;
-				// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
-				if curr_cluster % bytes_per_cluster as u32 == 0 {
-					curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
-					if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
-						panic!("Write error!");
-					}
-					curr_sector = manager.first_sector_of_cluster(curr_cluster);
-				} else {
-					curr_sector += 1;
-				}
-			}
-			write_size
+	// 找不到时返回(-1, -1),找到了返回短文件名目录项的offset和attribute
+	pub fn find_short_name(
+		&self,
+		offset: usize,
+		name: &str,
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
+	) -> (isize, isize) {
+		assert!(self.is_dir());
+		// let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		// 边界检查
+		// let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		let end = bytes_per_cluster * chain.write().cluster_count(self.first_cluster(), block_device, fat) as usize;
+		if curr_offset >= end {
+			return (EMPTY_DIRENT, EMPTY_DIRENT);
 		}
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			return (EMPTY_DIRENT, EMPTY_DIRENT);
+		}
+
+		let name_upper = name.to_ascii_uppercase();
+		let mut short_offset;
+		let mut short_attr;
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+
+			(short_offset, short_attr) = get_info_block_cache(  // 目录项通过Info block cache读取
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.read()
+			.read(0, |dirent_blk: &DirentBlock| {
+				for (off, short_ent) in dirent_blk.iter().enumerate() {
+					if short_ent.is_empty() {
+						return (EMPTY_DIRENT, EMPTY_DIRENT);
+					} else if short_ent.is_valid() && short_ent.is_short() && name_upper == short_ent.get_name_uppercase() {
+						return ((off * DIRENT_SZ + (curr_offset / bytes_per_sector) * bytes_per_sector) as isize, short_ent.attribute() as isize); 
+					}
+				}
+				(NOTFIND_DIRENT, NOTFIND_DIRENT)
+			});
+
+			if short_offset != NOTFIND_DIRENT {
+				break;
+			}
+			if end_current_block == end {
+				break;
+			}
+			curr_offset = end_current_block;
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_offset % bytes_per_cluster == 0 {
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain.write().get_next_cluster(curr_cluster, block_device, fat);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					panic!("Can not find the short dirent");
+					// break;
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		(short_offset, short_attr)
+	}
+
+	pub fn find_free_dirent(
+		&self,
+		offset: usize,
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
+	) -> usize {
+		assert!(self.is_dir());
+		// let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		// 边界检查
+		// let end = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+		let end = bytes_per_cluster * chain.write().cluster_count(self.first_cluster(), block_device, fat) as usize;
+		if curr_offset >= end {
+			return end;
+		}
+		// let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (mut curr_cluster, mut curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			return 0;
+		}
+
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+
+			let short_offset = get_info_block_cache(  // 目录项通过Info block cache读取
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.read()
+			.read(0, |dirent_blk: &DirentBlock| {
+				dirent_blk.iter().enumerate()
+					.find(|&(_, short_ent)| short_ent.is_empty())
+					.map(|pair| pair.0 * DIRENT_SZ + (curr_offset / bytes_per_sector) * bytes_per_sector)
+			});
+
+			if short_offset.is_some() {
+				return short_offset.unwrap();
+			}
+			curr_offset = end_current_block;
+			if end_current_block == end {
+				break;
+			}
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_offset % bytes_per_cluster == 0 {
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain.write().get_next_cluster(curr_cluster, block_device, fat);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					break;  // TODO: panic?
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		curr_offset
+	}
+
+	// 以偏移量写文件，需要保证offset开始的区间在文件范围内
+	pub fn write_at(
+		&self,
+		offset: usize,
+		buf: &[u8],
+		manager: &Arc<FAT32Manager>,
+		fat: &Arc<RwLock<FAT>>,
+		block_device: &Arc<dyn BlockDevice>,
+		chain: &Arc<RwLock<Chain>>,
+	) -> usize {
+		// 不会修改文件size，因此不用获取FAT写锁
+		// let fat_reader = fat.read();
+		let bytes_per_sector = manager.bytes_per_sector() as usize;
+		let bytes_per_cluster = manager.bytes_per_cluster() as usize;
+		let mut curr_offset = offset;
+		let end: usize;
+		// 边界检查
+		if self.is_dir() {
+			// let size = bytes_per_cluster * fat_reader.cluster_count(self.first_cluster(), block_device) as usize;
+			let size = bytes_per_cluster * chain.write().cluster_count(self.first_cluster(), block_device, fat) as usize;
+			end = (offset + buf.len()).min(size);
+		} else {
+			end = (offset + buf.len()).min(self.size_in_bytes as usize);
+		}
+		assert!(curr_offset <= end);
+
+		// let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device);
+		let (curr_cluster, curr_sector, _) = self.get_pos(offset, manager, fat, block_device, chain);
+		if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+			panic!("Write error! offset = {}, chain = {:?}, fc = {}", offset, chain.read().chain, self.first_cluster());
+		}
+		let mut curr_cluster = curr_cluster;
+		let mut curr_sector = curr_sector;
+
+		let mut write_size = 0usize;
+		loop {
+			// 将偏移量向上对齐扇区大小
+			let mut end_current_block = (curr_offset / bytes_per_sector + 1) * bytes_per_sector;
+			end_current_block = end_current_block.min(end);
+			let block_write_size = end_current_block - curr_offset;
+			// if self.is_dir() {
+			// 	get_info_block_cache(  // 目录项通过Info block cache读取
+			// 		curr_sector, 
+			// 		Arc::clone(block_device), 
+			// 		CacheMode::READ
+			// 	)
+			// 	.write()
+			// 	.modify(0, |data_block: &mut DataBlock| {
+			// 		let src = &buf[write_size..write_size + block_write_size];
+			// 		let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
+			// 		dst.copy_from_slice(src);
+			// 	});
+			// } else {
+			// 	get_data_block_cache(  // 文件内容通过Data block cache读取
+			// 		curr_sector, 
+			// 		Arc::clone(block_device), 
+			// 		CacheMode::READ
+			// 	)
+			// 	.write()
+			// 	.modify(0, |data_block: &mut DataBlock| {
+			// 		let src = &buf[write_size..write_size + block_write_size];
+			// 		let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
+			// 		dst.copy_from_slice(src);
+			// 	});
+			// }
+			get_data_block_cache(
+				curr_sector, 
+				Arc::clone(block_device), 
+				CacheMode::READ
+			)
+			.write()
+			.modify(0, |data_block: &mut DataBlock| {
+				let src = &buf[write_size..write_size + block_write_size];
+				let dst = &mut data_block[curr_offset % BLOCK_SZ..curr_offset % BLOCK_SZ + block_write_size];
+				dst.copy_from_slice(src);
+			});
+			write_size += block_write_size;
+			if end_current_block == end {
+				break;
+			}
+			curr_offset = end_current_block;
+			// 如果读完了一个簇，则需要到下一个簇的起始扇区，否则读取当前簇的下一个扇区
+			if curr_offset % bytes_per_cluster == 0 {
+				// curr_cluster = fat_reader.get_next_cluster(curr_cluster, block_device);
+				curr_cluster = chain.write().get_next_cluster(curr_cluster, block_device, fat);
+				if curr_cluster >= END_CLUSTER || curr_cluster == 0 {
+					panic!("Write error!");
+				}
+				curr_sector = manager.first_sector_of_cluster(curr_cluster);
+			} else {
+				curr_sector += 1;
+			}
+		}
+		write_size
+	}
 
 	pub fn as_bytes(&self) -> &[u8] {
         unsafe {

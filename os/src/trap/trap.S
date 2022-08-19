@@ -1,3 +1,4 @@
+.attribute arch, "rv64gc"
 .altmacro
 .macro SAVE_GP n
     sd x\n, \n*8(sp)
@@ -5,10 +6,18 @@
 .macro LOAD_GP n
     ld x\n, \n*8(sp)
 .endm
+.macro SAVE_FP n, m
+    fsd f\n, \m*8(sp)
+.endm
+.macro LOAD_FP n, m
+    fld f\n, \m*8(sp)
+.endm
+
     .section .text.trampoline
     .globl __alltraps
     .globl __restore
     .globl __sigreturn
+    .globl __trap_from_kernel
     .align 2
 __alltraps:
     csrrw sp, sscratch, sp
@@ -32,6 +41,15 @@ __alltraps:
     # read user stack from sscratch and save it in TrapContext
     csrr t2, sscratch
     sd t2, 2*8(sp)
+    # float-reg 38 - 69 
+    # fsd f9, 38*8(sp)
+    .set n, 0
+    .set m, 38
+    .rept 32
+        SAVE_FP %n, %m
+        .set n, n+1
+        .set m, m+1
+    .endr
     # load kernel_satp into t0
     ld t0, 34*8(sp)
     # load trap_handler into t1
@@ -57,6 +75,16 @@ __restore:
     # restore sstatus/sepc
     ld t0, 32*8(sp)
     ld t1, 33*8(sp)
+    # fld fs1, 38*8(sp)
+    # fld f9, 38*8(sp)
+    # float-reg 38 - 69 
+    .set n, 0
+    .set m, 38
+    .rept 32
+        LOAD_FP %n, %m
+        .set n, n+1
+        .set m, m+1
+    .endr
     csrw sstatus, t0
     csrw sepc, t1
     # restore general purpose registers except x0/sp
@@ -77,3 +105,7 @@ __sigreturn:
     li a7, 139
     # syscall SIGRETURN
     ecall
+
+    .align 2
+__trap_from_kernel:
+    call trap_from_kernel

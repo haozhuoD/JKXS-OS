@@ -3,9 +3,10 @@ mod pipe;
 mod stdio;
 mod vfile;
 mod devfs;
+mod fsidx;
 
 use crate::mm::UserBuffer;
-use alloc::sync::Arc;
+use alloc::{sync::Arc, string::String, vec::Vec};
 
 /// 枚举类型，分为普通文件和抽象文件
 /// 普通文件File，特点是支持更多类型的操作，包含seek, set_offset等
@@ -28,5 +29,21 @@ pub trait File: Send + Sync {
 pub use finfo::*;
 pub use pipe::{make_pipe, Pipe,PipeRingBuffer};
 pub use stdio::{Stdin, Stdout};
-pub use vfile::{init_rootfs, list_apps, open_common_file, path2vec, OSFile, OpenFlags};
+pub use vfile::*;
 pub use devfs::open_device_file;
+pub use fsidx::*;
+
+pub fn path2abs<'a>(cwdv: &mut Vec<&'a str>, pathv: &Vec<&'a str>) -> String {
+    for &path_element in pathv.iter() {
+        if path_element == "." {
+            continue;
+        } else if path_element == ".." {
+            cwdv.pop();
+        } else {
+            cwdv.push(path_element);
+        }
+    }
+    let mut abs_path = String::from("/");
+    abs_path.push_str(&cwdv.join("/"));
+    abs_path
+}

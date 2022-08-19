@@ -1,12 +1,16 @@
-#[allow(unused)]
+#![allow(unused)]
 
-pub const MEMORY_END: usize = 0xc000_0000;
+pub const FSIMG_START_PAGENUM : usize = 0x9000_0;
+pub const FSIMG_END_PAGENUM : usize = 0xb000_0;
+
+pub const MEMORY_END: usize = 0xb000_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
+pub const PAGE_MASK: usize = !0xfff;
 
-pub const USER_STACK_SIZE: usize = PAGE_SIZE * 24;
-pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 24;
-pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x8000;
+pub const USER_STACK_SIZE: usize = PAGE_SIZE * 35;
+pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 2;
+pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x4000;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 pub const SIGRETURN_TRAMPOLINE: usize = TRAMPOLINE - PAGE_SIZE;
@@ -28,15 +32,15 @@ pub use crate::board::{CLOCK_FREQ, MMIO};
 
 #[allow(unused)]
 pub fn aligned_up(addr: usize) -> usize {
-    (addr + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE
+    (addr + PAGE_SIZE - 1) & PAGE_MASK
 }
 
 #[allow(unused)]
 pub fn aligned_down(addr: usize) -> usize {
-    addr / PAGE_SIZE * PAGE_SIZE
+    addr & PAGE_MASK
 }
 
 #[allow(unused)]
 pub fn is_aligned(addr: usize) -> bool {
-    addr % PAGE_SIZE == 0
+    (addr & 0x0fff) == 0
 }

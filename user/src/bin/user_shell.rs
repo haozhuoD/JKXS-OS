@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     change_cwd, chdir, close, dup, exec, fork, get_wordlist, longest_common_prefix, open, pipe,
-    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test,
+    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test, busybox_lua_test, lmbench_test, exit,
 };
 
 #[derive(Debug)]
@@ -121,6 +121,8 @@ pub fn reprint_line(line: &str, line_len_inc: isize, former_pos: usize, pos: usi
 pub fn main() -> i32 {
     println!("\nHello, jkxs-OS!\n");
     // libc_test();
+    // busybox_lua_test();
+    // lmbench_test();
     interactive_main();
     shutdown()
 }
@@ -240,7 +242,7 @@ fn interactive_main() -> i32 {
                                     let input_fd = open(input.as_str(), OpenFlags::RDONLY);
                                     if input_fd == -1 {
                                         println!("Error when opening file {}", input);
-                                        return -4;
+                                        exit(-4);
                                     }
                                     let input_fd = input_fd as usize;
                                     close(0);
@@ -282,7 +284,7 @@ fn interactive_main() -> i32 {
                                 // execute new application
                                 if exec(args_copy[0].as_str(), args_addr.as_slice()) == -1 {
                                     println!("Error when executing!");
-                                    return -4;
+                                    exit(-4);
                                 }
                                 unreachable!();
                             } else {
@@ -297,7 +299,6 @@ fn interactive_main() -> i32 {
                         for pid in children.into_iter() {
                             let exit_pid = waitpid(pid as usize, &mut exit_code);
                             assert_eq!(pid, exit_pid);
-                            //println!("Shell: Process {} exited with code {}", pid, exit_code);
                         }
                         cwd_wl = get_wordlist(cwd.as_str()); // 有可能有更改工作目录下目录项的操作
                     }

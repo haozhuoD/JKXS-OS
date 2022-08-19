@@ -3,7 +3,7 @@ TARGET := riscv64gc-unknown-none-elf
 MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
-FS_IMG := ../fat32-fuse/fs.img
+FS_IMG := ../fat32-fuse/fs-img
 SDCARD := /dev/sdb
 CPUS ?= 2
 	
@@ -105,12 +105,24 @@ gdb:
 		-smp $(CPUS) \
 		-s -S
 
+gdb-vir-fsimg:
+	@qemu-system-riscv64 \
+		-m 1G	\
+		-machine virt -nographic \
+		-bios $(BOOTLOADER) \
+		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
+		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device loader,file=$(FS_IMG),addr=0x90000000 \
+		-smp $(CPUS) \
+		-s -S
+
 monitor:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' \
+		-ex 'add-symbol-file ../user/busybox_lua_testsuites/lmbench_all' \
 		-ex 'set arch riscv:rv64' \
 		-ex 'target remote localhost:1234'
-		
-# -ex 'add-symbol-file ../user/busybox_lua_testsuites/lmbench_all' \
+
 # -ex 'add-symbol-file ../user/libc-tests/entry-static.exe'\
 
 run-light:
@@ -139,17 +151,24 @@ HANDIN_BIN := ../os.bin
 handin-fu740: build
 	@cp $(KERNEL_BIN) $(HANDIN_BIN)
 
-local: user-apps
-	@echo Platform: fu740
-	@cp src/linker-fu740.ld src/linker.ld
-	@cargo build $(BUILD_MODE) --features "local_fu740" --offline
-	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
-	@rm src/linker.ld
-	cp /home/dhz/workspace/oscomp-2022/os/target/riscv64gc-unknown-none-elf/$(MODE)/os.bin ./
+# local: user-apps
+# 	@echo Platform: fu740
+# 	@cp src/linker-fu740.ld src/linker.ld
+# 	@cargo build $(BUILD_MODE) --features "local_fu740" --offline
+# 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
+# 	@rm src/linker.ld
+# 	cp /home/dhz/workspace/oscomp-2022/os/target/riscv64gc-unknown-none-elf/$(MODE)/os.bin ./
+
+local: 
+	make -C .. all
 
 move:
 	rm -f ~/nfs/os.bin
-	sudo cp ./os.bin ~/nfs	
+	sudo cp ../os.bin ~/nfs	
+
+move-fsimg:
+	rm -f ~/nfs/fs-img
+	sudo cp $(FS_IMG) ~/nfs
 
 showmount:
 	showmount -e 10.251.176.187

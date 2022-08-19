@@ -1,7 +1,9 @@
-use super::File;
+use super::{File, find_vfile_idx, insert_vfile_idx, path2abs, remove_vfile_idx};
+use super::{Kstat, S_IFCHR, S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, S_IFREG};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use alloc::{string::String, sync::Arc};
 use bitflags::*;
@@ -12,6 +14,7 @@ use spin::{Lazy, Mutex};
 pub struct OSFile {
     readable: bool,
     writable: bool,
+    vfile: Arc<VFile>,
     inner: Arc<Mutex<OSFileInner>>,
 }
 
@@ -19,7 +22,6 @@ pub struct OSFileInner {
     offset: usize,
     atime: u64,
     mtime: u64,
-    vfile: Arc<VFile>,
 }
 
 impl OSFile {
@@ -27,70 +29,58 @@ impl OSFile {
         Self {
             readable,
             writable,
-            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, atime: 0, mtime: 0, vfile })),
+            vfile,
+            inner: Arc::new(Mutex::new(OSFileInner { offset: 0, atime: 0, mtime: 0})),
         }
     }
 
-    pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.lock();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
-        loop {
-            let len = inner.vfile.read_at(inner.offset, &mut buffer);
-            if len == 0 {
-                break;
-            }
-            inner.offset += len;
-            v.extend_from_slice(&buffer[..len]);
-        }
-        v
+    pub unsafe fn read_as_elf(&self) -> &[u8] {
+        self.vfile.read_as_elf()
+    }
+
+    pub unsafe fn get_data_cache_physaddr(&self, offset: usize) -> usize {
+        self.vfile.get_data_cache_physaddr(offset)
     }
 
     pub fn find(&self, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-        let inner = self.inner.lock();
         let pathv = path2vec(path);
         let (readable, writable) = flags.read_write();
-        inner
+        self
             .vfile
             .find_vfile_path(&pathv)
             .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
     }
 
     pub fn remove(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.vfile.remove()
+        self.vfile.remove()
     }
 
     pub fn delete(&self) {
-        self.inner.lock().vfile.delete();
+        self.vfile.delete()
     }
 
     pub fn file_size(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.vfile.get_size() as usize
+        self.vfile.get_size() as usize
     }
 
     pub fn set_file_size(&self, size: u32) {
-        self.inner.lock().vfile.set_size(size);
+        self.vfile.set_size(size);
     }
 
     pub fn dirent_info(&self, offset: usize) -> Option<(String, u32, u32, u8)> {
-        let inner = self.inner.lock();
-        inner.vfile.dirent_info(offset)
+        self.vfile.dirent_info(offset)
     }
 
     pub fn is_dir(&self) -> bool {
-        let inner = self.inner.lock();
-        inner.vfile.is_dir()
+        self.vfile.is_dir()
     }
 
     pub fn inode_id(&self) -> u32 {
-        let inner = self.inner.lock();
-        inner.vfile.first_cluster()
+        self.vfile.first_cluster()
     }
 
     pub fn set_inode_id(&self, inode_id: u32) {
-        self.inner.lock().vfile.set_first_cluster(inode_id);
+        self.vfile.set_first_cluster(inode_id);
     }
 
     pub fn offset(&self) -> usize {
@@ -103,7 +93,7 @@ impl OSFile {
     }
 
     pub fn name(&self) -> String {
-        self.inner.lock().vfile.get_name()
+        self.vfile.get_name()
     }
 
     pub fn set_modification_time(&self, mtime: u64) {
@@ -124,6 +114,22 @@ impl OSFile {
     pub fn accessed_time(&self) -> u64 {
         // self.inner.lock().vfile.accessed_time()
         self.inner.lock().atime
+    }
+
+    pub fn stat(&self) -> Kstat {
+        let mut kstat = Kstat::new();
+        kstat.st_mode = {
+            if self.vfile.is_dir() {
+                S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
+            } else {
+                S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
+            }
+        };
+        // kstat.st_ino = inner.vfile.first_cluster() as u64;
+        kstat.st_size = self.vfile.get_size() as i64;
+        // kstat.st_atime_sec = self.atime as i64;
+        // kstat.st_mtime_sec = self.mtime as i64;
+        kstat
     }
 }
 
@@ -146,6 +152,7 @@ pub fn init_rootfs(){
     let _meminfo = open_common_file("/proc","meminfo", OpenFlags::CREATE | OpenFlags::DIRECTORY).unwrap();
     let _var = open_common_file("/","var", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _tmp = open_common_file("/","tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
+    let _var_tmp = open_common_file("/","/var/tmp", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _dev = open_common_file("/", "dev", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _null = open_common_file("/", "dev/null", OpenFlags::CREATE | OpenFlags::DIRECTORY ).unwrap();
     let _invalid = open_common_file("/", "dev/null/invalid", OpenFlags::CREATE | OpenFlags::RDWR ).unwrap();
@@ -194,12 +201,38 @@ impl OpenFlags {
 }
 
 fn do_create_common_file(
-    cur_vfile: Arc<VFile>,
-    pathv: &Vec<&str>,
+    cwd: &str,
+    path: &str,
     flags: OpenFlags,
+    abs_path: &str,
+    parent_path: &str,
+    child_name: &str,
 ) -> Option<Arc<OSFile>> {
-    let mut pathv = pathv.clone();
-    let name = pathv.pop().unwrap_or("/");
+    if let Some(parent_dir) = find_vfile_idx(parent_path) {
+        let attribute = {
+            if flags.contains(OpenFlags::DIRECTORY) {
+                ATTRIBUTE_DIRECTORY
+            } else {
+                ATTRIBUTE_ARCHIVE
+            }
+        };
+        let (readable, writable) = flags.read_write();
+        return parent_dir
+            .create(child_name, attribute)
+            .map(|vfile| {
+                insert_vfile_idx(abs_path, vfile.clone());
+                Arc::new(OSFile::new(readable, writable, vfile))
+            });
+    }
+    let mut pathv = path2vec(path);
+    pathv.pop();
+    let cur_vfile = {
+        if cwd == "/" {
+            ROOT_VFILE.clone()
+        } else {
+            ROOT_VFILE.find_vfile_path(&path2vec(cwd)).unwrap()
+        }
+    };
     if let Some(parent_dir) = cur_vfile.find_vfile_path(&pathv) {
         let attribute = {
             if flags.contains(OpenFlags::DIRECTORY) {
@@ -210,34 +243,41 @@ fn do_create_common_file(
         };
         let (readable, writable) = flags.read_write();
         parent_dir
-            .create(name, attribute)
-            .map(|vfile| Arc::new(OSFile::new(readable, writable, vfile)))
+            .create(child_name, attribute)
+            .map(|vfile| {
+                insert_vfile_idx(abs_path, vfile.clone());
+                Arc::new(OSFile::new(readable, writable, vfile))
+            })
     } else {
         None
     }
 }
 
 pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSFile>> {
-    let cur_vfile = {
-        if cwd == "/" {
-            ROOT_VFILE.clone()
-        } else {
-            let wpath = path2vec(cwd);
-            ROOT_VFILE.find_vfile_path(&wpath).unwrap()
-        }
-    }; // 当前工作路径对应节点
-    let (readable, writable) = flags.read_write();
-    // println!("open_file");
-
-    let pathv = path2vec(path);
-
-    // 节点是否存在？
-    if let Some(inode) = cur_vfile.find_vfile_path(&pathv) {
-        // println!("exist");
+    let abs_path = if is_abs_path(path) {
+        path.to_string()
+    } else {
+        let mut wpath = {
+            if cwd == "/" {
+                Vec::with_capacity(32)
+            } else {
+                path2vec(cwd)
+            }
+        };
+        path2abs(&mut wpath, &path2vec(path))
+    };
+    // 首先在FSIDX中查找文件是否存在
+    if let Some(inode) = find_vfile_idx(&abs_path) {
         if flags.contains(OpenFlags::TRUNC) {
+            let (mut parent_path, child_name) = abs_path.rsplit_once("/").unwrap();
+            if parent_path.is_empty() {
+                parent_path = "/";
+            }
+            remove_vfile_idx(&abs_path);
             inode.remove();
-            return do_create_common_file(cur_vfile, &pathv, flags);
+            return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
         }
+        let (readable, writable) = flags.read_write();
         let vfile = OSFile::new(readable, writable, inode);
         if flags.contains(OpenFlags::APPEND) {
             vfile.set_offset(vfile.file_size());
@@ -245,10 +285,53 @@ pub fn open_common_file(cwd: &str, path: &str, flags: OpenFlags) -> Option<Arc<O
         return Some(Arc::new(vfile));
     }
 
+    // 若在FSIDX中无法找到，尝试在FSIDX寻找父级目录
+    let (mut parent_path, child_name) = abs_path.rsplit_once("/").unwrap();
+    if parent_path.is_empty() {
+        parent_path = "/";
+    }
+    if let Some(parent_inode) = find_vfile_idx(parent_path) {
+        if let Some(inode) = parent_inode.find_vfile_name(child_name).map(|f| Arc::new(f)) {
+            if flags.contains(OpenFlags::TRUNC) {
+                remove_vfile_idx(&abs_path);
+                inode.remove();
+                return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
+            }
+            insert_vfile_idx(&abs_path, inode.clone());
+            let (readable, writable) = flags.read_write();
+            let vfile = OSFile::new(readable, writable, inode);
+            if flags.contains(OpenFlags::APPEND) {
+                vfile.set_offset(vfile.file_size());
+            }
+            return Some(Arc::new(vfile));
+        } 
+    } else {
+        let cur_vfile = {
+            if cwd == "/" {
+                ROOT_VFILE.clone()
+            } else {
+                ROOT_VFILE.find_vfile_path(&path2vec(cwd)).unwrap()
+            }
+        };
+        if let Some(inode) = cur_vfile.find_vfile_path(&path2vec(path)) {
+            if flags.contains(OpenFlags::TRUNC) {
+                remove_vfile_idx(&abs_path);
+                inode.remove();
+                return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
+            }
+            insert_vfile_idx(&abs_path, inode.clone());
+            let (readable, writable) = flags.read_write();
+            let vfile = OSFile::new(readable, writable, inode);
+            if flags.contains(OpenFlags::APPEND) {
+                vfile.set_offset(vfile.file_size());
+            }
+            return Some(Arc::new(vfile));
+        }
+    }
+
     // 节点不存在
     if flags.contains(OpenFlags::CREATE) {
-        // println!("don't exist");
-        return do_create_common_file(cur_vfile, &pathv, flags);
+        return do_create_common_file(cwd, path, flags, &abs_path, parent_path, child_name);
     }
     None
 }
@@ -263,8 +346,10 @@ impl File for OSFile {
     fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = inner.vfile.read_at(inner.offset, *slice);
+        for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter_mut() {
+            let read_size = self.vfile.read_at(inner.offset, unsafe {
+                core::slice::from_raw_parts_mut(slice.0 as *mut u8, slice.1 - slice.0)
+            });
             if read_size == 0 {
                 break;
             }
@@ -276,9 +361,11 @@ impl File for OSFile {
     fn write(&self, buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = inner.vfile.write_at(inner.offset, *slice);
-            assert_eq!(write_size, slice.len());
+        for slice in buf.bufvec.bufs[0..buf.bufvec.sz].iter() {
+            let write_size = self.vfile.write_at(inner.offset, unsafe {
+                core::slice::from_raw_parts(slice.0 as *const u8, slice.1 - slice.0)
+            });
+            assert_eq!(write_size, slice.1 - slice.0);
             inner.offset += write_size;
             total_write_size += write_size;
         }
@@ -292,6 +379,12 @@ impl File for OSFile {
     }
 }
 
+#[inline(always)]
 pub fn path2vec(path: &str) -> Vec<&str> {
-    path.split("/").filter(|x| *x != "").collect()
+    path.split('/').filter(|s| !s.is_empty()).collect()
+}
+
+#[inline(always)]
+pub fn is_abs_path(path: &str) -> bool {
+    unsafe { *path.as_ptr() == '/' as u8}
 }

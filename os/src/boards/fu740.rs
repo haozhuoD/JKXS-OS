@@ -1,4 +1,4 @@
-pub const CLOCK_FREQ: usize = 1000000; //???
+pub const CLOCK_FREQ: usize =  1000000;//1000000000; // 1G hz
 
 pub const MMIO: &[(usize, usize)] = &[
     // we don't need clint in S priv when running
@@ -52,7 +52,7 @@ pub const MMIO: &[(usize, usize)] = &[
                                // (0x0020_0000_0000, 0x003F_FFFF_FFFF),  // PCIe */           0x20_0000_0000  0x003F_FFFF_FFFF
 ];
 
-// pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
+pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
 
-pub type BlockDeviceImpl = crate::drivers::block::VirtIOFSImg;
+// pub type BlockDeviceImpl = crate::drivers::block::VirtIOFSImg;
 pub const MAX_CPU_NUM: usize = 5;

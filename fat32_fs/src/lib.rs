@@ -6,6 +6,7 @@ mod block_cache;
 mod block_dev;
 mod fsimg;
 mod layout;
+mod chain;
 mod fat;
 mod fat32_manager;
 mod vfs;
@@ -34,10 +35,10 @@ pub use fsimg::{
     get_data_block_cache,
     get_info_block_cache,
     set_start_sector,
-    DATA_BLOCK_CACHE_MANAGER,
-    INFO_BLOCK_CACHE_MANAGER
+    BLOCK_CACHE_MANAGER,
 };
 pub use layout::*;
 pub use fat::FAT;
+pub use chain::*;
 pub use fat32_manager::*;
 pub use vfs::VFile;

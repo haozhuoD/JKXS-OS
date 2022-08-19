@@ -1,18 +1,19 @@
 use crate::fs::{
-    make_pipe, open_common_file, path2vec, BitOpt, DType, FSDirent, FdSet, File, FileClass, IOVec, Kstat,
-    OSFile, OpenFlags, Pollfd, Statfs, TimeSpec, POLLIN, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR,
-    S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, open_device_file,
+    make_pipe, open_common_file, open_device_file, path2vec, remove_vfile_idx, BitOpt, DType,
+    FSDirent, FdSet, File, FileClass, IOVec, Kstat, OSFile, OpenFlags, Pollfd, Statfs, POLLIN,
+    SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR, S_IFDIR, S_IFREG, S_IRWXG, S_IRWXO, S_IRWXU, is_abs_path,
 };
 use crate::gdb_println;
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
+    UserBuffVec,
 };
 
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
 use crate::syscall::process;
-use crate::task::{current_process, current_user_token, suspend_current_and_run_next};
+use crate::task::{current_process, current_user_token, suspend_current_and_run_next, TimeSpec};
 use crate::timer::{get_time_ns, NSEC_PER_SEC};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -22,15 +23,15 @@ use fat32_fs::DIRENT_SZ;
 use super::errorno::*;
 
 const AT_FDCWD: isize = -100;
-const UTIME_NOW: i64 = (1 << 30) - 1;
-const UTIME_OMIT: i64 = (1 << 30) - 2;
+const UTIME_NOW: usize = (1 << 30) - 1;
+const UTIME_OMIT: usize = (1 << 30) - 2;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
-        return -EPERM;
+        return -EBADF;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -39,34 +40,25 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.writable() {
-            return -EPERM;
+            return -EINVAL;
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-
+        drop(process);
         let ret = f.write(UserBuffer::new(translated_byte_buffer(token, buf, len)));
-        if fd == 2 {
-            let _str = str::replace(translated_str(token, buf).as_str(), "\n", "\\n");
+        if fd >= 2 {
             gdb_println!(
                 SYSCALL_ENABLE,
-                "sys_write(fd: {}, buf: \"{}\", len: {}) = {}",
+                "sys_write(fd: {}, buf: {:#x?}, len: {}) = {}",
                 fd,
-                _str,
-                len,
-                ret
-            );
-        } else if fd > 2 {
-            gdb_println!(
-                SYSCALL_ENABLE,
-                "sys_write(fd: {}, buf: ?, len: {}) = {}",
-                fd,
+                buf,
                 len,
                 ret
             );
         }
         ret as isize
     } else {
-        -EPERM
+        -EBADF
     }
 }
 
@@ -75,7 +67,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let process = current_process();
     let inner = process.acquire_inner_lock();
     if fd >= inner.fd_table.len() {
-        return -EPERM;
+        return -EBADF;
     }
     if let Some(file) = &inner.fd_table[fd] {
         let f: Arc<dyn File + Send + Sync>;
@@ -84,63 +76,98 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
             FileClass::Abs(fi) => f = fi.clone(),
         }
         if !f.readable() {
-            return -EPERM;
+            return -EINVAL;
         }
         // release current task TCB manually to avoid multi-borrow
+        // 为什么要提前drop掉？因为在read/write的过程可能会触发suspend_current/exit_current
         drop(inner);
+        drop(process);
         let ret = f.read(UserBuffer::new(translated_byte_buffer(token, buf, len)));
         if fd > 2 {
             gdb_println!(
                 SYSCALL_ENABLE,
-                "sys_read(fd: {}, buf: *** , len: {}) = {}",
+                "sys_read(fd: {}, buf: {:#x?} , len: {}) = {}",
                 fd,
+                buf,
                 len,
                 ret
             );
         }
         ret as isize
     } else {
-        -EPERM
+        -EBADF
     }
 }
 
 pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isize {
+    if path as usize == 0 {
+        return -EFAULT;
+    }
     let token = current_user_token();
+    let mut path = translated_str(token, path);
+
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
-    let mut path = translated_str(token, path);
+
     let flags = OpenFlags::from_bits(flags).unwrap();
     gdb_println!(
         SYSCALL_ENABLE,
-        "***sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = ?",
+        "***sys_open_at(dirfd: {}, path: {:#x?}, flags: {:#x?}, mode: {:#x?}) = ?",
         dirfd,
         path,
         flags,
         _mode
     );
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        inner.cwd.clone()
-    } else {
-        String::from("/")
-    };
+    // let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
+    //     inner.cwd.clone()
+    // } else {
+    //     String::from("/")
+    // };
 
-    let ret = {
-        if let Some(devfile) = open_device_file(cwd.as_str(), path.as_str(), flags) {
+    // let ret = {
+    //     if let Some(devfile) = open_device_file(cwd.as_str(), path.as_str(), flags) {
+    //         let fd = inner.alloc_fd(0);
+    //         inner.fd_table[fd] = Some(FileClass::Abs(devfile));
+    //         fd as isize
+    //     } else if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
+    //         let fd = inner.alloc_fd(0);
+    //         inner.fd_table[fd] = Some(FileClass::File(vfile));
+    //         fd as isize
+    //     } else {
+    //         -ENOENT
+    //     }
+    // };
+
+    let ret;
+    if dirfd == AT_FDCWD && !is_abs_path(&path) {
+        ret = if let Some(devfile) = open_device_file(&inner.cwd, path.as_str(), flags) {
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::Abs(devfile));
             fd as isize
-        } else if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
+        } else if let Some(vfile) = open_common_file(&inner.cwd, path.as_str(), flags) {
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
             -ENOENT
         }
-    };
+    } else {
+        ret = if let Some(devfile) = open_device_file("/", path.as_str(), flags) {
+            let fd = inner.alloc_fd(0);
+            inner.fd_table[fd] = Some(FileClass::Abs(devfile));
+            fd as isize
+        } else if let Some(vfile) = open_common_file("/", path.as_str(), flags) {
+            let fd = inner.alloc_fd(0);
+            inner.fd_table[fd] = Some(FileClass::File(vfile));
+            fd as isize
+        } else {
+            -ENOENT
+        }
+    }
 
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_open_at(dirfd: {}, path: {:?}, flags: {:#x?}, mode: {:#x?}) = {}",
+        "sys_open_at(dirfd: {}, path: {:#x?}, flags: {:#x?}, mode: {:#x?}) = {}",
         dirfd,
         path,
         flags,
@@ -153,11 +180,7 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
 pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
     let mut inner = process.acquire_inner_lock();
-    if fd >= inner.fd_table.len() {
-        gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
-        return -EPERM;
-    }
-    if inner.fd_table[fd].is_none() {
+    if fd >= inner.fd_table.len() || inner.fd_table[fd].is_none() {
         gdb_println!(SYSCALL_ENABLE, "sys_close(fd: {}) = {}", fd, -EPERM);
         return -EPERM;
     }
@@ -238,50 +261,44 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize) -> isize {
     new_fd as isize
 }
 
-fn fstat_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer) -> isize {
-    let mut kstat = Kstat::new();
-    kstat.st_mode = {
-        if f.name() == "null" {
-            S_IFCHR
-        } else if f.is_dir() {
-            S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO
-        } else {
-            S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO
-        }
-    };
-    kstat.st_ino = f.inode_id() as u64;
-    kstat.st_size = f.file_size() as i64;
-    kstat.st_atime_sec = f.accessed_time() as i64;
-    kstat.st_mtime_sec = f.modification_time() as i64;
-    userbuf.write(kstat.as_bytes());
-    0
-}
-
 /// 将文件描述符为fd的文件信息填入buf
 pub fn sys_fstat(fd: isize, buf: *mut u8) -> isize {
     let token = current_user_token();
     let process = current_process();
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let inner = process.acquire_inner_lock();
-    let cwd = inner.cwd.clone();
     let mut userbuf = UserBuffer::new(buf_vec);
 
     let ret = if fd == AT_FDCWD {
-        fstat_inner(
-            open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
-            &mut userbuf,
-        )
-    } else if fd < 0 || fd >= inner.fd_table.len() as isize {
-        -EPERM
+        // fstat_inner(
+        //     open_common_file(&cwd, "", OpenFlags::RDONLY).unwrap(),
+        //     &mut userbuf,
+        // )
+        let cwd = inner.cwd.clone();
+        userbuf.copy_to_user(
+            open_common_file(&cwd, "", OpenFlags::RDONLY)
+                .unwrap()
+                .stat()
+                .as_bytes(),
+        );
+        0
+    // } else if fd < 0 || fd >= inner.fd_table.len() as isize {
+    //     -EPERM
+    // } else {
+    //     if let Some(file) = inner.fd_table[fd as usize].clone() {
+    //         match file {
+    //             FileClass::File(f) => fstat_inner(f, &mut userbuf),
+    //             _ => -EPERM,
+    //         }
+    //     } else {
+    //         -EPERM
+    //     }
+    // };
+    } else if let Some(Some(FileClass::File(f))) = inner.fd_table.get(fd as usize) {
+        userbuf.copy_to_user(f.stat().as_bytes());
+        0
     } else {
-        if let Some(file) = inner.fd_table[fd as usize].clone() {
-            match file {
-                FileClass::File(f) => fstat_inner(f, &mut userbuf),
-                _ => -EPERM,
-            }
-        } else {
-            -EPERM
-        }
+        -EPERM
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -301,17 +318,35 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let mut userbuf = UserBuffer::new(buf_vec);
 
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
-        process.acquire_inner_lock().cwd.clone()
-    } else {
-        String::from("/")
-    };
+    // let cwd = if !is_abs_path(&path) && dirfd == AT_FDCWD {
+    //     process.acquire_inner_lock().cwd.clone()
+    // } else {
+    //     String::from("/")
+    // };
 
-    let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
-        fstat_inner(osfile, &mut userbuf)
+    // let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
+    //     // fstat_inner(osfile, &mut userbuf)
+    //     userbuf.copy_to_user(osfile.stat().as_bytes());
+    //     0
+    // } else {
+    //     -ENOENT
+    // };
+    let ret;
+    if !is_abs_path(&path) && dirfd == AT_FDCWD {
+        ret = if let Some(osfile) = open_common_file(&process.acquire_inner_lock().cwd, &path, OpenFlags::RDONLY) {
+            userbuf.copy_to_user(osfile.stat().as_bytes());
+            0
+        } else {
+            -ENOENT
+        };
     } else {
-        -ENOENT
-    };
+        ret = if let Some(osfile) = open_common_file("/", &path, OpenFlags::RDONLY) {
+            userbuf.copy_to_user(osfile.stat().as_bytes());
+            0
+        } else {
+            -ENOENT
+        };
+    }
 
     gdb_println!(
         SYSCALL_ENABLE,
@@ -338,7 +373,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> isize {
 
     let ret = unsafe {
         let cwd_buf = core::slice::from_raw_parts(cwd_str.as_ptr(), cwd_str.len());
-        user_buf.write(cwd_buf) as isize
+        user_buf.copy_to_user(cwd_buf) as isize
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -355,7 +390,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, _mode: u32) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
 
-    let cwd = if dirfd == AT_FDCWD && !path.starts_with("/") {
+    let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
         process.acquire_inner_lock().cwd.clone()
     } else {
         String::from("/")
@@ -405,7 +440,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let mut path = translated_str(token, path);
     let mut inner = process.acquire_inner_lock();
 
-    let old_cwd = if !path.starts_with("/") {
+    let old_cwd = if !is_abs_path(&path) {
         inner.cwd.clone()
     } else {
         String::from("/")
@@ -413,7 +448,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
     let ret = {
         if let Some(osfile) = open_common_file(old_cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
             if osfile.is_dir() {
-                if path.starts_with("/") {
+                if is_abs_path(&path) {
                     if !path.ends_with("/") {
                         path.push('/');
                     }
@@ -425,7 +460,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
 
                     // cwdv.pop();
                     for &path_element in pathv.iter() {
-                        if path_element == "." || path_element == "" {
+                        if path_element == "." {
                             continue;
                         } else if path_element == ".." {
                             cwdv.pop();
@@ -480,7 +515,7 @@ fn getdents64_inner(f: Arc<OSFile>, userbuf: &mut UserBuffer, len: usize) -> isi
         }
         offset += DIRENT_SZ;
     }
-    userbuf.write(dentry_buf.as_slice());
+    userbuf.copy_to_user(dentry_buf.as_slice());
     f.set_offset(offset);
     nread as isize
 }
@@ -548,14 +583,10 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
     let path = translated_str(token, path);
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
-        let dirfd = dirfd as usize;
-        if dirfd >= inner.fd_table.len() {
-            return -EPERM;
-        }
-        if let Some(FileClass::File(osfile)) = &inner.fd_table[dirfd] {
+        if let Some(Some(FileClass::File(osfile))) = inner.fd_table.get(dirfd as usize) {
             if let Some(osfile) = osfile.find(path.as_str(), OpenFlags::empty()) {
                 osfile.remove();
                 gdb_println!(
@@ -571,12 +602,18 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _: u32) -> isize {
         return -EPERM;
     }
     if let Some(osfile) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
+        let abs_path = if is_abs_path(&path) {
+            path
+        } else {
+            base_path.to_string() + &path
+        };
+        remove_vfile_idx(&abs_path);
         osfile.remove();
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_unlinkat(dirfd = {}, path = {:#?}) = {}",
             dirfd,
-            path,
+            abs_path,
             0
         );
         return 0;
@@ -746,16 +783,33 @@ pub fn sys_sendfile(out_fd: usize, in_fd: usize, offset: *mut usize, count: usiz
         }
 
         // sendfile
-        let mut buf = vec![0u8; count];
-        let userbuf_read = UserBuffer::new(vec![unsafe {
-            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), count)
-        }]);
+        // 这里我们仍然采用UserBuffer，虽然实际上没有移入用户空间
+        let mut buf = vec![0u8; 0x2000];
+
+        let buf_vec_read = unsafe {
+            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
+                buf.as_mut_slice().as_mut_ptr(),
+                buf.as_slice().len(),
+            ))
+        };
+
+        let userbuf_read = UserBuffer::new(buf_vec_read);
         let read_cnt = fin_inner.read(userbuf_read);
 
-        let userbuf_write = UserBuffer::new(vec![unsafe {
-            core::slice::from_raw_parts_mut(buf.as_mut_slice().as_mut_ptr(), read_cnt)
-        }]);
+        if read_cnt > buf.len() {
+            panic!("sendfile buffer overflow");
+        }
+
+        let buf_vec_write = unsafe {
+            UserBuffVec::from_single_slice(core::slice::from_raw_parts_mut(
+                buf.as_mut_slice().as_mut_ptr(),
+                read_cnt,
+            ))
+        };
+    
+        let userbuf_write = UserBuffer::new(buf_vec_write);
         let ret = fout_inner.write(userbuf_write) as isize;
+
         gdb_println!(
             SYSCALL_ENABLE,
             "sys_sendfile(out_fd = {}, in_fd = {}, offset = {:#x?}, count = {}) = {}",
@@ -785,7 +839,7 @@ pub fn sys_utimensat(
     };
     let mut base_path = inner.cwd.as_str();
     // 如果path是绝对路径，则dirfd被忽略
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
         let dirfd = dirfd as usize;
@@ -831,7 +885,6 @@ pub fn sys_utimensat(
         );
         return -ENOENT;
     }
-    // println!("base_path:{}, path: {}", base_path, path);
     if let Some(f) = open_common_file(base_path, path.as_str(), OpenFlags::empty()) {
         do_utimensat(f, times, token);
         gdb_println!(
@@ -860,13 +913,13 @@ fn do_utimensat(file: Arc<OSFile>, times: *const TimeSpec, token: usize) {
         file.set_modification_time(curtime);
     } else {
         let atime_ts = translated_ref(token, times);
-        match atime_ts.tv_nsec {
+        match atime_ts.tv_usec {
             UTIME_NOW => file.set_accessed_time(curtime),
             UTIME_OMIT => (),
             _ => file.set_accessed_time(atime_ts.tv_sec as u64),
         };
         let mtime_ts = translated_ref(token, unsafe { times.add(1) });
-        match mtime_ts.tv_nsec {
+        match mtime_ts.tv_usec {
             UTIME_NOW => file.set_modification_time(curtime),
             UTIME_OMIT => (),
             _ => file.set_modification_time(mtime_ts.tv_sec as u64),
@@ -881,7 +934,7 @@ pub fn sys_faccessat(dirfd: isize, path: *const u8, _mode: usize, flags: usize) 
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as u32).unwrap();
     let mut base_path = inner.cwd.as_str();
-    if path.starts_with("/") {
+    if is_abs_path(&path) {
         base_path = "/";
     } else if dirfd != AT_FDCWD {
         let dirfd = dirfd as usize;
@@ -982,12 +1035,12 @@ pub fn sys_pselect(
     timeout: *mut TimeSpec,
 ) -> isize {
     let token = current_user_token();
-    let process = current_process();
-    let inner = process.acquire_inner_lock();
     let mut ret = 0isize;
 
     let time = translated_refmut(token, timeout);
-    if time.tv_sec == 0 && time.tv_nsec == 0 {
+    if time.tv_sec == 0 && time.tv_usec == 0 {
+        let process = current_process();
+        let inner = process.acquire_inner_lock();
         ////pselect非阻塞处理 todo todo
         // 处理 read fd set
         if rfds as usize != 0 {
@@ -1076,8 +1129,7 @@ pub fn sys_pselect(
             ret
         );
     } else {
-        //pselect阻塞处理 todo erro fd set 处理
-        drop(inner);
+        // pselect阻塞处理 todo erro fd set 处理
         // 内核保存一份 read_fds
         let rfd_clone: u128;
         if rfds as usize != 0 {
@@ -1101,6 +1153,7 @@ pub fn sys_pselect(
         }
 
         loop {
+            let process = current_process();
             let inner = process.acquire_inner_lock();
             let mut ret = 0isize;
 
@@ -1175,6 +1228,7 @@ pub fn sys_pselect(
                 //     time,
                 // );
                 drop(inner);
+                drop(process);
                 suspend_current_and_run_next();
             } else {
                 gdb_println!(
@@ -1213,7 +1267,7 @@ pub fn sys_renameat2(
     let old_file;
     let new_file;
 
-    if old_path.starts_with("/") {
+    if is_abs_path(&old_path) {
         match open_common_file("/", old_path.as_str(), OpenFlags::empty()) {
             Some(tmp_file) => old_file = tmp_file.clone(),
             None => return -ENOENT,
@@ -1245,7 +1299,7 @@ pub fn sys_renameat2(
         }
     };
 
-    if new_path.starts_with("/") {
+    if is_abs_path(&new_path) {
         match open_common_file("/", new_path.as_str(), open_flags) {
             Some(tmp_file) => new_file = tmp_file.clone(),
             None => return -ENOENT,
@@ -1304,11 +1358,10 @@ pub fn sys_lseek(fd: usize, offset: usize, whence: usize) -> isize {
     let ret = if let Some(Some(f)) = inner.fd_table.get(fd) {
         match f {
             FileClass::File(fi) => {
-                let sz = fi.file_size();
                 let new_off: isize = match whence {
                     SEEK_SET => offset as _,
                     SEEK_CUR => (fi.offset() + offset) as _,
-                    SEEK_END => (sz + offset) as _,
+                    SEEK_END => (fi.file_size() + offset) as _,
                     _ => -1,
                 };
                 if new_off < 0 {
@@ -1370,7 +1423,7 @@ pub fn sys_statfs(_path: *const u8, buf: *const u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Statfs>());
     let mut userbuf = UserBuffer::new(buf_vec);
     let statfs = Statfs::new();
-    userbuf.write(statfs.as_bytes());
+    userbuf.copy_to_user(statfs.as_bytes());
     gdb_println!(
         SYSCALL_ENABLE,
         "sys_statfs(path: {:#x?}, buf: {:#x?}) = {}",
@@ -1394,7 +1447,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: *mut u8, bufsiz: u
     }
     let mut userbuf = UserBuffer::new(translated_byte_buffer(token, buf, bufsiz));
     let _lmbench = "/exit_test\0";
-    userbuf.write(_lmbench.as_bytes());
+    userbuf.copy_to_user(_lmbench.as_bytes());
     let len = _lmbench.len() - 1;
 
     gdb_println!(

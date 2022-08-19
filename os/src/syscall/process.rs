@@ -1,12 +1,13 @@
 use core::arch::asm;
 use core::mem::size_of;
 use core::slice::from_raw_parts;
+use core::sync::atomic::Ordering;
 
-use crate::config::{aligned_up, PAGE_SIZE, FDMAX};
+use crate::config::{aligned_up, PAGE_SIZE, FDMAX, CLOCK_FREQ};
 use crate::console::{
     clear_log_buf, read_all_log_buf, read_clear_log_buf, read_log_buf, unread_size, LOG_BUF_LEN,
 };
-use crate::fs::{open_common_file, OpenFlags};
+use crate::fs::{open_common_file, OpenFlags, print_inner};
 use crate::gdb_println;
 use crate::loader::get_usershell_binary;
 use crate::mm::{
@@ -14,22 +15,33 @@ use crate::mm::{
     UserBuffer, VirtAddr, VirtPageNum,
 };
 use crate::monitor::{QEMU, SYSCALL_ENABLE};
+use crate::multicore::get_hartid;
 use crate::sbi::shutdown;
+use crate::syscall::process;
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next, is_signal_valid,
-    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid,
+    suspend_current_and_run_next, tid2task, SigAction, UContext, SIG_DFL, ClearChildTid, ITimerSpec, TimeSpec, current_trap_cx, __FA, block_current_and_run_next,
 };
-use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC};
-use crate::trap::page_fault_handler;
+use crate::test::{enable_ttimer_output, stop_ttimer, print_ttimer, start_ttimer};
+use crate::timer::{get_time_ns, get_time_us, NSEC_PER_SEC, USEC_PER_SEC, get_time};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 // use fat32_fs::sync_all;
 
-use super::errorno::{EINVAL, EPERM, ESRCH};
+use super::errorno::{EINVAL, EPERM, ESRCH, ECHILD};
+
+pub fn sys_unknown() -> isize {
+    gdb_println!(
+        SYSCALL_ENABLE,
+        "Unsupported syscall_id: {}", current_trap_cx().x[17]
+    );
+    0
+}
 
 pub fn sys_shutdown() -> ! {
     // sync_all();
+    print_inner();
     shutdown();
 }
 
@@ -64,8 +76,9 @@ pub fn sys_get_time(ts: *mut u64, _tz: usize) -> isize {
     *translated_refmut(token, unsafe { ts.add(1) }) = (curtime % USEC_PER_SEC) as u64;
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_get_time(ts: {:#x?}, tz = {:x?} ) = 0",
-        ts,
+        "sys_get_time_of_day(ts: sec={} usec={},  tz = {:x?} ) = 0",
+        (curtime / USEC_PER_SEC) as u64,
+        (curtime % USEC_PER_SEC) as u64,
         _tz
     );
     0
@@ -129,14 +142,13 @@ pub fn sys_clone(
         let new_task = current_process.clone_thread(task, flags, stack_ptr as usize, newtls);
         let mut new_task_inner = new_task.acquire_inner_lock();
         let new_tid = new_task_inner.gettid();
-        let current_process_inner = current_process.acquire_inner_lock();
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
-            *translated_refmut(current_process_inner.get_user_token(), ptid_ptr) =
+            *translated_refmut(current_user_token(), ptid_ptr) =
                 new_tid as u32;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
-                current_process_inner.get_user_token(),
+                current_user_token(),
                 ctid_ptr,
             ),
             addr: ctid_ptr as usize});
@@ -148,9 +160,10 @@ pub fn sys_clone(
         let new_task = new_process_inner.get_task(0);
         let mut new_task_inner = new_task.acquire_inner_lock();
 
+        let new_pid = new_process.getpid() as u32;
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && ptid_ptr as usize != 0 {
             *translated_refmut(current_process.acquire_inner_lock().get_user_token(), ptid_ptr) =
-            new_process_inner.pid as u32;
+            new_pid;
         }
         if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && ctid_ptr as usize != 0 {
             new_task_inner.clear_child_tid = Some(ClearChildTid {ctid: *translated_ref(
@@ -161,9 +174,9 @@ pub fn sys_clone(
         }
         if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && ctid_ptr as usize != 0 {
             *translated_refmut(new_process_inner.get_user_token(), ctid_ptr) =
-            new_process_inner.pid as u32;
+            new_pid;
         }
-        new_process_inner.pid
+        new_pid as usize
     };
     gdb_println!(
         SYSCALL_ENABLE,
@@ -185,7 +198,7 @@ pub fn sys_clone(
 pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
     let mut path = translated_str(token, path);
-    let mut args_vec: Vec<String> = Vec::new();
+    let mut args_vec: Vec<String> = Vec::with_capacity(16);
 
     loop {
         let arg_str_ptr = *translated_ref(token, args);
@@ -198,18 +211,23 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         }
     }
 
-    let cwd = current_process().acquire_inner_lock().cwd.clone();
-
     // run usershell
-    if cwd == "/" && path == "user_shell" {
+    if path == "user_shell" {
         let process = current_process();
-        let exec_ret = process.exec(get_usershell_binary(), &args_vec);
-        if exec_ret != 0 {
-            return -1;
-        }
-        unsafe {
-            asm!("sfence.vma");
-            asm!("fence.i");
+        match process.exec(get_usershell_binary(), &args_vec) {
+            Some(task) => {
+                task.acquire_inner_lock().__save_info_to_fast_access();
+                unsafe {
+                    __FA[get_hartid()].__user_token = process.acquire_inner_lock().get_user_token();
+                }
+                unsafe {
+                    asm!("sfence.vma");
+                    asm!("fence.i");
+                }
+                // return argc because cx.x[10] will be covered with it later
+                return 0
+            },
+            None => return -EPERM
         }
         return 0;
     }
@@ -221,21 +239,25 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
         path = String::from("/busybox");
     }
 
+    let process =  current_process();
+    let cwd = process.acquire_inner_lock().cwd.clone();
     // run other programs
     let ret = if let Some(app_vfile) = open_common_file(cwd.as_str(), path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_vfile.read_all();
-        let process = current_process();
-        let exec_ret = process.exec(all_data.as_slice(), &args_vec);
-        if exec_ret != 0 {
-            -EPERM
-        } else {
-            unsafe {
-                asm!("sfence.vma");
-                asm!("fence.i");
-            }
-            // return argc because cx.x[10] will be covered with it later
-            0
-        }
+        let all_data = unsafe { app_vfile.read_as_elf() };
+        match process.exec(all_data, &args_vec) {
+            Some(task) => {
+                task.acquire_inner_lock().__save_info_to_fast_access();
+                unsafe {
+                    __FA[get_hartid()].__user_token = process.acquire_inner_lock().get_user_token();
+                }
+                unsafe {
+                    asm!("sfence.vma");
+                    asm!("fence.i");
+                }
+                // return argc because cx.x[10] will be covered with it later
+                0
+            },
+            None => -EPERM}
     } else {
         -EPERM
     };
@@ -257,57 +279,47 @@ const WNOHANG: isize = 1;
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
     loop {
-        let mut found: bool = true; // when WNOHANG is set
-        let mut exited: bool = true;
+        let mut found = false; // when WNOHANG is set
+        let mut exit_info = None;
         {
             let process = current_process();
             let mut inner = process.acquire_inner_lock();
 
-            // find a child process
-            if !inner
-                .children
-                .iter()
-                .any(|p| pid == -1 || pid as usize == p.getpid())
-            {
-                found = false;
-            }
-            // child process exists
-            if found {
-                let pair = inner.children.iter().enumerate().find(|(_, p)| {
-                    // ++++ temporarily access child PCB exclusively
-                    let p_pid = p.getpid();
-                    p.acquire_inner_lock().is_zombie && (pid == -1 || pid as usize == p_pid)
-                    // ++++ release child PCB
-                });
-                if let Some((idx, _)) = pair {
-                    let child = inner.children.remove(idx);
-                    // confirm that child will be deallocated after being removed from children list
-                    assert_eq!(Arc::strong_count(&child), 1);
-                    let found_pid = child.getpid();
-                    // ++++ temporarily access child PCB exclusively
-                    let exit_code = child.acquire_inner_lock().exit_code;
-                    // ++++ release child PCB
-                    if wstatus as usize != 0 {
-                        *translated_refmut(inner.memory_set.token(), wstatus) =
-                            (exit_code & 0xff) << 8;
+            for (idx, child) in inner.children.iter().enumerate() {
+                let cpid = child.getpid();
+                if pid == -1 || child.getpid() == pid as usize {
+                    found = true;
+                    let child_inner = child.acquire_inner_lock();
+                    // *** here we do not recycle tasks 
+                    if child_inner.is_zombie {
+                        exit_info = Some((idx, cpid));
+                        let exit_code = child_inner.exit_code;
+                        if wstatus as usize != 0 {
+                            *translated_refmut(inner.memory_set.token(), wstatus) =
+                                (exit_code & 0xff) << 8;
+                        }
+                        break;
                     }
-                    gdb_println!(
-                        SYSCALL_ENABLE,
-                        "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
-                        pid,
-                        wstatus,
-                        options,
-                        found_pid as isize
-                    );
-                    return found_pid as isize;
-                } else {
-                    exited = false;
                 }
+            }
+            if let Some((idx, cpid)) = exit_info {
+                let p = inner.children.remove(idx);
+                assert_eq!(Arc::strong_count(&p), 1);
+                drop(p);
+                gdb_println!(
+                    SYSCALL_ENABLE,
+                    "sys_waitpid(pid: {}, wstatus: {:#x?}, options: {}) = {}",
+                    pid,
+                    wstatus,
+                    options,
+                    cpid
+                );
+                return cpid as isize;
             }
             // ---- release current PCB automatically
         }
         // not found yet
-        assert!(!found || !exited);
+        assert!(!found || exit_info.is_none());
         if !found || options == WNOHANG {
             gdb_println!(
                 SYSCALL_ENABLE,
@@ -315,11 +327,11 @@ pub fn sys_waitpid(pid: isize, wstatus: *mut i32, options: isize) -> isize {
                 pid,
                 wstatus,
                 options,
-                -EPERM
+                -ECHILD
             );
-            return -EPERM;
+            return -ECHILD;
         }
-        suspend_current_and_run_next();
+        block_current_and_run_next();
     }
 }
 
@@ -344,7 +356,7 @@ pub fn sys_brk(addr: usize) -> isize {
 }
 
 pub fn sys_mmap(
-    _start: usize,
+    start: usize,
     len: usize,
     prot: usize,
     flags: usize,
@@ -352,20 +364,12 @@ pub fn sys_mmap(
     offset: usize,
 ) -> isize {
     // let start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    let start:usize;
     //若起始地址不为0，选择相信传入的起始地址。不做检查
-    if _start != 0 {
-        start = aligned_up(_start);
-    }else {
-        start = aligned_up(current_process().acquire_inner_lock().mmap_area_top);
-    }
-    let aligned_len = aligned_up(len);
-    let ret = current_process().mmap(start, aligned_len, prot, flags, fd, offset);
-
+    let ret = current_process().mmap(start, len, prot, flags, fd, offset);
     gdb_println!(SYSCALL_ENABLE, 
-        "sys_mmap(aligned_start: {:#x?}, aligned_len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
+        "sys_mmap(start: {:#x?}, len: 0x{:x?}, prot: 0x{:x?}, flags: 0x{:x?}, fd: {}, offset: {} ) = {:#x?}",
         start , // start,
-        aligned_len,// aligned_len, 
+        len,// len, 
         prot, 
         flags, 
         fd, 
@@ -393,10 +397,11 @@ pub fn sys_getppid() -> isize {
     let parent = current_process()
         .acquire_inner_lock()
         .parent
-        .clone()
+        .as_ref()
         .unwrap()
-        .upgrade();
-    let ret = parent.unwrap().getpid() as isize;
+        .upgrade()
+        .unwrap();
+    let ret = parent.pid.load(Ordering::Relaxed) as isize;
     gdb_println!(SYSCALL_ENABLE, "sys_getppid() = {}", ret);
     ret
 }
@@ -480,7 +485,7 @@ pub fn sys_uname(buf: *mut u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Uname>());
     let uname = Uname::new();
     let mut userbuf = UserBuffer::new(buf_vec);
-    userbuf.write(uname.as_bytes());
+    userbuf.copy_to_user(uname.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_uname(buf: {:#x?}) = {}", buf, 0);
     0
 }
@@ -490,15 +495,19 @@ pub fn sys_clock_get_time(_clk_id: usize, tp: *mut u64) -> isize {
     //     time_t   tv_sec;        /* seconds */
     //     long     tv_nsec;       /* nanoseconds */
     // };
+    if tp as usize == 0 {
+        return 0;
+    }
     let token = current_user_token();
     let curtime = get_time_ns();
     *translated_refmut(token, tp) = (curtime / NSEC_PER_SEC) as u64;
     *translated_refmut(token, unsafe { tp.add(1) }) = (curtime % NSEC_PER_SEC) as u64;
     gdb_println!(
         SYSCALL_ENABLE,
-        "sys_clock_get_time(clk_id: {}, tp = {:x?} ) = 0",
+        "sys_clock_get_time(clk_id: {}, tp = tv_sec:{:x?} tv_nsec:{:x?} ) = 0",
         _clk_id,
-        tp
+        (curtime / NSEC_PER_SEC) as u64,
+        (curtime % NSEC_PER_SEC) as u64
     );
     0
 }
@@ -561,7 +570,7 @@ pub fn sys_sysinfo(buf: *mut u8) -> isize {
     let sysinfo = Sysinfo::new();
 
     let mut userbuf = UserBuffer::new(buf_vec);
-    userbuf.write(sysinfo.as_bytes());
+    userbuf.copy_to_user(sysinfo.as_bytes());
     gdb_println!(SYSCALL_ENABLE, "sys_sysinfo(buf: {:#x?}) = {}", buf, 0);
     return 0;
 }
@@ -586,19 +595,19 @@ pub fn sys_syslog(_type: isize, bufp: *mut u8, len: usize) -> isize {
         SYSLOG_ACTION_READ => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_READ_ALL => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_all_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_READ_CLEAR => {
             let mut tmp_buf: [u8; LOG_BUF_LEN] = [0; LOG_BUF_LEN];
             let r_sz = read_clear_log_buf(tmp_buf.as_mut_slice(), len);
-            userbuf.write(&tmp_buf[0..r_sz]);
+            userbuf.copy_to_user(&tmp_buf[0..r_sz]);
             r_sz as isize
         }
         SYSLOG_ACTION_CLEAR => {
@@ -637,7 +646,8 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
             continue;
         }
         // failed
-        if page_fault_handler(&mut inner, VirtAddr::from(vpn).into()) == 0 {
+        let vaddr: usize = VirtAddr::from(vpn).into();
+        if inner.check_lazy(vaddr,true) == 0 {
             if (&mut inner.memory_set).set_pte_flags(vpn, flags) == 0 {
                 continue;
             }
@@ -721,4 +731,56 @@ pub fn sys_prlimit(pid:usize, resource:usize, rlimit:*const RLimit64, old_rlimit
         ret
     );
     ret
+}
+
+pub fn sys_getitimer(which: isize, curr_value: *mut ITimerSpec) -> isize{
+    let token = current_user_token();
+    if curr_value as usize != 0{
+        let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+        let u_itimer = translated_refmut(token, curr_value);
+        if !itimer.is_zero(){
+            itimer.it_value = itimer.it_value - crate::timer::get_timespec();
+        }
+        // userbuf.write(itimer.as_bytes());
+        u_itimer.it_value = itimer.it_value;
+        u_itimer.it_interval = itimer.it_interval;
+
+        gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {:?}) = {},", which, u_itimer, 0);
+
+        0
+    }
+    else{
+        gdb_println!(SYSCALL_ENABLE, "sys_getitimer(which: {}, curr_value: {}) = {},", which, 0, 0);
+        -1
+    }
+}
+
+pub fn sys_setitimer(which: isize, new_value: *mut ITimerSpec, old_value: *mut ITimerSpec) -> isize{
+    let token = current_user_token();
+    if old_value as usize != 0{
+        let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+        // let mut buf_vec = translated_byte_buffer(token, old_value, size_of::<ITimerSpec>());
+        // 使用UserBuffer结构，以便于跨页读写
+        // let mut userbuf = UserBuffer::new(buf_vec);
+        let u_old_itimer = translated_refmut(token, old_value);
+        if !itimer.is_zero(){
+            itimer.it_value = itimer.it_value - crate::timer::get_timespec();
+        }
+        // itimer_old = itimer;
+        u_old_itimer.it_interval = itimer.it_interval;
+        u_old_itimer.it_value = itimer.it_value;
+        // userbuf.write(itimer.as_bytes());
+        gdb_println!(SYSCALL_ENABLE, "----old_itimer: {:?} ---- task old_itimer: {:?} ", u_old_itimer, itimer);
+    }
+    // let mut itimer = ITimerSpec::new();
+    let u_new_itimer = translated_refmut(token, old_value);
+    let mut itimer = current_task().unwrap().acquire_inner_lock().itimer;
+    itimer.it_interval = u_new_itimer.it_interval;
+    itimer.it_value = u_new_itimer.it_value;
+    gdb_println!(SYSCALL_ENABLE, "sys_setitimer(which: {}, new_itimer: {:?}, old_itimer: {:?}) = {}", which, u_new_itimer, old_value, 0);
+    if !itimer.it_value.is_zero(){
+        itimer.it_value = itimer.it_value + crate::timer::get_timespec();
+    }
+    // current_task().unwrap().acquire_inner_lock().itimer = itimer;
+    0
 }

@@ -1,14 +1,18 @@
-use super::{add_task, SigAction, insert_into_tid2task};
-use super::manager::insert_into_pid2process;
-use super::TaskControlBlock;
-use crate::config::{is_aligned, MMAP_BASE, PAGE_SIZE, FDMAX};
+use core::arch::asm;
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+use super::{TaskControlBlock, MAX_SIGNUM};
+use super::{add_task, insert_into_tid2task, SigAction};
+use crate::config::{is_aligned, FDMAX, MMAP_BASE, PAGE_SIZE, aligned_up};
 use crate::fs::{FileClass, Stdin, Stdout};
-use crate::mm::{translated_refmut, MapPermission, MemorySet, MmapArea, VirtAddr, KERNEL_SPACE, MmapFlags};
+use crate::mm::{
+    translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
+};
+use crate::mm::address::StepByOne;
 use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
 use crate::trap::{trap_handler, TrapContext};
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -17,11 +21,11 @@ use spin::{Mutex, MutexGuard};
 // use spin::Mutex;
 
 pub struct ProcessControlBlock {
+    pub pid: AtomicUsize,
     inner: Arc<Mutex<ProcessControlBlockInner>>,
 }
 
 pub struct ProcessControlBlockInner {
-    pub pid: usize,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -29,7 +33,7 @@ pub struct ProcessControlBlockInner {
     pub exit_code: i32,
     pub fd_max: usize,
     pub fd_table: FdTable,
-    pub sigactions: BTreeMap<u32, SigAction>,
+    pub sigactions: [SigAction; MAX_SIGNUM as usize],
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub cwd: String,
     pub user_heap_base: usize, // user heap
@@ -47,16 +51,13 @@ impl ProcessControlBlockInner {
     }
 
     pub fn alloc_fd(&mut self, minfd: usize) -> usize {
-        let mut i = minfd;
-        loop {
-            while i >= self.fd_table.len() {
+        let len = self.fd_table.len();
+        (minfd..len)
+            .find(|&idx| self.fd_table[idx].is_none())
+            .unwrap_or_else(|| {
                 self.fd_table.push(None);
-            }
-            if self.fd_table[i].is_none() {
-                return i;
-            }
-            i += 1;
-        }
+                len
+            })
     }
 
     pub fn thread_count(&self) -> usize {
@@ -73,17 +74,21 @@ impl ProcessControlBlock {
         self.inner.lock()
     }
 
+    pub fn getpid(&self) -> usize {
+        self.pid.load(Ordering::Acquire)
+    }
+
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, _) = MemorySet::from_elf(elf_data);
         // allocate a pid
         let process = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: None,
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: vec![
@@ -94,8 +99,8 @@ impl ProcessControlBlock {
                     // 2 -> stderr
                     Some(FileClass::Abs(Arc::new(Stdout))),
                 ],
-                sigactions: BTreeMap::new(),
-                tasks: Vec::new(),
+                sigactions: [SigAction::new(); MAX_SIGNUM as usize],
+                tasks: Vec::with_capacity(10),
                 cwd: String::from("/"),
                 user_heap_base: uheap_base,
                 user_heap_top: uheap_base,
@@ -128,64 +133,75 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.acquire_inner_lock();
-        process_inner.pid = task_inner.gettid();
+        // set pid
+        process.pid.store(task_inner.gettid(), Ordering::Release);
         process_inner.tasks.push(Some(Arc::clone(&task)));
 
         drop(task_inner);
         drop(process_inner);
 
-        insert_into_pid2process(process.getpid(), Arc::clone(&process));
+        // insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
         process
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> isize {
-        assert_eq!(self.acquire_inner_lock().thread_count(), 1);
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: &Vec<String>) -> Option<Arc<TaskControlBlock>> {
+        let mut inner = self.acquire_inner_lock();
+        assert_eq!(inner.thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point, uheap_base, mut auxv) =
             MemorySet::from_elf(elf_data);
-        if (ustack_base==0) && (entry_point==0) && (uheap_base==0) {
-            return -1;
+        if ustack_base == 0 && entry_point == 0 && uheap_base == 0 {
+            return None;
         }
         let new_token = memory_set.token();
+
         // substitute memory_set
-        self.acquire_inner_lock().memory_set = memory_set;
+        inner.memory_set = memory_set;
 
         // ****设置用户堆顶和mmap顶端位置****
-        self.acquire_inner_lock().user_heap_base = uheap_base;
-        self.acquire_inner_lock().user_heap_top = uheap_base;
-        self.acquire_inner_lock().mmap_area_top = MMAP_BASE;
+        inner.user_heap_base = uheap_base;
+        inner.user_heap_top = uheap_base;
+        inner.mmap_area_top = MMAP_BASE;
+        
+        let task = inner.get_task(0);
+        drop(inner);
+
         // then we alloc user resource for main thread again
         // since memory_set has been changed
-        let task = self.acquire_inner_lock().get_task(0);
         let mut task_inner = task.acquire_inner_lock();
-        task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
-        task_inner.res.as_mut().unwrap().alloc_user_res();
-        task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
+        let res = task_inner.res.as_mut().unwrap();
+        res.ustack_base = ustack_base;
+        res.alloc_user_res();
+        let trap_cx_ppn = res.trap_cx_ppn();
+        let mut user_sp = res.ustack_top();
+        drop(res);
+        task_inner.trap_cx_ppn = trap_cx_ppn;
 
-        let mut user_sp = task_inner.res.as_mut().unwrap().ustack_top();
+        ////////////// push env strings ///////////////////
 
-        ////////////// envp[] ///////////////////
-        let mut env: Vec<String> = Vec::new();
-        env.push(String::from("SHELL=/user_shell"));
-        env.push(String::from("PWD=/"));
-        env.push(String::from("USER=root"));
-        env.push(String::from("MOTD_SHOWN=pam"));
-        env.push(String::from("LANG=C.UTF-8"));
-        env.push(String::from(
-            "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
-        ));
-        env.push(String::from("TERM=vt220"));
-        env.push(String::from("SHLVL=2"));
-        env.push(String::from("JOURNAL_STREAM=8:9265"));
-        env.push(String::from("OLDPWD=/root"));
-        env.push(String::from("_=busybox"));
-        env.push(String::from("LOGNAME=root"));
-        env.push(String::from("HOME=/"));
+        let mut envp: Vec<usize> = Vec::with_capacity(1);
+        envp.push(0);
+        let mut env: Vec<String> = Vec::with_capacity(30);
+        // env.push(String::from("SHELL=/bin/sh"));
+        // env.push(String::from("PWD=/"));
+        // env.push(String::from("USER=root"));
+        // env.push(String::from("MOTD_SHOWN=pam"));
+        // env.push(String::from("LANG=C.UTF-8"));
+        // env.push(String::from(
+        //     "INVOCATION_ID=e9500a871cf044d9886a157f53826684",
+        // ));
+        // env.push(String::from("TERM=vt220"));
+        // env.push(String::from("SHLVL=2"));
+        // env.push(String::from("JOURNAL_STREAM=8:9265"));
+        // env.push(String::from("OLDPWD=/root"));
+        // env.push(String::from("_=busybox"));
+        // env.push(String::from("LOGNAME=root"));
+        // env.push(String::from("HOME=/"));
         env.push(String::from("PATH=/"));
-        env.push(String::from("LD_LIBRARY_PATH=/"));
+        // env.push(String::from("LD_LIBRARY_PATH=/lib64"));
         let mut envp: Vec<usize> = (0..=env.len()).collect();
         envp[env.len()] = 0;
 
@@ -202,8 +218,7 @@ impl ProcessControlBlock {
         }
         // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
-
-        ////////////// argv[] ///////////////////
+        ///////////// push argv strings ///////////////////
         let mut argv: Vec<usize> = (0..=args.len()).collect();
         argv[args.len()] = 0;
         for i in 0..args.len() {
@@ -219,7 +234,6 @@ impl ProcessControlBlock {
             }
             *translated_refmut(new_token, p as *mut u8) = 0;
         }
-        // make the user_sp aligned to 8B for k210 platform
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
         ////////////// platform String ///////////////////
@@ -235,15 +249,15 @@ impl ProcessControlBlock {
 
         ////////////// rand bytes ///////////////////
         user_sp -= 16;
-        p = user_sp;
+        // p = user_sp;
         auxv.push(AuxHeader {
             aux_type: AT_RANDOM,
             value: user_sp,
         });
-        for i in 0..0xf {
-            *translated_refmut(new_token, p as *mut u8) = i as u8;
-            p += 1;
-        }
+        // for i in 0..0xf {
+        //     *translated_refmut(new_token, p as *mut u8) = i as u8;
+        //     p += 1;
+        // }
 
         ////////////// padding //////////////////////
         user_sp -= user_sp % 16;
@@ -316,7 +330,8 @@ impl ProcessControlBlock {
         trap_cx.x[12] = envp_base;
         trap_cx.x[13] = auxv_base;
         *task_inner.get_trap_cx() = trap_cx;
-        0
+        drop(task_inner);
+        Some(task.clone())
     }
 
     /// Only support processes with a single thread.
@@ -326,9 +341,11 @@ impl ProcessControlBlock {
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         // 复制trap_cx和ustack等内存区域均在这里
         // 因此后面不需要再allow_user_res了
-        let memory_set = MemorySet::from_existed_user(&parent.memory_set);
+        // todo cow
+        // let memory_set = MemorySet::from_existed_user(&parent.memory_set);
+        let memory_set = MemorySet::cow_from_existed_user(&mut parent.memory_set);
         // copy fd table
-        let mut new_fd_table = Vec::new();
+        let mut new_fd_table = Vec::with_capacity(1024);
         for fd in parent.fd_table.iter() {
             if let Some(file) = fd {
                 new_fd_table.push(Some(file.clone()));
@@ -339,17 +356,17 @@ impl ProcessControlBlock {
 
         // create child process pcb
         let child = Arc::new(Self {
+            pid: AtomicUsize::new(0),
             inner: Arc::new(Mutex::new(ProcessControlBlockInner {
-                pid: 0,
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
-                children: Vec::new(),
+                children: Vec::with_capacity(10),
                 exit_code: 0,
                 fd_max: FDMAX,
                 fd_table: new_fd_table,
                 sigactions: parent.sigactions.clone(),
-                tasks: Vec::new(),
+                tasks: Vec::with_capacity(10),
                 cwd: parent.cwd.clone(),
                 user_heap_base: parent.user_heap_base,
                 user_heap_top: parent.user_heap_top,
@@ -378,7 +395,7 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.acquire_inner_lock();
         let task_inner = task.acquire_inner_lock();
-        child_inner.pid = task_inner.gettid();
+        child.pid.store(task_inner.gettid(), Ordering::Relaxed);
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
@@ -395,7 +412,7 @@ impl ProcessControlBlock {
         }
 
         drop(task_inner);
-        insert_into_pid2process(child.getpid(), Arc::clone(&child));
+        // insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler
         add_task(task);
         child
@@ -408,7 +425,7 @@ impl ProcessControlBlock {
         stack: usize,
         newtls: usize,
     ) -> Arc<TaskControlBlock> {
-        let pid = self.acquire_inner_lock().pid;
+        let pid = self.getpid();
         // only the main thread can create a sub-thread
         assert_eq!(parent_task.acquire_inner_lock().get_relative_tid(), 0);
         // create main thread of child process
@@ -473,8 +490,14 @@ impl ProcessControlBlock {
         // `flags` field unimplemented
         // 目前mmap区域只能不断向上增长，无回收重整内存
         // 目前不检查fd是否合法
-        assert!(is_aligned(start) && is_aligned(len));
+        // assert!(is_aligned(start) && is_aligned(len));
         let mut inner = self.acquire_inner_lock();
+        let start = if start != 0 {
+            aligned_up(start)
+        }else {
+            inner.mmap_area_top
+        };
+        let len = aligned_up(len);
         // assert_eq!(start, inner.mmap_area_top);
 
         let start_vpn = VirtAddr::from(start).floor();
@@ -482,17 +505,18 @@ impl ProcessControlBlock {
         let map_perm = MapPermission::from_bits((prot << 1) as u8).unwrap() | MapPermission::U;
         let mmap_flags = MmapFlags::from_bits(flags).unwrap();
         // TODO
-        let mmap_fdone: crate::mm::FdOne ;// = inner.fd_table[fd as usize].clone();
+        let mmap_fdone: crate::mm::FdOne; // = inner.fd_table[fd as usize].clone();
         if fd == -1 {
             // 转发到fd2, 标准错误输出
             mmap_fdone = inner.fd_table[2].clone();
-        }else {
+        } else {
             mmap_fdone = inner.fd_table[fd as usize].clone();
         }
         let fixed = mmap_flags.contains(MmapFlags::MAP_FIXED);
         // println!("mmap_flags: {:#?} , flags: 0x{:x}",mmap_flags,flags);
 
-        if !fixed { // 一般情况mmap,注意，此处不判断fd是否有效
+        if !fixed {
+            // 一般情况mmap,注意，此处不判断fd是否有效
             inner.memory_set.push_mmap_area(MmapArea::new(
                 start_vpn,
                 end_vpn,
@@ -502,7 +526,8 @@ impl ProcessControlBlock {
                 fd as usize,
                 offset,
             ));
-        } else {   // fixed 区域
+        } else {
+            // fixed 区域
             //TODO 可能有部分区间重叠情况考虑不到位
             // println!("fixed handle start ...");
             // println!("[new mmap in] start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
@@ -510,35 +535,36 @@ impl ProcessControlBlock {
             let mut old_perm = MapPermission::U;
             let mut old_start = VirtAddr::from(0).floor();
             let mut old_end = VirtAddr::from(0).floor();
-            let mut old_flags= 0usize;
-            let mut old_fdone =mmap_fdone.clone();
-            let mut old_fd= 0usize;
+            let mut old_flags = 0usize;
+            let mut old_fdone = mmap_fdone.clone();
+            let mut old_fd = 0usize;
             let mut old_offset = 0usize;
             loop {
                 let mut loop_flag = true;
                 // let mut index = 0;
                 // for (i,mmap_area) in inner.memory_set.mmap_areas.iter().enumerate(){
-                for mmap_area in inner.memory_set.mmap_areas.iter(){
+                for mmap_area in inner.memory_set.mmap_areas.iter() {
                     // 在此处提取old_area相关信息
-                    // 1                  1          
-                    // fix area        |----- - -    
-                    // old area           |----|     
-                    // 3                    3               
-                    // fix area          |-- - - -        
-                    // old area        |-----|  
-                    if (start_vpn < mmap_area.start_vpn && end_vpn > mmap_area.start_vpn) 
-                            ||(start_vpn >= mmap_area.start_vpn && start_vpn < mmap_area.end_vpn) {
+                    // 1                  1
+                    // fix area        |----- - -
+                    // old area           |----|
+                    // 3                    3
+                    // fix area          |-- - - -
+                    // old area        |-----|
+                    if (start_vpn < mmap_area.vpn_range.get_start() && end_vpn > mmap_area.vpn_range.get_start())
+                        || (start_vpn >= mmap_area.vpn_range.get_start() && start_vpn < mmap_area.vpn_range.get_end())
+                    {
                         // index = i;
                         old_perm = mmap_area.map_perm;
-                        old_start= mmap_area.start_vpn;
-                        old_end = mmap_area.end_vpn;
-                        old_flags= mmap_area.flags;
+                        old_start = mmap_area.vpn_range.get_start();
+                        old_end = mmap_area.vpn_range.get_end();
+                        old_flags = mmap_area.flags;
                         old_offset = mmap_area.offset;
                         old_fdone = mmap_area.fd_one.clone();
                         old_fd = mmap_area.fd;
                         loop_flag = false;
                         // collision = true;
-                    }            
+                    }
                 }
 
                 if loop_flag {
@@ -547,47 +573,48 @@ impl ProcessControlBlock {
                 }
                 // println!("fixed handle real start ...");
                 inner.memory_set.remove_mmap_area_with_start_vpn(old_start);
-                // fix area        |-----|   
-                // old area           |----| 
+                // fix area        |-----|
+                // old area           |----|
                 if start_vpn <= old_start && end_vpn > old_start && end_vpn < old_end {
                     // println!("fixed situation 1");
                     let u_old_start: usize = old_start.into();
                     // 向上取整页
-                    old_offset = old_offset + ( (len+start- u_old_start +PAGE_SIZE -1) / PAGE_SIZE )*PAGE_SIZE; 
+                    old_offset = old_offset
+                        + ((len + start - u_old_start + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
                     old_start = VirtAddr::from(start + len).ceil();
                     // println!("[part-1]fixed situation 1  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
                     // println!("[part-2]fixed situation 1  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
                     inner.memory_set.push_mmap_area(MmapArea::new(
                         old_start,
-                        old_end ,
-                        old_perm  ,
+                        old_end,
+                        old_perm,
                         old_flags,
                         old_fdone.clone(),
                         old_fd,
                         old_offset,
                     ));
-                }else 
-                // fix area        |----------|   
-                // old area           |----| 
+                } else
+                // fix area        |----------|
+                // old area           |----|
                 // 刚好完全覆盖的情况也在此处
                 if start_vpn <= old_start && end_vpn >= old_end {
                     // println!("fixed situation 2");
                     // println!("[part-2]fixed situation 2  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
-                    
-                }else
-                // fix area          |--|        
-                // old area        |-----|   
+                } else
+                // fix area          |--|
+                // old area        |-----|
                 if start_vpn >= old_start && end_vpn <= old_end {
                     // println!("fixed situation 3");
-                    if end_vpn != old_end{
+                    if end_vpn != old_end {
                         // 向上取整页
                         let u_old_start: usize = old_start.into();
-                        let part3_offset = old_offset+( (len+start-u_old_start +PAGE_SIZE -1) / PAGE_SIZE )*PAGE_SIZE; 
+                        let part3_offset = old_offset
+                            + ((len + start - u_old_start + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
                         let part3_start = VirtAddr::from(start + len).ceil();
-                        let part3_end= old_end;
+                        let part3_end = old_end;
                         let part3_perm = old_perm;
-                        let part3_flags= old_flags;
-                        let part3_fd= old_fd;
+                        let part3_flags = old_flags;
+                        let part3_fd = old_fd;
                         // println!("[part-3]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",part3_start,part3_end);
                         inner.memory_set.push_mmap_area(MmapArea::new(
                             part3_start,
@@ -598,41 +625,41 @@ impl ProcessControlBlock {
                             part3_fd,
                             part3_offset,
                         ));
-                    } 
-                
-                    // println!("[part-2]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);      
+                    }
+
+                    // println!("[part-2]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
                     if start_vpn != old_start {
                         // 原区域作为第一段
-                        old_end = VirtAddr::from(start+PAGE_SIZE-1).floor();
+                        old_end = VirtAddr::from(start + PAGE_SIZE - 1).floor();
                         // println!("[part-1]fixed situation 3  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
                         inner.memory_set.push_mmap_area(MmapArea::new(
                             old_start,
-                            old_end ,
-                            old_perm  ,
+                            old_end,
+                            old_perm,
                             old_flags,
                             old_fdone.clone(),
                             old_fd,
                             old_offset,
                         ));
-                    }                    
-                }else
-                // fix area          |-------|        
-                // old area        |-----|  
+                    }
+                } else
+                // fix area          |-------|
+                // old area        |-----|
                 if start_vpn > old_start && end_vpn > old_end {
                     // println!("fixed situation 4");
                     // 原区域作为第一段
-                    old_end = VirtAddr::from(start+PAGE_SIZE-1).floor();
+                    old_end = VirtAddr::from(start + PAGE_SIZE - 1).floor();
                     // println!("[part-1]fixed situation 4  start_vpn:{:#?}  end_vpn:{:#?}",old_start,old_end);
                     // println!("[part-2]fixed situation 4  start_vpn:{:#?}  end_vpn:{:#?}",start_vpn,end_vpn);
                     inner.memory_set.push_mmap_area(MmapArea::new(
                         old_start,
-                        old_end ,
-                        old_perm  ,
+                        old_end,
+                        old_perm,
                         old_flags,
                         old_fdone.clone(),
                         old_fd,
                         old_offset,
-                    ));   
+                    ));
                 }
             }
             inner.memory_set.push_mmap_area(MmapArea::new(
@@ -649,21 +676,114 @@ impl ProcessControlBlock {
             // }
         }
         // 维护最高mmap区域地址值
-        if inner.mmap_area_top < VirtAddr::from(end_vpn).0{
+        if inner.mmap_area_top < VirtAddr::from(end_vpn).0 {
             inner.mmap_area_top = VirtAddr::from(end_vpn).0;
         }
-        
+
         start as isize
     }
 
     pub fn munmap(&self, start: usize, _len: usize) -> isize {
-        assert!(is_aligned(start));
+        // assert!(is_aligned(start));
         let mut inner = self.acquire_inner_lock();
         let start_vpn = VirtAddr::from(start).floor();
         inner.memory_set.remove_mmap_area_with_start_vpn(start_vpn)
     }
+}
 
-    pub fn getpid(&self) -> usize {
-        self.acquire_inner_lock().pid
+impl ProcessControlBlockInner {
+    fn lazy_alloc_mmap_page(&mut self, vaddr: usize) -> isize {
+        // let vpn = VirtAddr::from(vaddr).floor();
+        // self.memory_set.insert_mmap_dataframe(vpn)
+
+        let mut vpn = VirtAddr::from(vaddr).floor();
+        let mut ret = -1;
+        for i in 0..4 {
+            if self.memory_set.insert_mmap_dataframe(vpn) == -1 {
+                break;
+            }
+            vpn.step4();
+            ret = 0;
+        }
+        ret
+    }
+
+    fn lazy_alloc_heap_page(&mut self, vaddr: usize) -> isize {
+        // println!("lazy_alloc_heap_page({:#x?})", vaddr);
+        let user_heap_base = self.user_heap_base;
+        let user_heap_top = self.user_heap_top;
+        self.memory_set
+            .insert_heap_dataframe(vaddr, user_heap_base, user_heap_top)
+    }
+    
+    #[inline(always)]
+    pub fn check_lazy(&mut self, vaddr: usize, is_load: bool) -> isize {
+        if vaddr == 0 {
+            error!("Assertion failed in user space");
+            return -1;
+        }
+        let heap_base = self.user_heap_base;
+        let heap_top = self.user_heap_top;
+        let mmap_top = self.mmap_area_top;
+        let mut ret:isize = 0;
+        if is_load {
+            if vaddr >= heap_base && vaddr < heap_top {
+                    // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_heap_page(vaddr);
+                } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                    // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_mmap_page(vaddr);
+                } else {
+                    ret = -1;
+                }
+        }else {
+            let vaddr_n: VirtAddr = vaddr.into();
+            let vpn: VirtPageNum = vaddr_n.floor();
+            if let Some(pte) = self.memory_set.translate(vpn) {
+                if pte.is_cow() && pte.is_valid() {
+                    // cow_alloc(vpn, former_ppn);
+                    let former_ppn = pte.ppn();
+                    self.memory_set.cow_alloc(vpn, former_ppn, vaddr >= heap_base && vaddr < heap_top);
+                    ret = 0;
+                }else if !pte.is_valid() {
+                    if vaddr >= heap_base && vaddr < heap_top {
+                        // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                        // println!("is_load? {:#x?}", is_load);
+                        ret = self.lazy_alloc_heap_page(vaddr);
+                    } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                        // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                        // println!("is_load? {:#x?}", is_load);
+                        ret = self.lazy_alloc_mmap_page(vaddr);
+                    } else {
+                        ret = -1;
+                    }
+                }else {
+                    // error!("lazy cow erro , find pte but ...");
+                    ret = -1;
+                }  
+            }else {
+                if vaddr >= heap_base && vaddr < heap_top {
+                    // println!("[kernel] lazy_alloc heap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_heap_page(vaddr);
+                } else if vaddr >= MMAP_BASE && vaddr < mmap_top {
+                    // println!("[kernel] lazy_alloc mmap memory {:#x?}", vaddr);
+                    // println!("is_load? {:#x?}", is_load);
+                    ret = self.lazy_alloc_mmap_page(vaddr);
+                } else {
+                    ret = -1;
+                }
+            }
+        }
+
+        if ret == 0 {
+            unsafe {
+                asm!("sfence.vma");
+                asm!("fence.i");
+            }
+        }
+        ret
     }
 }

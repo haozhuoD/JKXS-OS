@@ -1,6 +1,6 @@
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
-use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE, MmapArea, MapAreaType};
 
 use crate::gdb_println;
 use crate::monitor::{MAPPING_ENABLE, QEMU};
@@ -19,7 +19,7 @@ impl RecycleAllocator {
     pub fn new() -> Self {
         RecycleAllocator {
             current: 0,
-            recycled: Vec::new(),
+            recycled: Vec::with_capacity(0x1000),
         }
     }
     pub fn alloc(&mut self) -> usize {
@@ -78,6 +78,7 @@ pub fn kstack_alloc() -> KernelStack {
         kstack_top
     );
     KERNEL_SPACE.write().insert_framed_area(
+        MapAreaType::KernelStack,
         kstack_bottom.into(),
         kstack_top.into(),
         MapPermission::R | MapPermission::W,
@@ -96,18 +97,6 @@ impl Drop for KernelStack {
 }
 
 impl KernelStack {
-    #[allow(unused)]
-    pub fn push_on_top<T>(&self, value: T) -> *mut T
-    where
-        T: Sized,
-    {
-        let kernel_stack_top = self.get_top();
-        let ptr_mut = (kernel_stack_top - core::mem::size_of::<T>()) as *mut T;
-        unsafe {
-            *ptr_mut = value;
-        }
-        ptr_mut
-    }
     pub fn get_top(&self) -> usize {
         let (_, kernel_stack_top) = kernel_stack_position(self.0);
         kernel_stack_top
@@ -165,6 +154,7 @@ impl TaskUserRes {
             ustack_top
         );
         process_inner.memory_set.insert_framed_area(
+            MapAreaType::UserStack,
             ustack_bottom.into(),
             ustack_top.into(),
             MapPermission::R | MapPermission::W | MapPermission::U,
@@ -179,6 +169,7 @@ impl TaskUserRes {
             trap_cx_top
         );
         process_inner.memory_set.insert_framed_area(
+            MapAreaType::TrapContext,
             trap_cx_bottom.into(),
             trap_cx_top.into(),
             MapPermission::R | MapPermission::W,

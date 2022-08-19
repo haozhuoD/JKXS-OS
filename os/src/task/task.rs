@@ -1,6 +1,8 @@
 use super::id::TaskUserRes;
-use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags};
+use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext, SAFlags, ITimerSpec, __FA};
+use crate::config::PAGE_SIZE;
 use crate::mm::PhysPageNum;
+use crate::multicore::get_hartid;
 use crate::trap::TrapContext;
 use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
@@ -33,12 +35,13 @@ pub struct TaskControlBlockInner {
     pub trap_cx_ppn: PhysPageNum,
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
-    pub exit_code: Option<i32>,
-    pub pending_signals: VecDeque<u32>,
+    pub pending_signals: u64,
     pub sigmask: u64,
+    pub itimer: ITimerSpec,
     pub clear_child_tid: Option<ClearChildTid>,
+    pub killed: bool,
     performing_signals: Vec<(u32, SAFlags)>,
-    trap_cx_backup: Vec<TrapContext>,
+    trap_cx_backup: Option<TrapContext>,
 }
 
 impl TaskControlBlockInner {
@@ -53,11 +56,11 @@ impl TaskControlBlockInner {
     }
 
     pub fn pop_trap_cx(&mut self) {
-        *self.get_trap_cx() = self.trap_cx_backup.pop().unwrap();
+        *self.get_trap_cx() = self.trap_cx_backup.take().unwrap();
     }
 
     pub fn push_trap_cx(&mut self) {
-        self.trap_cx_backup.push((*self.get_trap_cx()).clone());
+        self.trap_cx_backup = Some(*self.get_trap_cx());
     }
 
     pub fn signal_context_restore(&mut self) -> (u32, SAFlags) {
@@ -71,7 +74,7 @@ impl TaskControlBlockInner {
     }
 
     pub fn is_signaling(&self) -> bool {
-        !self.trap_cx_backup.is_empty()
+        self.trap_cx_backup.is_some()
     }
 
     pub fn gettid(&self) -> usize {
@@ -80,6 +83,33 @@ impl TaskControlBlockInner {
 
     pub fn get_relative_tid(&self) -> usize {
         self.res.as_ref().unwrap().rel_tid
+    }
+
+    pub fn add_signal(&mut self, signum: u32) {
+        self.pending_signals |= 1 << signum;
+    }
+
+    pub fn remove_signal(&mut self, signum: u32) {
+        self.pending_signals &= !(1 << signum);
+    }
+
+    pub fn fetch_signal(&mut self) -> Option<u32> {
+        if self.pending_signals == 0 {
+            return None;
+        }
+        let signum = self.pending_signals.trailing_zeros();
+        self.remove_signal(signum);
+        Some(signum)
+    }
+
+    pub fn __save_info_to_fast_access(&self) {
+        let hartid = get_hartid();
+        unsafe {
+            let p = &mut __FA[hartid];
+            p.__tid = self.gettid();
+            p.__trap_cx_pa = usize::from(self.trap_cx_ppn) * PAGE_SIZE;
+            p.__trap_cx_va = self.res.as_ref().unwrap().trap_cx_user_va();
+        }
     }
 }
 
@@ -103,12 +133,13 @@ impl TaskControlBlock {
                 trap_cx_ppn,
                 task_cx: TaskContext::goto_trap_return(kstack_top),
                 task_status: TaskStatus::Ready,
-                exit_code: None,
-                pending_signals: VecDeque::new(),
+                pending_signals: 0,
                 sigmask: 0,
-                performing_signals: Vec::new(),
-                trap_cx_backup: Vec::new(),
+                itimer: ITimerSpec::new(),
+                performing_signals: Vec::with_capacity(64),
+                trap_cx_backup: None,
                 clear_child_tid: None,
+                killed: false
             })),
         }
     }

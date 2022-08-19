@@ -14,6 +14,7 @@
 read-fd-set和write-fd-set的立即返回查询，以及对文件描述符是否阻塞的阻塞等待（内核态阻塞调用返回，仅支持PIPE文件）
 
 新增文件trait ：
+
 ```
 判断当前文件描述符对应的文件是否阻塞
 fn read_blocking(&self) -> bool;
@@ -26,13 +27,13 @@ fn write_blocking(&self) -> bool;
 
 当前对于erro fd set 只是简单的全部清零
 
+### 用户态缺页异常问题 - jalr a4跳转到地址为4的位置？(fixed)
 
-
-### 用户态缺页异常问题--待修复 TODO
 （只差最后这一点了）
-子进程benchmp_child 
-循环运行 benchmp_interval     
-在最后case： cooldown的 exit(0) 退出时 用户态运行爆炸。 原因计算错误的寄存器 a4=0x4，jalr a4 导致缺页  （也行是之前某个系统调用返回值不正确？） 
+子进程benchmp_child
+循环运行 benchmp_interval
+在最后case： cooldown的 exit(0) 退出时 用户态运行爆炸。 原因计算错误的寄存器 a4=0x4，jalr a4 导致缺页  （也行是之前某个系统调用返回值不正确？）
+
 ```
 相关函数地址信息
 0x000000000006f7fa  exit函数入口
@@ -148,7 +149,8 @@ New value = 0
 0x0000000000014852 in ?? ()
 (gdb)
 
----------------------------------------
+---
+
 但是我们的实现中，有三处被修改：多出了0x149f0的一次。
 
 Hardware watchpoint 5: *0x106e240
@@ -232,3 +234,13 @@ Simple fstat: 20.0672 microseconds
 Simple open/close: 856.4118 microseconds
 Select on 100 fd's: 18.6066 microseconds
 Signal handler installation: 13.2011 microseconds
+
+#### 当前无法成功运行的测试
+
+`./lmbench_all lat_proc -P 1 shell`  -----测试不正确，因为没有/bin/sh
+
+### lat pipe卡死问题
+
+`./lmbench_all lat_pipe -P 1`
+
+卡死，原因是不能kill掉一直卡在内核态的进程。解决方法是，在sys_kill时判断信号是否为SIGKILL，若是则给目标task的killed标志位设为true。在目标task执行suspend_current_and_run_next()时检查该标志位，若为true则立即退出。

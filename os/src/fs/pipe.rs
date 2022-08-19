@@ -1,7 +1,7 @@
 use super::{File, OpenFlags};
-use crate::mm::UserBuffer;
+use crate::{mm::UserBuffer, syscall::EPIPE};
 
-use alloc::sync::{Arc, Weak};
+use alloc::{sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 
 use crate::task::suspend_current_and_run_next;
@@ -32,7 +32,7 @@ impl Pipe {
     }
 }
 
-const RING_BUFFER_SIZE: usize = 1024;
+const RING_BUFFER_SIZE: usize = 0x20000;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
@@ -42,61 +42,41 @@ enum RingBufferStatus {
 }
 
 pub struct PipeRingBuffer {
-    arr: [u8; RING_BUFFER_SIZE],
+    arr: Vec<u8>,
     head: usize,
     tail: usize,
-    status: RingBufferStatus,
+    pub sz: usize,
+    read_end: Option<Weak<Pipe>>,
     write_end: Option<Weak<Pipe>>,
 }
 
 impl PipeRingBuffer {
     pub fn new() -> Self {
+        let mut buf = Vec::with_capacity(RING_BUFFER_SIZE);
+        unsafe { buf.set_len(RING_BUFFER_SIZE); }
         Self {
-            arr: [0; RING_BUFFER_SIZE],
+            arr: buf,
             head: 0,
             tail: 0,
-            status: RingBufferStatus::Empty,
+            sz: 0,
+            read_end: None,
             write_end: None,
         }
+    }
+    pub fn arr_len(&self) -> usize {
+        RING_BUFFER_SIZE
+    }
+    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+        self.read_end = Some(Arc::downgrade(read_end));
     }
     pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
     }
-    pub fn write_byte(&mut self, byte: u8) {
-        self.status = RingBufferStatus::Normal;
-        self.arr[self.tail] = byte;
-        self.tail = (self.tail + 1) % RING_BUFFER_SIZE;
-        if self.tail == self.head {
-            self.status = RingBufferStatus::Full;
-        }
-    }
-    pub fn read_byte(&mut self) -> u8 {
-        self.status = RingBufferStatus::Normal;
-        let c = self.arr[self.head];
-        self.head = (self.head + 1) % RING_BUFFER_SIZE;
-        if self.head == self.tail {
-            self.status = RingBufferStatus::Empty;
-        }
-        c
-    }
-    pub fn available_read(&self) -> usize {
-        if self.status == RingBufferStatus::Empty {
-            0
-        } else if self.tail > self.head {
-            self.tail - self.head
-        } else {
-            self.tail + RING_BUFFER_SIZE - self.head
-        }
-    }
-    pub fn available_write(&self) -> usize {
-        if self.status == RingBufferStatus::Full {
-            0
-        } else {
-            RING_BUFFER_SIZE - self.available_read()
-        }
-    }
     pub fn all_write_ends_closed(&self) -> bool {
         self.write_end.as_ref().unwrap().upgrade().is_none()
+    }
+    pub fn all_read_ends_closed(&self) -> bool {
+        self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 }
 
@@ -106,6 +86,7 @@ pub fn make_pipe(flags: OpenFlags) -> (Arc<Pipe>, Arc<Pipe>) {
     let nonblock = flags.contains(OpenFlags::NONBLOCK);
     let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone(), nonblock));
     let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone(), nonblock));
+    buffer.lock().set_read_end(&read_end);
     buffer.lock().set_write_end(&write_end);
     (read_end, write_end)
 }
@@ -117,60 +98,89 @@ impl File for Pipe {
     fn writable(&self) -> bool {
         self.writable
     }
-    fn read(&self, buf: UserBuffer) -> usize {
+    fn read(&self, mut buf: UserBuffer) -> usize {
         assert!(self.readable());
-        let mut buf_iter = buf.into_iter();
-        let mut read_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_read = ring_buffer.available_read();
-            if loop_read == 0 {
-                if ring_buffer.all_write_ends_closed() || read_size > 0 || self.nonblock {
-                    return read_size;
+            let mut ring = self.buffer.lock();
+            if ring.sz == 0 {
+                if ring.all_write_ends_closed() || self.nonblock {
+                    return 0;
                 }
-                drop(ring_buffer);
+                drop(ring);
+                // debug!("read suspend, buf.len = {}, c = {}", l, read_size);
                 suspend_current_and_run_next();
                 continue;
             }
-            // read at most loop_read bytes
-            for _ in 0..loop_read {
-                if let Some(byte_ref) = buf_iter.next() {
-                    unsafe {
-                        *byte_ref = ring_buffer.read_byte();
-                    }
-                    read_size += 1;
-                } else {
-                    return read_size;
-                }
-            }
+            
+            assert!(ring.sz > 0);
+            let read_size = if ring.head < ring.tail {
+                buf.copy_to_user(&ring.arr[ring.head..ring.tail])
+            } else {
+                let sz1 = buf.copy_to_user(&ring.arr[ring.head..ring.arr_len()]);
+                let sz2 = buf.copy_to_user(&ring.arr[0..ring.tail]);
+                sz1 + sz2
+            };
+            
+            ring.head = (ring.head + read_size) % ring.arr_len();
+            ring.sz -= read_size;
+            // for pa in buf.into_iter() {
+            //     if ring.sz == 0 {
+            //         break;
+            //     }
+            //     unsafe { *pa = ring.arr[ring.head]; }
+            //     ring.head += 1;
+            //     if ring.head == RING_BUFFER_SIZE {
+            //         ring.head = 0;
+            //     }
+            //     ring.sz -= 1;
+            //     read_size += 1;
+            // }
+            return read_size;
         }
     }
-    fn write(&self, buf: UserBuffer) -> usize {
+
+    fn write(&self, mut buf: UserBuffer) -> usize {
         assert!(self.writable());
         if buf.len() == 0 {
             return 0;
         }
-        let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_write = ring_buffer.available_write();
-            if loop_write == 0 {
+            let mut ring = self.buffer.lock();
+            if ring.all_read_ends_closed() {
+                return write_size;
+            }
+            if ring.sz == ring.arr_len() {
+                // ring buffer is full
                 if self.nonblock {
                     return write_size;
                 }
-                drop(ring_buffer);
+                drop(ring);
+                // debug!("write suspend, buf.len = {}, c = {}", l, write_size);
                 suspend_current_and_run_next();
                 continue;
             }
-            // write at most loop_write bytes
-            for _ in 0..loop_write {
-                if let Some(byte_ref) = buf_iter.next() {
-                    ring_buffer.write_byte(unsafe { *byte_ref });
-                    write_size += 1;
-                } else {
-                    return write_size;
-                }
+            assert!(ring.sz < ring.arr_len());
+
+            let head = ring.head;
+            let tail = ring.tail;
+            let arr_len = ring.arr_len();
+
+            let write_sz_this_time = if tail < head {
+                buf.copy_from_user(&mut ring.arr[tail..head])
+            } else {
+                let sz1 = buf.copy_from_user(&mut ring.arr[tail..arr_len]);
+                let sz2 = buf.copy_from_user(&mut ring.arr[0..head]);
+                sz1 + sz2
+            };
+            
+            ring.tail = (ring.tail + write_sz_this_time) % ring.arr_len();
+            ring.sz += write_sz_this_time;
+            write_size += write_sz_this_time;
+
+            // 不同于read，在写操作时只有写满了buf才返回
+            if write_size == buf.len() {
+                return write_size;
             }
         }
     }
@@ -180,7 +190,7 @@ impl File for Pipe {
                 return false;
             } else {
                 let ring_buffer = self.buffer.lock();
-                if ring_buffer.available_read() == 0 {
+                if ring_buffer.sz == 0 {
                     return true;
                 } else {
                     return false;
@@ -195,7 +205,7 @@ impl File for Pipe {
                 return false;
             } else {
                 let ring_buffer = self.buffer.lock();
-                if ring_buffer.available_write() == 0 {
+                if ring_buffer.sz == RING_BUFFER_SIZE {
                     return true;
                 } else {
                     return false;
