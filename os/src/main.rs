@@ -54,6 +54,19 @@ fn clear_bss() {
     }
 }
 
+fn print_logo() {
+    println!("\n");
+    println!(r"***********************************************************************");
+    println!(r"********    ___   _   __ __   __  _____           _____  _____       **");
+    println!(r"*******    |_  | | | / / \ \ / / /  ___|         |  _  |/  ___|     ***");
+    println!(r"******       | | | |/ /   \ V /  \ `--.   ______ | | | |\ `--.     ****");
+    println!(r"*****        | | |    \   / ^ \   `--. \ |______|| | | | `--. \   *****");
+    println!(r"****     /\__/ / | |\  \ / / \ \ /\__/ /         \ \_/ //\__/ /  ******");
+    println!(r"***      \____/  \_| \_/ \/   \/ \____/           \___/ \____/  *******");
+    println!(r"**                                                             ********");
+    println!(r"***********************************************************************");
+}
+
 static BOOT_CORE_READY: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
 static BOOT_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 
@@ -74,6 +87,7 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
+    print_logo();
     fs::init_rootfs();
     // block_device_test();
     task::add_initproc();

@@ -53,17 +53,17 @@ impl DLLMem {
     }
     pub fn readso(&mut self, cwd: &str, path: &str) {
         if let Some(app_vfile) = open_common_file(cwd, path, OpenFlags::RDONLY) {
-            info!(
-                "[execve load_dl] dynamic load dl {:#x?} success ... cwd is {:#x?}",
-                path, cwd
-            );
+            // info!(
+            //     "[execve load_dl] dynamic load dl {:#x?} success ... cwd is {:#x?}",
+            //     path, cwd
+            // );
             self.name = path.to_string();
             self.data = app_vfile.read_all();
         } else {
-            error!(
-                "[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}",
-                path, cwd
-            );
+            // error!(
+            //     "[execve load_dl] dynamic load dl {:#x?} false ... cwd is {:#x?}",
+            //     path, cwd
+            // );
             self.name = "NULL".to_string();
             self.data.clear();
         }
