@@ -1,5 +1,5 @@
 use super::{File, find_vfile_idx, insert_vfile_idx, path2abs, remove_vfile_idx};
-use super::{Kstat, S_IFCHR, S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, S_IFREG};
+use super::{Kstat, S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, S_IFREG};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 

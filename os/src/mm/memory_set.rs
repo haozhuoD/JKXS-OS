@@ -82,6 +82,7 @@ impl DLLMem {
 //     }
 // }
 
+#[allow(unused)]
 pub fn load_dll() {
     let dl = KERNEL_DL_DATA.read();
     debug!(

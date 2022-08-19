@@ -16,7 +16,7 @@ use core::mem::size_of;
 use crate::{
     config::SIGRETURN_TRAMPOLINE,
     loader::get_initproc_binary,
-    mm::{translated_byte_buffer, UserBuffer, translated_refmut}, syscall::futex_wake, timer::wakeup_futex_waiters,
+    mm::{translated_byte_buffer, UserBuffer}, syscall::futex_wake, timer::wakeup_futex_waiters,
 };
 use alloc::sync::Arc;
 use manager::fetch_task;

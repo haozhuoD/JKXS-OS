@@ -1,5 +1,5 @@
 
-use crate::{CacheMode, println};
+use crate::CacheMode;
 use crate::fat::END_CLUSTER;
 
 use super:: {

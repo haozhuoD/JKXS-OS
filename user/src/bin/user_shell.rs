@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use user_lib::console::getchar;
 use user_lib::{
     change_cwd, chdir, close, dup, exec, fork, get_wordlist, longest_common_prefix, open, pipe,
-    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, libc_test, busybox_lua_test, lmbench_test, exit,
+    preliminary_test, shutdown, toggle_trace, waitpid, OpenFlags, exit,
 };
 
 #[derive(Debug)]

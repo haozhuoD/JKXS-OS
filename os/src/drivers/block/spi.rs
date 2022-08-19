@@ -77,6 +77,7 @@ pub trait SPI {
 }
 
 impl SPIImpl {
+    #[allow(unused)]
     pub fn new(spi: SPI2) -> Self {
         Self { spi }
     }

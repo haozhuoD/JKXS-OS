@@ -34,7 +34,7 @@ mod timer;
 mod trap;
 mod test;
 
-use crate::multicore::{get_hartid, save_hartid, wakeup_other_cores};
+use crate::multicore::{get_hartid, save_hartid};
 use core::arch::global_asm;
 #[allow(unused)]
 use drivers::block_device_test;

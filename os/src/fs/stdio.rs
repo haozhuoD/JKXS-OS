@@ -14,8 +14,6 @@ pub struct Stdout;
 
 pub static STDIN_BUF: Lazy<Mutex<VecDeque<u8>>> = Lazy::new(|| Mutex::new(VecDeque::new()));
 
-const LF: usize = 0x0a;
-const CR: usize = 0x0d;
 // const DL: usize = 0x7f;
 // const BS: usize = 0x08;
 

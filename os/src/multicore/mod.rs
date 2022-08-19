@@ -16,6 +16,7 @@ pub fn save_hartid() {
     }
 }
 
+#[allow(unused)]
 pub fn wakeup_other_cores(boot_hartid: usize) {
     extern "C" {
         fn skernel();

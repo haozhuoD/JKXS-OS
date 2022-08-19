@@ -3,9 +3,9 @@ use core::ops::{Add, Sub};
 use crate::timer::USEC_PER_SEC;
 
 // sys_setitimer
-pub const ITIMER_REAL:isize = 0; /* Timers run in real time.  */
-pub const ITIMER_VIRTUAL:isize = 1; /* Timers run only when the process is executing.  */
-pub const ITIMER_PROF:isize = 2; /* Timers run when the process is executing and when the system is executing on behalf of the process.  */
+// pub const ITIMER_REAL:isize = 0; /* Timers run in real time.  */
+// pub const ITIMER_VIRTUAL:isize = 1; /* Timers run only when the process is executing.  */
+// pub const ITIMER_PROF:isize = 2; /* Timers run when the process is executing and when the system is executing on behalf of the process.  */
 
 #[repr(C)]
 #[derive(Copy, Clone,Debug)]
@@ -29,12 +29,14 @@ impl TimeSpec{
         }
     }
 
+    #[allow(unused)]
     pub fn add_usec(&mut self, usec:usize){
         self.tv_usec += usec;
         self.tv_sec += self.tv_usec/1000_000;
         self.tv_usec %= 1000_000;
     }
 
+    #[allow(unused)]
     pub fn is_zero(&self) -> bool{
         self.tv_sec == 0 && self.tv_usec == 0
     }
@@ -49,6 +51,7 @@ impl ITimerSpec{
         }
     }
 
+    #[allow(unused)]
     pub fn is_zero(&self) -> bool{
         self.it_interval.is_zero() && self.it_value.is_zero()
     }
