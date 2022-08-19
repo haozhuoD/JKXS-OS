@@ -184,20 +184,28 @@ impl PhysPageNum {
         for x in self.slice_u64() {
             *x = 0;
         }
+        // self.slice_u64().fill(0);
     }
 }
 
 pub trait StepByOne {
     fn step(&mut self);
+    fn step4(&mut self);
 }
 impl StepByOne for VirtPageNum {
     fn step(&mut self) {
         self.0 += 1;
     }
+    fn step4(&mut self) {
+        self.0 += 4;
+    }
 }
 impl StepByOne for PhysPageNum {
     fn step(&mut self) {
         self.0 += 1;
+    }
+    fn step4(&mut self) {
+        self.0 += 4;
     }
 }
 

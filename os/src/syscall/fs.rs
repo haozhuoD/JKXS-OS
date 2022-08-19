@@ -118,25 +118,52 @@ pub fn sys_open_at(dirfd: isize, path: *const u8, flags: u32, _mode: u32) -> isi
         flags,
         _mode
     );
-    let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
-        inner.cwd.clone()
-    } else {
-        String::from("/")
-    };
+    // let cwd = if dirfd == AT_FDCWD && !is_abs_path(&path) {
+    //     inner.cwd.clone()
+    // } else {
+    //     String::from("/")
+    // };
 
-    let ret = {
-        if let Some(devfile) = open_device_file(cwd.as_str(), path.as_str(), flags) {
+    // let ret = {
+    //     if let Some(devfile) = open_device_file(cwd.as_str(), path.as_str(), flags) {
+    //         let fd = inner.alloc_fd(0);
+    //         inner.fd_table[fd] = Some(FileClass::Abs(devfile));
+    //         fd as isize
+    //     } else if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
+    //         let fd = inner.alloc_fd(0);
+    //         inner.fd_table[fd] = Some(FileClass::File(vfile));
+    //         fd as isize
+    //     } else {
+    //         -ENOENT
+    //     }
+    // };
+
+    let ret;
+    if dirfd == AT_FDCWD && !is_abs_path(&path) {
+        ret = if let Some(devfile) = open_device_file(&inner.cwd, path.as_str(), flags) {
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::Abs(devfile));
             fd as isize
-        } else if let Some(vfile) = open_common_file(cwd.as_str(), path.as_str(), flags) {
+        } else if let Some(vfile) = open_common_file(&inner.cwd, path.as_str(), flags) {
             let fd = inner.alloc_fd(0);
             inner.fd_table[fd] = Some(FileClass::File(vfile));
             fd as isize
         } else {
             -ENOENT
         }
-    };
+    } else {
+        ret = if let Some(devfile) = open_device_file("/", path.as_str(), flags) {
+            let fd = inner.alloc_fd(0);
+            inner.fd_table[fd] = Some(FileClass::Abs(devfile));
+            fd as isize
+        } else if let Some(vfile) = open_common_file("/", path.as_str(), flags) {
+            let fd = inner.alloc_fd(0);
+            inner.fd_table[fd] = Some(FileClass::File(vfile));
+            fd as isize
+        } else {
+            -ENOENT
+        }
+    }
 
     gdb_println!(
         SYSCALL_ENABLE,
@@ -291,19 +318,35 @@ pub fn sys_fstatat(dirfd: isize, path: *mut u8, buf: *mut u8) -> isize {
     let buf_vec = translated_byte_buffer(token, buf, size_of::<Kstat>());
     let mut userbuf = UserBuffer::new(buf_vec);
 
-    let cwd = if !is_abs_path(&path) && dirfd == AT_FDCWD {
-        process.acquire_inner_lock().cwd.clone()
-    } else {
-        String::from("/")
-    };
+    // let cwd = if !is_abs_path(&path) && dirfd == AT_FDCWD {
+    //     process.acquire_inner_lock().cwd.clone()
+    // } else {
+    //     String::from("/")
+    // };
 
-    let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
-        // fstat_inner(osfile, &mut userbuf)
-        userbuf.copy_to_user(osfile.stat().as_bytes());
-        0
+    // let ret = if let Some(osfile) = open_common_file(&cwd, &path, OpenFlags::RDONLY) {
+    //     // fstat_inner(osfile, &mut userbuf)
+    //     userbuf.copy_to_user(osfile.stat().as_bytes());
+    //     0
+    // } else {
+    //     -ENOENT
+    // };
+    let ret;
+    if !is_abs_path(&path) && dirfd == AT_FDCWD {
+        ret = if let Some(osfile) = open_common_file(&process.acquire_inner_lock().cwd, &path, OpenFlags::RDONLY) {
+            userbuf.copy_to_user(osfile.stat().as_bytes());
+            0
+        } else {
+            -ENOENT
+        };
     } else {
-        -ENOENT
-    };
+        ret = if let Some(osfile) = open_common_file("/", &path, OpenFlags::RDONLY) {
+            userbuf.copy_to_user(osfile.stat().as_bytes());
+            0
+        } else {
+            -ENOENT
+        };
+    }
 
     gdb_println!(
         SYSCALL_ENABLE,

@@ -20,6 +20,9 @@ impl FrameTracker {
         ppn.clear_page();
         Self { ppn }
     }
+    pub fn new_without_clear(ppn: PhysPageNum) -> Self {
+        Self { ppn }
+    }
     pub fn from_ppn(ppn: PhysPageNum) -> Self {
         frame_add_ref(ppn);
         Self { ppn }
@@ -156,6 +159,14 @@ pub fn init_frame_allocator() {
 
 pub fn frame_alloc() -> Option<FrameTracker> {
     FRAME_ALLOCATOR.write().alloc().map(FrameTracker::new)
+}
+
+pub fn frame_alloc_without_clear() -> Option<FrameTracker> {
+    FRAME_ALLOCATOR.write().alloc().map(FrameTracker::new_without_clear)
+}
+
+pub fn frame_clean(ppn: PhysPageNum) {
+    ppn.clear_page();
 }
 
 pub fn frame_dealloc(ppn: PhysPageNum) {

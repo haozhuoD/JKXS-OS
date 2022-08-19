@@ -1,4 +1,4 @@
-use super::frame_allocator::frame_enquire_ref;
+use super::frame_allocator::{frame_enquire_ref, frame_alloc_without_clear};
 use super::mmap::MmapArea;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
@@ -645,7 +645,7 @@ impl MemorySet {
             return;
         }
         // info!("cow_alloc ref = 2");
-        let frame = frame_alloc().unwrap();
+        let frame = frame_alloc_without_clear().unwrap();
         let ppn = frame.ppn;
         self.page_table.cow_remap(vpn, ppn, former_ppn);
         // info!("cow_remapping  vpn:{:?}, former_ppn:{:?}, ppn:{:?}",vpn, former_ppn, ppn);
@@ -812,7 +812,7 @@ impl MapArea {
     pub fn insert_tracker(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) {
         self.data_frames.insert(vpn.0, FrameTracker::from_ppn(ppn));
     }
-    // 建立页框并分配物理内存
+    // 建立页框并分配物理内存, 不清空
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
@@ -820,6 +820,7 @@ impl MapArea {
                 ppn = PhysPageNum(vpn.0);
             }
             MapType::Framed => {
+                // let frame = frame_alloc_without_clear().unwrap();
                 let frame = frame_alloc().unwrap();
                 ppn = frame.ppn;
                 self.data_frames.insert(vpn.0, frame);

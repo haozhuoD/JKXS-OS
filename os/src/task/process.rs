@@ -8,6 +8,7 @@ use crate::fs::{FileClass, Stdin, Stdout};
 use crate::mm::{
     translated_refmut, MapPermission, MemorySet, MmapArea, MmapFlags, VirtAddr, KERNEL_SPACE, VirtPageNum,
 };
+use crate::mm::address::StepByOne;
 use crate::multicore::get_hartid;
 use crate::syscall::CloneFlags;
 use crate::task::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM};
@@ -50,16 +51,13 @@ impl ProcessControlBlockInner {
     }
 
     pub fn alloc_fd(&mut self, minfd: usize) -> usize {
-        let mut i = minfd;
-        loop {
-            while i >= self.fd_table.len() {
+        let len = self.fd_table.len();
+        (minfd..len)
+            .find(|&idx| self.fd_table[idx].is_none())
+            .unwrap_or_else(|| {
                 self.fd_table.push(None);
-            }
-            if self.fd_table[i].is_none() {
-                return i;
-            }
-            i += 1;
-        }
+                len
+            })
     }
 
     pub fn thread_count(&self) -> usize {
@@ -695,8 +693,19 @@ impl ProcessControlBlock {
 
 impl ProcessControlBlockInner {
     fn lazy_alloc_mmap_page(&mut self, vaddr: usize) -> isize {
-        let vpn = VirtAddr::from(vaddr).floor();
-        self.memory_set.insert_mmap_dataframe(vpn)
+        // let vpn = VirtAddr::from(vaddr).floor();
+        // self.memory_set.insert_mmap_dataframe(vpn)
+
+        let mut vpn = VirtAddr::from(vaddr).floor();
+        let mut ret = -1;
+        for i in 0..4 {
+            if self.memory_set.insert_mmap_dataframe(vpn) == -1 {
+                break;
+            }
+            vpn.step4();
+            ret = 0;
+        }
+        ret
     }
 
     fn lazy_alloc_heap_page(&mut self, vaddr: usize) -> isize {
