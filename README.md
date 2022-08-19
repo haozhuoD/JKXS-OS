@@ -157,7 +157,7 @@ make monitor
 
 如有相关技术问题，联系 `2567769508@qq.com`。
 
-## *Credits*
+## *Acknowledgments*
 
 本项目基于吴一凡等开发者的 `rCoreTutorial-v3` 项目进行开发。
 
