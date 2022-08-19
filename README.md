@@ -1,10 +1,10 @@
 ![logo](./docs/image/readme/学校logo.png)
 
-# **jkxs-OS:** `<i>`System Overview`</i>`
+# **jkxs-OS:** *System Overview*
 
 ![System](https://img.shields.io/badge/System-jkxsOS-brightgreen) ![Lang](https://img.shields.io/badge/Lang-Rust-green) ![ISA](https://img.shields.io/badge/ISA-riscv64-yellowgreen) ![Platform](https://img.shields.io/badge/Platform-Qemu%2c%20Hifive%20Unmatched-yellow)
 
-## `<i>`Current Achievements`</i>`
+## *Current Achievements*
 
 ### 完成情况：通过比赛所有测试用例，针对性能瓶颈进行优化，完成了部分移植工作
 
@@ -22,13 +22,13 @@
 
 ![k210](./docs/image/readme/k210排行榜.png)
 
-## `<i>`Documents `</i>`
+## *Documents*
 
 #### 项目整体设计文档 [doc_jkxsOS设计文档](./doc_jkxsOS设计文档.pdf)
 
 #### 模块开发相关文档 [./docs](./docs)
 
-## `<i>`Branches `</i>`
+## *Branches*
 
 * `main`               ------主分支
 * `libc-test`          ------`libc`测试提交分支（决赛第一阶段提交）
@@ -39,7 +39,7 @@
 
 ## 项目代码架构
 
-`<i>`code`</i>`：项目代码框架
+*code*：项目代码框架
 
 |   文件目录   |         描述         |
 | :-----------: | :------------------: |
@@ -49,7 +49,7 @@
 |      os      |        OS内核        |
 |     user     |       用户程序       |
 
-## `<i>`How to Run`</i>`
+## *How to Run*
 
 #### qemu运行
 
@@ -94,7 +94,7 @@ make gdb
 make monitor
 ```
 
-## `<i>`Our Work `</i>`
+## *Our Work*
 
 + `jkxs-OS`致力于开发一个能在 `RISCV-64`处理器上运行的宏内核操作系统。我们以清华大学吴一凡同学的教学项目 `rCore-Tutorial`为基础，在其代码框架上进行迭代开发。
 + 之所以选择 `rCore-Tutorial`，一是它的开发语言——`Rust`在系统编程领域具有得天独厚的优势，它天然地保证了程序的内存安全和线程安全，能够帮助我们规避内核开发中的诸多潜在问题；二是 `rCore-Tutorial`是一个较为完整的系统，具有良好的可拓展性，基于 `rCore-Tutorial`开发能够避免“重复造轮子”的麻烦，节省了在线程上下文切换、页表访问等大量细节的实现上需要花费的时间，使我们能将更多的精力投入到内核性能的优化、健壮性的增强、用户体验的提升等环节上，做出更有意义、更具有创新性的工作。
@@ -145,27 +145,17 @@ make monitor
 + 基于此，我们实现了一个功能更加强大、且用户体验更好的 `shell`。它不仅解决了上下左右键按下时命令出错、光标跑飞等问题，还支持 `tab`命令补全、命令历史回溯等功能，为调试带来极大便利。
 + 我们实现了一套较为完整的日志系统，用户可选择最小日志输出等级，并通过 `debug!`，`info!`，`warning!`，`error!`等宏打印不同输出等级的日志信息。日志系统能为不同等级的输出信息设置不同的颜色，且能显示输出语句所在文件的名称和所在行数，使内核输出更加清晰、直观，更利于调试。
 
-## `<i>`Future Plans `</i>`
-
-| 计划                               | 优先级 |
-| ---------------------------------- | ------ |
-| 支持 `lmbench`，并进行性能测试   | 高     |
-| 基于性能测试进行性能优化           | 高     |
-| 提升多核运行的稳定性，修复bug      | 高     |
-| 提高 `SDcard`驱动的稳定性        | 中     |
-| 基于硬件平台拓展内核的功能：网卡等 | 低     |
-
-## `<i>`Contact Us `</i>`
+## *Contact Us*
 
 本项目的三位队员均来自哈尔滨工业大学（深圳），指导老师为夏文老师和仇洁婷老师。
 
-丁浩卓（队长）：负责SDCard驱动、多核支持、性能优化。
-郑启洋：负责FAT32文件系统的设计与实现。
+丁浩卓（队长）：负责 `SDCard` 驱动、多核支持、性能优化。
+郑启洋：负责 `FAT32` 文件系统的设计与实现。
 陈林锟：负责进程、内存管理模块设计，信号系统。
 
 如有相关技术问题，联系 `2567769508@qq.com`。
 
-## `<i>`Future Plans `</i>`
+## *Future Plans*
 
 | 计划                               | 优先级 |
 | ---------------------------------- | ------ |
@@ -175,7 +165,7 @@ make monitor
 | 提高 `SDcard`驱动的稳定性        | 中     |
 | 基于硬件平台拓展内核的功能：网卡等 | 低     |
 
-## `<i>`Contact Us `</i>`
+## *Contact Us*
 
 本项目的三位队员均来自哈尔滨工业大学（深圳），指导老师为夏文老师和仇洁婷老师。
 
@@ -185,7 +175,7 @@ make monitor
 
 如有相关技术问题，联系 `2567769508@qq.com`。
 
-## `<i>`Credits`</i>`
+## *Credits*
 
 本项目基于吴一凡等开发者的 `rCoreTutorial-v3` 项目进行开发。
 感谢同样来自哈尔滨工业大学（深圳）的叶自立、张艺枫、潘智伟等一起参赛的同学，在和你们的交流中，我们学到了很多。
