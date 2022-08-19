@@ -1,17 +1,18 @@
 ![logo](./docs/image/readme/学校logo.png)
 
-# **jkxs-OS:** <i>System Overview</i>
+# **jkxs-OS:** `<i>`System Overview`</i>`
 
 ![System](https://img.shields.io/badge/System-jkxsOS-brightgreen) ![Lang](https://img.shields.io/badge/Lang-Rust-green) ![ISA](https://img.shields.io/badge/ISA-riscv64-yellowgreen) ![Platform](https://img.shields.io/badge/Platform-Qemu%2c%20Hifive%20Unmatched-yellow)
 
-## <i>Current Achievements</i>
+## `<i>`Current Achievements`</i>`
 
 ### 完成情况：通过比赛所有测试用例，针对性能瓶颈进行优化，完成了部分移植工作
 
-#### 内核赛道 决赛第二阶段`fu740` 得分为116.9109 排名第二（截至2022.8.19 17:27）
+#### 内核赛道 决赛第二阶段 `fu740` 得分为116.9109 排名第二（截至2022.8.19 17:27）
+
 ![决赛stage2](./docs/image/readme/决赛第二阶段排名.png)
 
-#### 内核赛道 决赛第一阶段`fu740`测评满分
+#### 内核赛道 决赛第一阶段 `fu740`测评满分
 
 ![决赛stage1](./docs/image/readme/决赛stage1排行榜.png)
 
@@ -38,17 +39,17 @@
 
 ## 项目代码架构
 
-<i>code</i>：项目代码框架
+`<i>`code`</i>`：项目代码框架
 
-|         文件目录        |                       描述                        |
-| :--------------------: | :-----------------------------------------------: |
-|       bootloader       |                sbi二进制文件                 |
-|      external_libs     |                项目依赖的部分外部库                  |
-|        fat32_fs        |                fat32文件系统                  |
-|           os           |                    OS内核                        |
-|          user          |                   用户程序          |
+|   文件目录   |         描述         |
+| :-----------: | :------------------: |
+|  bootloader  |    sbi二进制文件    |
+| external_libs | 项目依赖的部分外部库 |
+|   fat32_fs   |    fat32文件系统    |
+|      os      |        OS内核        |
+|     user     |       用户程序       |
 
-## <i>How to Run</i>
+## `<i>`How to Run`</i>`
 
 #### qemu运行
 
@@ -144,10 +145,6 @@ make monitor
 + 基于此，我们实现了一个功能更加强大、且用户体验更好的 `shell`。它不仅解决了上下左右键按下时命令出错、光标跑飞等问题，还支持 `tab`命令补全、命令历史回溯等功能，为调试带来极大便利。
 + 我们实现了一套较为完整的日志系统，用户可选择最小日志输出等级，并通过 `debug!`，`info!`，`warning!`，`error!`等宏打印不同输出等级的日志信息。日志系统能为不同等级的输出信息设置不同的颜色，且能显示输出语句所在文件的名称和所在行数，使内核输出更加清晰、直观，更利于调试。
 
-<br>
-<<<<<<< HEAD
-=======
-
 ## `<i>`Future Plans `</i>`
 
 | 计划                               | 优先级 |
@@ -182,14 +179,14 @@ make monitor
 
 本项目的三位队员均来自哈尔滨工业大学（深圳），指导老师为夏文老师和仇洁婷老师。
 
-丁浩卓（队长）：负责SDCard驱动、多核支持、性能优化。
-郑启洋：负责FAT32文件系统的设计与实现。
-陈林锟：负责进程、内存管理模块设计，信号系统。
+丁浩卓（队长）：负责 `SDCard` 驱动、多核支持、性能优化。
+郑启洋：负责 `FAT32` 文件系统的设计、实现与优化。
+陈林锟：负责进程管理、内存管理、信号系统。
 
 如有相关技术问题，联系 `2567769508@qq.com`。
 
 ## `<i>`Credits`</i>`
 
-本项目基于吴一凡等开发者的rCoreTutorial-v3项目进行开发。
+本项目基于吴一凡等开发者的 `rCoreTutorial-v3` 项目进行开发。
 感谢同样来自哈尔滨工业大学（深圳）的叶自立、张艺枫、潘智伟等一起参赛的同学，在和你们的交流中，我们学到了很多。
 同样感谢夏文老师和仇洁婷老师对我们的帮助和指导。
