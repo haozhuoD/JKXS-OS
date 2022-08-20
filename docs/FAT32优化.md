@@ -1,123 +1,60 @@
-# FAT32 优化比较
+# FAT32优化
 
-## 5层结构
- - 磁盘块设备接口层
- - 块缓存层
- - 磁盘数据结构层
- - 磁盘块管理器层
- - 索引节点层
+## 内存SD卡镜像
 
-<br/>
+* 由于SD卡镜像已放置到内存0x90000000位置处，因此访问SD卡内容无需通过SD卡驱动，而是直接访问对应位置的内存即可。因此原来的五层文件系统架构中的较低两层块设备接口层和块缓存层可以舍弃。我们重新设计了 `fsimg`模块用于计算给定块号在内存中的位置，并向上暴露原有的接口对其进行互斥访问。
+* 相较于原来块缓存层的 `BlockCacheManager`和 `BlockCache`的双锁设计，现在可以去除掉 `BlockCacheManager`的锁，但是由于对对应内存区域的访问必须是互斥的，因此 `BlockCache`的锁需要保留。同时我们也优化了检索对应块号的 `BlockCache`的速度。
 
-## 磁盘块设备接口层
+## 目录项查找优化
 
-没有变动
+- 由于SD卡镜像已放置到内存中，因此现在在进行目录项的性质判断之类的操作时，无需进行拷贝工作，而是可以直接对对应内存的值进行判断。在 `layout`层中原来的接口 `read_at`会进行内存拷贝工作，所以我们新增了接口 `find_short_name`用于短文件名目录项的搜索，`find_free_dirent`用于空闲目录项的搜索。
+- 同时我们以更大粒度即一个块 `type DirentBlock = [ShortDirEntry; BLOCK_SZ / DIRENT_SZ]`而不是单个目录项去访问内存中的内容，从而能够减少锁的获取次数。
 
-<br/>
+## 文件和目录的查找和创建优化
 
-## 块缓存层
+* 在进行多级目录查找时，会依次对各级目录都进行查找，这样的查找效率十分慢。为此，我们在内核中加入了文件(目录)索引机制，在进行文件和目录的查找时，会通过 `find_vfile_idx`优先从文件(目录)索引中进行寻找，如果找到了则可以直接得到对应文件或目录的 `vfile `。如果找不到，则正常地调用 `find_vfile_path`进行多级目录查找，并在找到之后将其加入到文件(目录)索引中。同样地，对文件和目录remove后，也需要在索引中去除对应的内容。
+* 不存在的文件：对于一个不存在的文件，在引入了索引之后，查找的效率反而变慢了，因为多引入了一层的判断。为了加快不存在的文件的检索速度，我们退一步获取了该文件的父级目录。很显然，通过索引找到其父级目录，再通过 `find_vfile_name`找某个文件，比通过 `find_vfile_path`去找该文件更快。因此现在查找一个文件或目录的流程如下：
+  1. 使用 `find_vfile_idx`通过索引直接查找该文件或目录；
+  2. 使用 `find_vfile_idx`查找其父级目录，再通过 `find_vfile_name`在父级目录下查找该文件或目录；
+  3. 使用 `find_vfile_path`通过路径查找该文件或目录。
+* 需要注意的是，如果通过索引找到了其父级目录，但通过 `find_vfile_name`找不到的话，就不需要进行第3步了，这样才能加快不存在的文件的查找效率。当然，如果通过索引找不到父级目录，则还需进行第三步。即 `find_vfile_name`和 `find_vfile_path`是完备的，`find_vfile_idx`是不完备的。
 
-主要变动如下：
+## 簇链优化
 
-1. 未实现：导入`use riscv::register::time;`，其中`time`是RISC-V架构下的一个CSR，用于记录CPU自复位以来共运行了多长时间，猜测想要实现LRU替换策略，但最后去除了。
+簇链的优化主要有两个原因：一是如果将整个FAT表当作一个整体对象并利用读写锁进行互斥访问，当对两个文件分别进行读和写时，虽然这两个文件所拥有的簇链是不同的，但读操作仍然会被写操作阻塞。二是FAT表是链式存储结构，读取某个簇链上的第n个簇的簇号只能O(n)顺序查找，如果能够随机访问的话，则会对性能有较大的提升。
 
-2. 已实现：将锁由`use spin::Mutex;`改成`use spin::RwLock;`。`RwLock`读写锁支持多个读者或一个写者，但仍然是写者不公平的，即如果总是有读者，那么写者永远无法占有锁。`RwLock`的主要方法如下：
+综合上述原因，结合我们设计的FAT表的两个主要接口：
 
-     - `read()`：获取读锁
-     - `write()`：获取写锁
-     - `upgradeable_read`：获取一个可升级的读锁，获取到后无法获取写锁和可升级的读锁，同时不允许有新的读锁被获取。该可升级的读锁后续可以通过`upgrade`方法升级为写锁。从而可以缓解写者饥饿问题。
+```rust
+get_next_cluster(cluster) // 查询簇cluster的下一个簇
+get_cluster_at(first_cluster, index) // 查询以first_cluster为首的簇链中的第index个簇
+```
 
-3. 未实现：rCore中的缓存块有16个，UltraOS中的缓存块增加到20个(虽然常量`BLOCK_CACHE_SIZE`是这么定义的，但事实上像是由`BlockCacheManager`的`limit`属性来决定)。
+可以看出，我们不仅要用cluster，也要用index对簇链进行访问。由此得到了我们的设计：
 
-4. 已实现：采用双缓存，即信息缓存和数据缓存，其中每个缓存各有10个扇区，信息缓存用于缓存存储检索信息的块，例如文件系统信息扇区、FAT、目录等，数据缓存则用于缓存文件的数据。在全局实例时实例化了两个块缓存全局管理器`DATA_BLOCK_CACHE_MANAGER`和`INFO_CACHE_MANAGER`。因此在向其他模块暴露公共函数时，也需要暴露`get_block_cache`和`get_info_cache`两个函数，分别用来访问文件数据块和访问保留区及目录项。
+```rust
+struct Chain {
+    chain: Vec<u32>,
+    chain_map: HashMap<u32, usize>
+}
+```
 
-5. 结构体`BlockCacheManager`新增两个成员`start_sec`和`limit`，一些方法。
+其中 `chain`按序维护文件一条簇链上的所有簇号，事实上就是index到cluster的映射；`chain_map`维护簇号cluster到 `chain`中cluster所在index的映射。
 
-     - 已实现：`start_sec`属性表示起始扇区号，似乎是为了支持分区磁盘，通过`set_start_sec`方法来设置起始扇区，在设置起始扇区后，上层模块就可以不用考虑分区的起始偏移，从而只用传入逻辑扇区号，缓存层会自动加上`start_sec`从而得到物理扇区号。
-     - 未实现：`limit`属性应该是表示缓存块的个数，在创建`BlockCacheManager`实例调用`new()`时传入，但这样看来两个块缓存全局管理器在实例化时都应该传入10，表示两个缓存都各有10个扇区。但实际上实例化`INFO_CACHE_MANAGER`时传入了10，但在实例化`DATA_BLOCK_CACHE_MANAGER`时传入了1034。
-     - 已实现：方法`read_block_cache`同方法`get_block_cache`类似，区别在于在缓存中找到对应`block_id`的缓存块时，返回这个缓存块引用的Some封装，否则返回None而不从磁盘中读取到缓存中。需要`read_block_cache`方法的原因是使用了读写锁，获取读锁时返回的是不可变引用，而`get_block_cache`需要的是可变引用。另外如果调用`read_block_cache`返回的是None，说明磁盘块没在缓存中，则需要获取`BlockCacheManager`的写锁并调用`get_block_cache`方法将磁盘块读入缓存中，再调用一次`read_block_cache`即可。
+`Chain`所暴露出的接口基本与 `fat`一致，当试图通过 `Chain`对簇链进行查询时，需要先通过 `chain_map`来判断first_cluster是否在 `chain`中，在的话可以进行下一步查询。否则需要通过fat表进行查询并更新 `Chain`。思路同目录项查询一样，我们以更大的粒度即 `FatentBlock`去访问内存中的内容。
 
-6. 已实现：使用了读写锁，因此需要判断访问的方式，于是在上述两个公共函数的参数中都增加了`rw_mode`参数，取值为枚举变体`CacheMode::READ`和`CacheMode::WRITE`分别表示读和写。在函数中根据rw_mode的取值来分别获取读锁和写锁。
+```
+const FAT_ENTRY_PER_SEC: u32 = BLOCK_SZ as u32 / 4;
+type FatentBlock = [u32; FAT_ENTRY_PER_SEC as usize];
+```
 
-<br/>
+分配簇时，我们不仅更新fat表，也同步更新对应的 `Chain`。对于 `set_next_cluster(curr_cluster, next_cluster)`接口而言，主要有三种情况：
 
-## 磁盘数据结构层
+- 之前没有分配过簇，此时只分配一个簇：next_cluster为END_CLUSTER。
+- 之前没有分配过簇，此时分配若干个簇：将各个簇连接成一条簇链，最后一个簇的next_cluster为END_CLUSTER。
+- 之前分配过簇，此时新分配一个或若干个簇：先将之前已分配的簇链和新分配的第一个簇连接起来，再将新分配的各个簇连接成一条簇链，最后一个簇的next_cluster为END_CLUSTER。
 
-TODO_list: ShortDirEntry的checksum方法
+可以得出 `set_next_cluster`时 `chain`的更新规则：
 
-<br/>
-
-### rCore
-
-1. SuperBlock
-
-     - initialize：对超级块进行初始化，传入的数据由上层计算
-     - is_valid
-
-2. Bitmap：常驻内存,保存了它磁盘结构所在区域的起始块编号`start_block_id`和区域的块长度`blocks`，对位图的修改均通过缓存块来进行
-
-     - new
-     - alloc：分配一个bit，通过`get_block_cache`获取块缓存来修改
-     - dealloc：回收一个bit时同样通过`get_block_cache`获取块缓存来修改
-
-3. BitmapBlock
-
-4. DiskInode
-
-     - initialize
-     - is_dir
-     - is_file
-     - get_block_id：由于需要读取索引块，因此需要`get_block_cache`
-     - increase_size：扩充容量，给上层磁盘块管理器调用
-     - clear_size：回收容量，给上层磁盘块管理器调用
-     - read_at、write_at：读写磁盘中的数据
-
-5. DirEntry
-
-     - empty
-     - new
-     - name
-     - inode_number
-
-### 现在的思路
-
-1. UltraOS仅维护了FSInfo的内存结构，仅保存FSInfo所在的扇区号，对FSInfo的读出和写入均采用缓存块来进行，优点是不需要加锁和不用维护FSInfo的写入，通过BlockCache在drop时就会写入磁盘。缺点是对FSInfo读写时需要获取整个BlockCacheManager的读写锁，会影响其他缓存块的读写。
-
-     现在的思路是对FSInfo实现完整的结构体与磁盘数据一一对应，并常驻内存中，相当于给FSInfo一个单独的缓存块。注意点是修改结构体字段的值时需要添加读写锁，同时还需要维护写入磁盘。
-
-
-<br/>
-
-## 磁盘块管理层
-
-### rCore
-
-EasyFileSystem
-
- - create：创建并初始化一个文件系统
- - open：打开文件系统
- - get_disk_inode_pos
- - get_data_block_id
- - allow_inode
- - alloc_data
- - dealloc_data
-
-<br/>
-
-## VFS
-
-### Inode
-
- - new
- - read_disk_inode
- - modify_disk_inode
- - find
-   - find_inode_id
- - increase_size
- - create
- - ls
- - read_at
- - write_at
- - clear
-
-
+- 当 `chain`为空时，将curr_cluster加入 `chain`中；
+- 当next_cluster不为FREE_CLUSTER和END_CLUSTER时，将next_cluster加入 `chain`中。
