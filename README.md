@@ -40,6 +40,8 @@
 
 #### 模块开发相关文档 [./docs](./docs)
 
+#### 比赛仓库 [oskernel2022](https://gitlab.eduxiji.net/dh2zz/oskernel2022)
+
 ## *Branches*
 
 * `main`               ------主分支
